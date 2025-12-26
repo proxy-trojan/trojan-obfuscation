@@ -1,0 +1,92 @@
+{
+    "_comment": "客户端配置 - 带高级混淆功能",
+    "_note": "混淆功能仅在客户端生效，服务端仍需 Caddy 作为伪装后端",
+    
+    "run_type": "client",
+    "local_addr": "127.0.0.1",
+    "local_port": 1080,
+    "remote_addr": "your-server.com",
+    "remote_port": 443,
+    "password": [
+        "your-password-here"
+    ],
+    "log_level": 1,
+    
+    "ssl": {
+        "verify": true,
+        "verify_hostname": true,
+        "cert": "",
+        "cipher": "",
+        "cipher_tls13": "",
+        "sni": "your-server.com",
+        "alpn": [
+            "h2",
+            "http/1.1"
+        ],
+        "reuse_session": true,
+        "session_ticket": true,
+        "curves": ""
+    },
+    
+    "tcp": {
+        "prefer_ipv4": false,
+        "no_delay": true,
+        "keep_alive": true,
+        "reuse_port": false,
+        "fast_open": false,
+        "fast_open_qlen": 20
+    },
+    
+    "obfuscation": {
+        "_comment": "混淆配置 - 仅客户端使用",
+        "enabled": true,
+        
+        "fingerprint": {
+            "_comment": "TLS 指纹随机化，模拟真实浏览器",
+            "enabled": true,
+            "type": "random",
+            "grease": true
+        },
+        
+        "handshake_mimicry": {
+            "_comment": "从真实网站采集握手特征",
+            "enabled": true,
+            "cache_file": "~/.trojan/handshake.bin",
+            "prefetch": true,
+            "prefetch_domains": [
+                "www.google.com",
+                "www.cloudflare.com",
+                "www.microsoft.com"
+            ]
+        },
+        
+        "timing": {
+            "_comment": "时序混淆: aggressive(低延迟) / balanced(平衡) / stealth(高隐蔽)",
+            "profile": "aggressive"
+        },
+        
+        "padding": {
+            "_comment": "协议填充，增加流量随机性",
+            "enabled": false,
+            "min_bytes": 0,
+            "max_bytes": 64
+        },
+        
+        "record_splitting": {
+            "_comment": "TLS 记录分片",
+            "enabled": false
+        },
+        
+        "cache": {
+            "_comment": "缓存配置，减少启动延迟",
+            "enabled": true,
+            "directory": "~/.trojan/cache"
+        },
+        
+        "tls": {
+            "_comment": "TLS 版本控制",
+            "enforce_tls13": true,
+            "min_version": "0x0304"
+        }
+    }
+}

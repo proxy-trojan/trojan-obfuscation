@@ -1,0 +1,31 @@
+{
+    "mode": "rule",
+    "rules": [
+        {"type": "DOMAIN", "value": "localhost", "action": "DIRECT"},
+        {"type": "DOMAIN-SUFFIX", "value": "local", "action": "DIRECT"},
+        {"type": "IP-CIDR", "value": "127.0.0.0/8", "action": "DIRECT"},
+        {"type": "IP-CIDR", "value": "10.0.0.0/8", "action": "DIRECT"},
+        {"type": "IP-CIDR", "value": "172.16.0.0/12", "action": "DIRECT"},
+        {"type": "IP-CIDR", "value": "192.168.0.0/16", "action": "DIRECT"},
+        
+        {"type": "DOMAIN-SUFFIX", "value": "cn", "action": "DIRECT"},
+        {"type": "DOMAIN-SUFFIX", "value": "baidu.com", "action": "DIRECT"},
+        {"type": "DOMAIN-SUFFIX", "value": "qq.com", "action": "DIRECT"},
+        {"type": "DOMAIN-SUFFIX", "value": "taobao.com", "action": "DIRECT"},
+        {"type": "DOMAIN-SUFFIX", "value": "jd.com", "action": "DIRECT"},
+        {"type": "DOMAIN-SUFFIX", "value": "bilibili.com", "action": "DIRECT"},
+        {"type": "GEOIP", "value": "CN", "action": "DIRECT"},
+        
+        {"type": "DOMAIN-SUFFIX", "value": "google.com", "action": "PROXY"},
+        {"type": "DOMAIN-SUFFIX", "value": "youtube.com", "action": "PROXY"},
+        {"type": "DOMAIN-SUFFIX", "value": "facebook.com", "action": "PROXY"},
+        {"type": "DOMAIN-SUFFIX", "value": "twitter.com", "action": "PROXY"},
+        {"type": "DOMAIN-SUFFIX", "value": "github.com", "action": "PROXY"},
+        {"type": "DOMAIN-SUFFIX", "value": "openai.com", "action": "PROXY"},
+        
+        {"type": "DOMAIN-KEYWORD", "value": "ads", "action": "REJECT"},
+        {"type": "DOMAIN-KEYWORD", "value": "tracker", "action": "REJECT"},
+        
+        {"type": "MATCH", "value": "", "action": "PROXY"}
+    ]
+}
