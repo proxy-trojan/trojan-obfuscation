@@ -96,16 +96,11 @@ jobs:
         include:
           - arch: x86_64
             runner: macos-15
-            triplet: x64-osx
           - arch: arm64
             runner: macos-15
-            triplet: arm64-osx
 
     runs-on: ${{ matrix.runner }}
     name: macOS ${{ matrix.arch }}
-
-    env:
-      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
 
     steps:
       - name: Checkout code
@@ -113,24 +108,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2cbc495aa94'
-
-      - name: Install dependencies via vcpkg
+      - name: Install dependencies
         run: |
-          vcpkg install boost-system boost-program-options boost-asio openssl --triplet ${{ matrix.triplet }}
+          brew install boost openssl@3
 
       - name: Build
         run: |
+          OPENSSL_ROOT=$(brew --prefix openssl@3)
+          BOOST_ROOT=$(brew --prefix boost)
+          
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
-            -DENABLE_MYSQL=OFF
+            -DCMAKE_POLICY_DEFAULT_CMP0167=OLD \
+            -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$OPENSSL_ROOT" \
+            -DBoost_USE_STATIC_LIBS=ON \
+            -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
+            -DENABLE_MYSQL=OFF \
+            -Wno-dev
           make -j$(sysctl -n hw.ncpu)
 
       - name: Strip binary
