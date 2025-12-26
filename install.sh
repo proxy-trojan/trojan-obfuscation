@@ -1,7 +1,7 @@
 #!/bin/bash
 # Trojan-Pro One-Click Installer
 # Suitable for consumption via curl/wget
-# Usage: bash <(curl -sL https://github.com/proxy-trojan/trojan-obfuscation/tree/feature_1.0_no_obfus_and_no_rules/install.sh)
+# Usage: bash <(curl -sL https://raw.githubusercontent.com/proxy-trojan/trojan-obfuscation/feature_1.0_no_obfus_and_no_rules/install.sh)
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
