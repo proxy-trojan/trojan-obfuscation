@@ -72,7 +72,7 @@ void ClientSession::in_async_read() {
             destroy();
             return;
         }
-        in_recv(string((const char*)in_read_buf.data(), length));
+        in_recv(length);
     });
 }
 
@@ -95,7 +95,7 @@ void ClientSession::out_async_read() {
             destroy();
             return;
         }
-        out_recv(string((const char*)out_read_buf.data(), length));
+        out_recv(length);
     });
 }
 
@@ -123,7 +123,7 @@ void ClientSession::udp_async_read() {
             destroy();
             return;
         }
-        udp_recv(string((const char*)udp_read_buf.data(), length), udp_recv_endpoint);
+        udp_recv(length, udp_recv_endpoint);
     });
 }
 
@@ -139,10 +139,11 @@ void ClientSession::udp_async_write(const string &data, const udp::endpoint &end
     });
 }
 
-void ClientSession::in_recv(const string &data) {
-    if (data.length() > in_read_buf.size() * 0.75) {
-        resize_buffer(in_read_buf, data.length() * 2);
+void ClientSession::in_recv(size_t length) {
+    if (length > in_read_buf.size() * 0.75) {
+        resize_buffer(in_read_buf, length * 2);
     }
+    std::string_view data((const char*)in_read_buf.data(), length);
     
     switch (status) {
         case HANDSHAKE: {
@@ -176,7 +177,7 @@ void ClientSession::in_recv(const string &data) {
             
             // Parse SOCKS5 request to get target address
             TrojanRequest req;
-            string temp_buf = config.password.cbegin()->first + "\r\n" + data[1] + data.substr(3) + "\r\n";
+            string temp_buf = config.password.cbegin()->first + "\r\n" + string(data.substr(1, 1)) + string(data.substr(3)) + "\r\n";
             if (req.parse(temp_buf) == -1) {
                 Log::log_with_endpoint(in_endpoint, "unsupported command", Log::ERROR);
                 in_async_write(string("\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00", 10));
@@ -210,14 +211,14 @@ void ClientSession::in_recv(const string &data) {
             break;
         }
         case CONNECT: {
-            sent_len += data.length();
+            sent_len += length;
             first_packet_recv = true;
-            out_write_buf += data;
+            out_write_buf += string(data);
             break;
         }
         case FORWARD: {
-            sent_len += data.length();
-            out_async_write(data);
+            sent_len += length;
+            out_async_write(string(data));
             break;
         }
 
@@ -328,16 +329,17 @@ void ClientSession::in_sent() {
     }
 }
 
-void ClientSession::out_recv(const string &data) {
-    if (data.length() > out_read_buf.size() * 0.75) {
-        resize_buffer(out_read_buf, data.length() * 2);
+void ClientSession::out_recv(size_t length) {
+    if (length > out_read_buf.size() * 0.75) {
+        resize_buffer(out_read_buf, length * 2);
     }
+    std::string_view data((const char*)out_read_buf.data(), length);
     
     if (status == FORWARD) {
-        recv_len += data.length();
-        in_async_write(data);
+        recv_len += length;
+        in_async_write(string(data));
     } else if (status == UDP_FORWARD) {
-        udp_data_buf += data;
+        udp_data_buf += string(data);
         udp_sent();
     }
 }
@@ -350,15 +352,16 @@ void ClientSession::out_sent() {
     }
 }
 
-void ClientSession::udp_recv(const string &data, const udp::endpoint&) {
-    if (data.length() > udp_read_buf.size() * 0.75) {
-        resize_buffer(udp_read_buf, data.length() * 2);
+void ClientSession::udp_recv(size_t length, const udp::endpoint&) {
+    if (length > udp_read_buf.size() * 0.75) {
+        resize_buffer(udp_read_buf, length * 2);
     }
+    std::string_view data((const char*)udp_read_buf.data(), length);
     
-    if (data.length() == 0) {
+    if (length == 0) {
         return;
     }
-    if (data.length() < 3 || data[0] || data[1] || data[2]) {
+    if (length < 3 || data[0] || data[1] || data[2]) {
         Log::log_with_endpoint(in_endpoint, "bad UDP packet", Log::ERROR);
         destroy();
         return;
@@ -371,10 +374,10 @@ void ClientSession::udp_recv(const string &data, const udp::endpoint&) {
         destroy();
         return;
     }
-    size_t length = data.length() - 3 - address_len;
-    Log::log_with_endpoint(in_endpoint, "sent a UDP packet of length " + to_string(length) + " bytes to " + address.address + ':' + to_string(address.port));
-    string packet = data.substr(3, address_len) + char(uint8_t(length >> 8)) + char(uint8_t(length & 0xFF)) + "\r\n" + data.substr(address_len + 3);
-    sent_len += length;
+    size_t packet_length = length - 3 - address_len;
+    Log::log_with_endpoint(in_endpoint, "sent a UDP packet of length " + to_string(packet_length) + " bytes to " + address.address + ':' + to_string(address.port));
+    string packet = string(data.substr(3, address_len)) + char(uint8_t(packet_length >> 8)) + char(uint8_t(packet_length & 0xFF)) + "\r\n" + string(data.substr(address_len + 3));
+    sent_len += packet_length;
     if (status == CONNECT) {
         first_packet_recv = true;
         out_write_buf += packet;

@@ -7,6 +7,8 @@ Trojan-Pro is built upon the core principles of the original [Trojan](https://gi
 ## Features
 
 - **High Performance**: Built with C++17 and Boost.Asio for efficient asynchronous I/O and low resource usage.
+- **Multithreading Support**: Configurable thread pool to utilize all available CPU cores.
+- **Memory Optimization**: Zero-copy buffer management to minimize CPU overhead and latency.
 - **Trojan Protocol**: Mimics HTTPS traffic to bypass deep packet inspection (DPI) and ISP QoS limitations.
 - **TLS 1.3**: Fully supports TLS 1.3 for state-of-the-art security and forward secrecy.
 - **SOCKS5 Support**: Acts as a standard SOCKS5 proxy server for clients.
@@ -93,13 +95,15 @@ docker run -d --name trojan \
         "cert": "/path/to/fullchain.crt",
         "key": "/path/to/private.key",
         "sni": "your-domain.com"
-    }
+    },
+    "threads": 4
 }
 ```
 
 -   `remote_addr`/`remote_port`: Where to forward invalid/probe traffic (e.g., a local Nginx/Apache server).
 -   `ssl.cert`: Path to your server's certificate file.
 -   `ssl.key`: Path to your server's private key.
+-   `threads`: Number of worker threads. Defaults to the number of CPU cores if set to 0 or omitted.
 
 ### Client Configuration (`client.json`)
 

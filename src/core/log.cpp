@@ -32,11 +32,13 @@ using namespace boost::posix_time;
 using namespace boost::asio::ip;
 
 Log::Level Log::level(INFO);
+std::mutex Log::mutex_;
 FILE *Log::keylog(nullptr);
 FILE *Log::output_stream(stderr);
 Log::LogCallback Log::log_callback{};
 
 void Log::log(const string &message, Level level) {
+    lock_guard<mutex> lock(mutex_);
     if (level >= Log::level) {
 #ifdef ENABLE_ANDROID_LOG
         __android_log_print(ANDROID_LOG_ERROR, "trojan", "%s\n",

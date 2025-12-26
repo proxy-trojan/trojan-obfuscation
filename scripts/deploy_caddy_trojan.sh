@@ -510,6 +510,14 @@ EOF
 }
 
 configure_trojan() {
+    # Auto-detect CPU cores for thread configuration
+    local CPU_CORES=4
+    if command -v nproc &>/dev/null; then
+        CPU_CORES=$(nproc)
+    elif [[ "$(uname)" == "Darwin" ]]; then
+        CPU_CORES=$(sysctl -n hw.ncpu)
+    fi
+
     local trojan_conf="/etc/trojan/config.json"
     mkdir -p /etc/trojan
     mkdir -p /var/log/trojan
@@ -547,6 +555,7 @@ configure_trojan() {
         "curves": "",
         "dhparam": ""
     },
+    "threads": ${CPU_CORES},
     "tcp": {
         "prefer_ipv4": false,
         "no_delay": true,

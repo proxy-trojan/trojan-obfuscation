@@ -23,6 +23,7 @@
 #ifdef ENABLE_MYSQL
 #include <mysql.h>
 #endif // ENABLE_MYSQL
+#include <mutex>
 #include "config.h"
 
 class Authenticator {
@@ -33,6 +34,7 @@ private:
     enum {
         PASSWORD_LENGTH=56
     };
+    std::mutex mutex_;
     static bool is_valid_password(const std::string &password);
 public:
     explicit Authenticator(const Config &config);

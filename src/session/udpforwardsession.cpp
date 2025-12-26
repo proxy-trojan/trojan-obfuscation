@@ -129,7 +129,7 @@ void UDPForwardSession::out_async_read() {
             destroy();
             return;
         }
-        out_recv(string(reinterpret_cast<const char*>(out_read_buf.data()), length));
+        out_recv(length);
     });
 }
 
@@ -175,11 +175,16 @@ void UDPForwardSession::in_recv(const string &data) {
     }
 }
 
-void UDPForwardSession::out_recv(const string &data) {
+void UDPForwardSession::out_recv(size_t length) {
+    if (length > out_read_buf.size() * 0.75) {
+        resize_buffer(out_read_buf, length * 2);
+    }
+    string_view data((const char*)out_read_buf.data(), length);
+
     if (status == FORWARD || status == FORWARDING) {
         gc_timer.cancel();
         timer_async_wait();
-        udp_data_buf += data;
+        udp_data_buf += string(data);
         for (;;) {
             UDPPacket packet;
             size_t packet_len;

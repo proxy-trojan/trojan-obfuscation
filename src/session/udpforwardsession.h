@@ -41,7 +41,7 @@ private:
     void in_recv(const std::string &data);
     void out_async_read();
     void out_async_write(const std::string &data);
-    void out_recv(const std::string &data);
+    void out_recv(size_t length);
     void out_sent();
     void timer_async_wait();
 public:

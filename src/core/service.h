@@ -29,6 +29,10 @@
 #include "authenticator.h"
 #include "session/udpforwardsession.h"
 
+#include <thread>
+#include <vector>
+#include <mutex>
+
 class Service {
 private:
     enum {
@@ -42,6 +46,9 @@ private:
     std::string plain_http_response;
     boost::asio::ip::udp::socket udp_socket;
     std::map<boost::asio::ip::udp::endpoint, std::weak_ptr<UDPForwardSession> > udp_sessions;
+    std::mutex udp_sessions_mutex;
+    std::mutex udp_socket_mutex;
+    std::vector<std::thread> thread_pool;
     uint8_t udp_read_buf[MAX_LENGTH]{};
     boost::asio::ip::udp::endpoint udp_recv_endpoint;
     void async_accept();

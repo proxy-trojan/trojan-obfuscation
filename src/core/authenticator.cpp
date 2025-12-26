@@ -47,6 +47,7 @@ Authenticator::Authenticator(const Config &config) {
 }
 
 bool Authenticator::auth(const string &password) {
+    lock_guard<mutex> lock(mutex_);
     if (!is_valid_password(password)) {
         return false;
     }
@@ -130,6 +131,7 @@ bool Authenticator::auth(const string &password) {
 }
 
 void Authenticator::record(const string &password, uint64_t download, uint64_t upload) {
+    lock_guard<mutex> lock(mutex_);
     if (!is_valid_password(password)) {
         return;
     }

@@ -277,8 +277,6 @@ Service::Service(Config &config, bool test) :
 }
 
 void Service::run() {
-
-
     async_accept();
     if (config.run_type == Config::FORWARD) {
         udp_async_read();
@@ -295,7 +293,30 @@ void Service::run() {
         rt = "client";
     }
     Log::log_with_date_time(string("trojan service (") + rt + ") started at " + local_endpoint.address().to_string() + ':' + to_string(local_endpoint.port()), Log::WARN);
-    io_context.run();
+
+    int thread_num = config.threads;
+    if (thread_num <= 0) {
+        thread_num = std::thread::hardware_concurrency();
+        if (thread_num <= 0) {
+            thread_num = 1;
+        }
+    }
+
+    if (thread_num > 1) {
+        Log::log_with_date_time("starting " + to_string(thread_num) + " worker threads", Log::WARN);
+        for (int i = 0; i < thread_num; ++i) {
+            thread_pool.emplace_back([this]() {
+                io_context.run();
+            });
+        }
+        for (auto &t : thread_pool) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+    } else {
+        io_context.run();
+    }
     Log::log_with_date_time("trojan service stopped", Log::WARN);
 }
 
@@ -350,28 +371,37 @@ void Service::udp_async_read() {
             throw runtime_error(error.message());
         }
         string data((const char *)udp_read_buf, length);
-        auto it = udp_sessions.find(udp_recv_endpoint);
-        if (it != udp_sessions.end()) {
-            if (it->second.expired()) {
-                udp_sessions.erase(it);
-            } else {
-                if (it->second.lock()->process(udp_recv_endpoint, data)) {
-                    udp_async_read();
-                    return;
+        {
+            std::lock_guard<std::mutex> lock(udp_sessions_mutex);
+            auto it = udp_sessions.find(udp_recv_endpoint);
+            if (it != udp_sessions.end()) {
+                if (it->second.expired()) {
+                    udp_sessions.erase(it);
+                } else {
+                    if (it->second.lock()->process(udp_recv_endpoint, data)) {
+                        udp_async_read();
+                        return;
+                    }
                 }
             }
         }
         Log::log_with_endpoint(tcp::endpoint(udp_recv_endpoint.address(), udp_recv_endpoint.port()), "new UDP session");
         auto session = make_shared<UDPForwardSession>(config, io_context, ssl_context, udp_recv_endpoint, [this](const udp::endpoint &endpoint, const string &data) {
             boost::system::error_code ec;
-            udp_socket.send_to(boost::asio::buffer(data), endpoint, 0, ec);
+            {
+                std::lock_guard<std::mutex> lock(udp_socket_mutex);
+                udp_socket.send_to(boost::asio::buffer(data), endpoint, 0, ec);
+            }
             if (ec == boost::asio::error::no_permission) {
                 Log::log_with_endpoint(tcp::endpoint(endpoint.address(), endpoint.port()), "dropped a UDP packet due to firewall policy or rate limit");
             } else if (ec) {
                 throw runtime_error(ec.message());
             }
         });
-        udp_sessions[udp_recv_endpoint] = session;
+        {
+             std::lock_guard<std::mutex> lock(udp_sessions_mutex);
+             udp_sessions[udp_recv_endpoint] = session;
+        }
         session->start();
         session->process(udp_recv_endpoint, data);
         udp_async_read();

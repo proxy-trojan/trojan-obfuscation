@@ -42,6 +42,7 @@ public:
     uint16_t target_port;
     std::map<std::string, std::string> password;
     int udp_timeout;
+    int threads;
     Log::Level log_level;
     class SSLConfig {
     public:

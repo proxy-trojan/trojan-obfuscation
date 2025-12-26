@@ -127,7 +127,7 @@ void ForwardSession::in_async_read() {
             destroy();
             return;
         }
-        in_recv(string(reinterpret_cast<const char*>(in_read_buf.data()), length));
+        in_recv(length);
     });
 }
 
@@ -150,7 +150,7 @@ void ForwardSession::out_async_read() {
             destroy();
             return;
         }
-        out_recv(string(reinterpret_cast<const char*>(out_read_buf.data()), length));
+        out_recv(length);
     });
 }
 
@@ -166,14 +166,19 @@ void ForwardSession::out_async_write(const string &data) {
     });
 }
 
-void ForwardSession::in_recv(const string &data) {
+void ForwardSession::in_recv(size_t length) {
+    if (length > in_read_buf.size() * 0.75) {
+        resize_buffer(in_read_buf, length * 2);
+    }
+    std::string_view data((const char*)in_read_buf.data(), length);
+
     if (status == CONNECT) {
-        sent_len += data.length();
+        sent_len += length;
         first_packet_recv = true;
-        out_write_buf += data;
+        out_write_buf += string(data);
     } else if (status == FORWARD) {
-        sent_len += data.length();
-        out_async_write(data);
+        sent_len += length;
+        out_async_write(string(data));
     }
 }
 
@@ -183,10 +188,15 @@ void ForwardSession::in_sent() {
     }
 }
 
-void ForwardSession::out_recv(const string &data) {
+void ForwardSession::out_recv(size_t length) {
+    if (length > out_read_buf.size() * 0.75) {
+        resize_buffer(out_read_buf, length * 2);
+    }
+    std::string_view data((const char*)out_read_buf.data(), length);
+
     if (status == FORWARD) {
-        recv_len += data.length();
-        in_async_write(data);
+        recv_len += length;
+        in_async_write(string(data));
     }
 }
 

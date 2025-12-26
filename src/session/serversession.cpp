@@ -70,7 +70,7 @@ void ServerSession::in_async_read() {
             destroy();
             return;
         }
-        in_recv(string(reinterpret_cast<const char*>(in_read_buf.data()), length));
+        in_recv(length);
     });
 }
 
@@ -93,7 +93,7 @@ void ServerSession::out_async_read() {
             destroy();
             return;
         }
-        out_recv(string(reinterpret_cast<const char*>(out_read_buf.data()), length));
+        out_recv(length);
     });
 }
 
@@ -116,7 +116,7 @@ void ServerSession::udp_async_read() {
             destroy();
             return;
         }
-        udp_recv(string(reinterpret_cast<const char*>(udp_read_buf.data()), length), udp_recv_endpoint);
+        udp_recv(length, udp_recv_endpoint);
     });
 }
 
@@ -132,11 +132,11 @@ void ServerSession::udp_async_write(const string &data, const udp::endpoint &end
     });
 }
 
-void ServerSession::in_recv(const string &data) {
-    // 如果数据量较大，考虑调整缓冲区大小
-    if (data.length() > in_read_buf.size() * 0.75) {
-        resize_buffer(in_read_buf, data.length() * 2);
+void ServerSession::in_recv(size_t length) {
+    if (length > in_read_buf.size() * 0.75) {
+        resize_buffer(in_read_buf, length * 2);
     }
+    std::string_view data((const char*)in_read_buf.data(), length);
     
     if (status == HANDSHAKE) {
         TrojanRequest req;
@@ -184,7 +184,7 @@ void ServerSession::in_recv(const string &data) {
             }
         } else {
             Log::log_with_endpoint(in_endpoint, "not trojan request, connecting to " + query_addr + ':' + query_port, Log::WARN);
-            out_write_buf = data;
+            out_write_buf = string(data);
         }
         sent_len += out_write_buf.length();
         auto self = shared_from_this();
@@ -241,10 +241,10 @@ void ServerSession::in_recv(const string &data) {
             });
         });
     } else if (status == FORWARD) {
-        sent_len += data.length();
-        out_async_write(data);
+        sent_len += length;
+        out_async_write(string(data));
     } else if (status == UDP_FORWARD) {
-        udp_data_buf += data;
+        udp_data_buf += string(data);
         udp_sent();
     }
 }
@@ -257,15 +257,15 @@ void ServerSession::in_sent() {
     }
 }
 
-void ServerSession::out_recv(const string &data) {
-    // 如果数据量较大，考虑调整缓冲区大小
-    if (data.length() > out_read_buf.size() * 0.75) {
-        resize_buffer(out_read_buf, data.length() * 2);
+void ServerSession::out_recv(size_t length) {
+    if (length > out_read_buf.size() * 0.75) {
+        resize_buffer(out_read_buf, length * 2);
     }
+    std::string_view data((const char*)out_read_buf.data(), length);
     
     if (status == FORWARD) {
-        recv_len += data.length();
-        in_async_write(data);
+        recv_len += length;
+        in_async_write(string(data));
     }
 }
 
@@ -275,17 +275,19 @@ void ServerSession::out_sent() {
     }
 }
 
-void ServerSession::udp_recv(const string &data, const udp::endpoint &endpoint) {
-    // 如果数据量较大，考虑调整缓冲区大小
-    if (data.length() > udp_read_buf.size() * 0.75) {
-        resize_buffer(udp_read_buf, data.length() * 2);
+void ServerSession::udp_recv(size_t length, const udp::endpoint &endpoint) {
+    if (length > udp_read_buf.size() * 0.75) {
+        resize_buffer(udp_read_buf, length * 2);
     }
+    std::string_view data((const char*)udp_read_buf.data(), length);
     
     if (status == UDP_FORWARD) {
-        size_t length = data.length();
         Log::log_with_endpoint(in_endpoint, "received a UDP packet of length " + to_string(length) + " bytes from " + endpoint.address().to_string() + ':' + to_string(endpoint.port()));
         recv_len += length;
-        in_async_write(UDPPacket::generate(endpoint, data));
+        // Construct string only when needed for UDPPacket::generate which takes string
+        // Actually UDPPacket::generate (at least one overload) takes string payload.
+        // But here we are generating a Trojan UDP packet from RAW UDP data.
+        in_async_write(UDPPacket::generate(endpoint, string(data)));
     }
 }
 

@@ -22,6 +22,7 @@
 
 #include <cstdio>
 #include <string>
+#include <mutex>
 #include <boost/asio/ip/tcp.hpp>
 
 #ifdef ERROR // windows.h
@@ -49,6 +50,7 @@ public:
     static void set_callback(LogCallback cb);
     static void reset();
 private:
+    static std::mutex mutex_;
     static FILE *output_stream;
     static LogCallback log_callback;
 };

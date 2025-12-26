@@ -21,7 +21,7 @@
 using namespace std;
 using namespace boost::asio::ip;
 
-bool UDPPacket::parse(const string &data, size_t &udp_packet_len) {
+bool UDPPacket::parse(const string_view &data, size_t &udp_packet_len) {
     if (data.length() <= 0) {
         return false;
     }

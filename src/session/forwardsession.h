@@ -36,11 +36,11 @@ private:
     void destroy();
     void in_async_read();
     void in_async_write(const std::string &data);
-    void in_recv(const std::string &data);
+    void in_recv(size_t length);
     void in_sent();
     void out_async_read();
     void out_async_write(const std::string &data);
-    void out_recv(const std::string &data);
+    void out_recv(size_t length);
     void out_sent();
 public:
     ForwardSession(const Config &config, boost::asio::io_context &io_context, boost::asio::ssl::context &ssl_context);

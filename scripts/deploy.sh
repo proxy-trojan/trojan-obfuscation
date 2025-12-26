@@ -332,6 +332,14 @@ generate_password() {
 
 configure_trojan() {
     log_step "配置 Trojan..."
+
+    # Auto-detect CPU cores for thread configuration
+    local CPU_CORES=4
+    if command -v nproc &>/dev/null; then
+        CPU_CORES=$(nproc)
+    elif [[ "$(uname)" == "Darwin" ]]; then
+        CPU_CORES=$(sysctl -n hw.ncpu)
+    fi
     
     local cert_path="/etc/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
     local key_path="/etc/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.key"
@@ -368,8 +376,10 @@ configure_trojan() {
         "session_timeout": 600,
         "plain_http_response": "",
         "curves": "",
+        "curves": "",
         "dhparam": ""
     },
+    "threads": ${CPU_CORES},
     "tcp": {
         "prefer_ipv4": false,
         "no_delay": true,
