@@ -108,22 +108,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Install OpenSSL
         run: |
-          brew install boost openssl@3
+          brew install openssl@3
+
+      - name: Build Boost from source
+        run: |
+          # Download Boost 1.84.0 (stable version with good CMake support)
+          curl -L -o boost.tar.gz https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.gz
+          tar -xzf boost.tar.gz
+          cd boost_1_84_0
+          
+          # Bootstrap and build only required libraries
+          ./bootstrap.sh --with-libraries=system,program_options --prefix=$HOME/boost-install
+          
+          # Build with proper architecture
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            ./b2 architecture=x86 address-model=64 link=static threading=multi variant=release install -j$(sysctl -n hw.ncpu)
+          else
+            ./b2 architecture=arm address-model=64 link=static threading=multi variant=release install -j$(sysctl -n hw.ncpu)
+          fi
 
       - name: Build
         run: |
           OPENSSL_ROOT=$(brew --prefix openssl@3)
-          BOOST_ROOT=$(brew --prefix boost)
           
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DCMAKE_POLICY_DEFAULT_CMP0167=OLD \
-            -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$OPENSSL_ROOT" \
-            -DBoost_USE_STATIC_LIBS=ON \
+            -DBOOST_ROOT=$HOME/boost-install \
+            -DBoost_NO_BOOST_CMAKE=ON \
+            -DBoost_NO_SYSTEM_PATHS=ON \
             -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
             -DENABLE_MYSQL=OFF \
             -Wno-dev
