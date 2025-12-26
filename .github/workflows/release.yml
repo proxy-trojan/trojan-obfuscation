@@ -96,8 +96,10 @@ jobs:
         include:
           - arch: x86_64
             runner: macos-15
+            brew_prefix: /usr/local
           - arch: arm64
             runner: macos-15
+            brew_prefix: /opt/homebrew
 
     runs-on: ${{ matrix.runner }}
     name: macOS ${{ matrix.arch }}
@@ -108,46 +110,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install OpenSSL
+      - name: Install dependencies (x86_64 via Rosetta)
+        if: matrix.arch == 'x86_64'
         run: |
-          brew install openssl@3
+          # Install Rosetta 2 if needed
+          softwareupdate --install-rosetta --agree-to-license || true
+          
+          # Install x86_64 Homebrew
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          
+          # Install x86_64 dependencies
+          arch -x86_64 /usr/local/bin/brew install openssl@3 boost
 
-      - name: Build Boost from source
+      - name: Install dependencies (arm64 native)
+        if: matrix.arch == 'arm64'
         run: |
-          # Download Boost 1.84.0 from GitHub releases
-          BOOST_VERSION="1.84.0"
-          BOOST_VERSION_UNDERSCORE="1_84_0"
-          curl -L -o boost.tar.bz2 "https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-b2-nodocs.tar.gz"
-          
-          # Verify download
-          if [ ! -s boost.tar.bz2 ] || [ $(stat -f%z boost.tar.bz2) -lt 10000000 ]; then
-            echo "Download failed or file too small, trying alternative URL..."
-            curl -L -o boost.tar.bz2 "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2"
-          fi
-          
-          # Extract
-          tar -xjf boost.tar.bz2 || tar -xzf boost.tar.bz2
-          cd boost* || cd boost_*
-          
-          # Bootstrap and build only required libraries
-          ./bootstrap.sh --with-libraries=system,program_options --prefix=$HOME/boost-install
-          
-          # Build with proper architecture
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            ./b2 architecture=x86 address-model=64 link=static threading=multi variant=release install -j$(sysctl -n hw.ncpu)
-          else
-            ./b2 architecture=arm address-model=64 link=static threading=multi variant=release install -j$(sysctl -n hw.ncpu)
-          fi
+          brew install openssl@3 boost
 
       - name: Build
         run: |
-          OPENSSL_ROOT=$(brew --prefix openssl@3)
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            export PATH="/usr/local/bin:$PATH"
+            OPENSSL_ROOT="/usr/local/opt/openssl@3"
+            BOOST_ROOT="/usr/local/opt/boost"
+          else
+            OPENSSL_ROOT="$(brew --prefix openssl@3)"
+            BOOST_ROOT="$(brew --prefix boost)"
+          fi
           
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DBOOST_ROOT=$HOME/boost-install \
+            -DCMAKE_POLICY_DEFAULT_CMP0167=OLD \
+            -DBOOST_ROOT=$BOOST_ROOT \
             -DBoost_NO_BOOST_CMAKE=ON \
             -DBoost_NO_SYSTEM_PATHS=ON \
             -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
