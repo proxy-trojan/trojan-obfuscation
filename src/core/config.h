@@ -84,58 +84,7 @@ public:
         std::string cert;
         std::string ca;
     } mysql;
-    class ObfuscationConfig {
-    public:
-        bool enabled;
-        // Fingerprint randomization
-        struct Fingerprint {
-            bool enabled;
-            std::string type;  // chrome, firefox, safari, edge, opera, random
-            bool grease;       // Enable GREASE (RFC 8701)
-        } fingerprint;
-        // Handshake mimicry
-        struct Handshake {
-            bool enabled;
-            std::string cache_file;
-            bool prefetch;
-            std::vector<std::string> prefetch_domains;
-        } handshake;
-        // Timing obfuscation
-        struct Timing {
-            std::string profile;  // aggressive, balanced, stealth
-            uint32_t min_delay_ms;
-            uint32_t max_delay_ms;
-            uint32_t jitter_ms;
-        } timing;
-        // Padding
-        struct Padding {
-            bool enabled;
-            uint16_t min_bytes;
-            uint16_t max_bytes;
-        } padding;
-        // Record splitting
-        struct RecordSplitting {
-            bool enabled;
-            uint16_t min_fragment;
-            uint16_t max_fragment;
-        } record_splitting;
-        // Cache
-        struct Cache {
-            bool enabled;
-            std::string directory;
-        } cache;
-        // TLS version control
-        struct TLS {
-            bool enforce_tls13;  // 强制使用 TLS 1.3
-            uint16_t min_version;  // 最低版本 (0x0303=TLS1.2, 0x0304=TLS1.3)
-        } tls;
-    } obfuscation;
-    class RoutingConfig {
-    public:
-        bool enabled;
-        std::string mode;  // rule, global, direct
-        std::string rules_file;  // Path to rules JSON file
-    } routing;
+
     void load(const std::string &filename);
     void populate(const std::string &JSON);
     bool sip003();

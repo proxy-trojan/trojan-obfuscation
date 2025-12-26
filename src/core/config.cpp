@@ -112,39 +112,7 @@ void Config::populate(const ptree &tree) {
     mysql.cert = tree.get("mysql.cert", string());
     mysql.ca = tree.get("mysql.ca", string());
     
-    // Obfuscation config (client-side only)
-    obfuscation.enabled = tree.get("obfuscation.enabled", false);
-    obfuscation.fingerprint.enabled = tree.get("obfuscation.fingerprint.enabled", true);
-    obfuscation.fingerprint.type = tree.get("obfuscation.fingerprint.type", string("random"));
-    obfuscation.fingerprint.grease = tree.get("obfuscation.fingerprint.grease", true);
-    obfuscation.handshake.enabled = tree.get("obfuscation.handshake_mimicry.enabled", true);
-    obfuscation.handshake.cache_file = tree.get("obfuscation.handshake_mimicry.cache_file", string());
-    obfuscation.handshake.prefetch = tree.get("obfuscation.handshake_mimicry.prefetch", true);
-    vector<string>().swap(obfuscation.handshake.prefetch_domains);
-    if (tree.get_child_optional("obfuscation.handshake_mimicry.prefetch_domains")) {
-        for (auto& item : tree.get_child("obfuscation.handshake_mimicry.prefetch_domains")) {
-            obfuscation.handshake.prefetch_domains.push_back(item.second.get_value<string>());
-        }
-    }
-    obfuscation.timing.profile = tree.get("obfuscation.timing.profile", string("aggressive"));
-    obfuscation.timing.min_delay_ms = tree.get("obfuscation.timing.min_delay_ms", uint32_t(0));
-    obfuscation.timing.max_delay_ms = tree.get("obfuscation.timing.max_delay_ms", uint32_t(5));
-    obfuscation.timing.jitter_ms = tree.get("obfuscation.timing.jitter_ms", uint32_t(2));
-    obfuscation.padding.enabled = tree.get("obfuscation.padding.enabled", false);
-    obfuscation.padding.min_bytes = tree.get("obfuscation.padding.min_bytes", uint16_t(0));
-    obfuscation.padding.max_bytes = tree.get("obfuscation.padding.max_bytes", uint16_t(64));
-    obfuscation.record_splitting.enabled = tree.get("obfuscation.record_splitting.enabled", false);
-    obfuscation.record_splitting.min_fragment = tree.get("obfuscation.record_splitting.min_fragment", uint16_t(64));
-    obfuscation.record_splitting.max_fragment = tree.get("obfuscation.record_splitting.max_fragment", uint16_t(256));
-    obfuscation.cache.enabled = tree.get("obfuscation.cache.enabled", true);
-    obfuscation.cache.directory = tree.get("obfuscation.cache.directory", string());
-    obfuscation.tls.enforce_tls13 = tree.get("obfuscation.tls.enforce_tls13", false);
-    obfuscation.tls.min_version = tree.get("obfuscation.tls.min_version", uint16_t(0x0303));  // 默认 TLS 1.2
-    
-    // Routing config (client-side only)
-    routing.enabled = tree.get("routing.enabled", true);  // 默认启用分流
-    routing.mode = tree.get("routing.mode", string("rule"));  // rule, global, direct
-    routing.rules_file = tree.get("routing.rules_file", string());  // 自定义规则文件
+
 }
 
 bool Config::sip003() {

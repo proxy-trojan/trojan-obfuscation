@@ -56,10 +56,7 @@ void signal_async_wait(signal_set &sig, Service &service, bool &restart) {
                 service.reload_cert();
                 signal_async_wait(sig, service, restart);
                 break;
-            case SIGUSR2:
-                service.reload_routing();
-                signal_async_wait(sig, service, restart);
-                break;
+
 #endif // _WIN32
         }
     });
@@ -161,7 +158,7 @@ int main(int argc, const char *argv[]) {
 #ifndef _WIN32
             sig.add(SIGHUP);
             sig.add(SIGUSR1);
-            sig.add(SIGUSR2);
+
 #endif // _WIN32
             signal_async_wait(sig, service, restart);
             service.run();

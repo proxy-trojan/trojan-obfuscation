@@ -30,17 +30,17 @@ private:
         REQUEST,
         CONNECT,
         FORWARD,
-        DIRECT_FORWARD,  // Direct connection (bypass proxy)
+
         UDP_FORWARD,
         INVALID,
         DESTROY
     } status;
     bool is_udp{};
-    bool is_direct{};  // Whether this connection should be direct
+
     bool first_packet_recv;
     boost::asio::ip::tcp::socket in_socket;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket>out_socket;
-    boost::asio::ip::tcp::socket direct_socket;  // Socket for direct connections
+
     std::string target_host;  // Target host for logging
     uint16_t target_port;     // Target port
     void destroy();
@@ -52,10 +52,7 @@ private:
     void out_async_write(const std::string &data);
     void out_recv(const std::string &data);
     void out_sent();
-    void direct_async_read();
-    void direct_async_write(const std::string &data);
-    void direct_recv(const std::string &data);
-    void direct_sent();
+
     void udp_async_read();
     void udp_async_write(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint);
     void udp_recv(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint);

@@ -36,7 +36,7 @@
 #include "session/natsession.h"
 #include "ssl/ssldefaults.h"
 #include "ssl/sslsession.h"
-#include "rule_engine.h"
+
 using namespace std;
 using namespace boost::asio::ip;
 using namespace boost::asio::ssl;
@@ -277,10 +277,7 @@ Service::Service(Config &config, bool test) :
 }
 
 void Service::run() {
-    // Initialize rule engine for client mode
-    if (config.run_type == Config::CLIENT) {
-        reload_routing();
-    }
+
 
     async_accept();
     if (config.run_type == Config::FORWARD) {
@@ -312,35 +309,7 @@ void Service::stop() {
     io_context.stop();
 }
 
-void Service::reload_routing() {
-    if (config.run_type != Config::CLIENT) {
-        return;
-    }
 
-    auto& rule_engine = get_rule_engine();
-    rule_engine.set_enabled(config.routing.enabled);
-
-    // Mode is primarily driven by rules json ("mode" field) when rules_file is present.
-    // Keep backward-compat: if no rules_file, fall back to config.routing.mode.
-    if (!config.routing.rules_file.empty()) {
-        if (rule_engine.load_rules_file(config.routing.rules_file)) {
-            Log::log_with_date_time("[Routing] reloaded from file: " + config.routing.rules_file + ", rules: " + to_string(rule_engine.rule_count()), Log::INFO);
-        } else {
-            Log::log_with_date_time("[Routing] failed to reload rules from file: " + config.routing.rules_file, Log::ERROR);
-        }
-        return;
-    }
-
-    if (config.routing.mode == "global") {
-        rule_engine.set_mode(ProxyMode::GLOBAL);
-    } else if (config.routing.mode == "direct") {
-        rule_engine.set_mode(ProxyMode::DIRECT);
-    } else {
-        rule_engine.set_mode(ProxyMode::RULE);
-    }
-
-    Log::log_with_date_time("[Routing] mode set to: " + config.routing.mode, Log::INFO);
-}
 
 void Service::async_accept() {
     shared_ptr<Session>session(nullptr);
@@ -381,16 +350,16 @@ void Service::udp_async_read() {
             throw runtime_error(error.message());
         }
         string data((const char *)udp_read_buf, length);
-        for (auto it = udp_sessions.begin(); it != udp_sessions.end();) {
-            auto next = ++it;
-            --it;
-            if (it->expired()) {
+        auto it = udp_sessions.find(udp_recv_endpoint);
+        if (it != udp_sessions.end()) {
+            if (it->second.expired()) {
                 udp_sessions.erase(it);
-            } else if (it->lock()->process(udp_recv_endpoint, data)) {
-                udp_async_read();
-                return;
+            } else {
+                if (it->second.lock()->process(udp_recv_endpoint, data)) {
+                    udp_async_read();
+                    return;
+                }
             }
-            it = next;
         }
         Log::log_with_endpoint(tcp::endpoint(udp_recv_endpoint.address(), udp_recv_endpoint.port()), "new UDP session");
         auto session = make_shared<UDPForwardSession>(config, io_context, ssl_context, udp_recv_endpoint, [this](const udp::endpoint &endpoint, const string &data) {
@@ -402,7 +371,7 @@ void Service::udp_async_read() {
                 throw runtime_error(ec.message());
             }
         });
-        udp_sessions.emplace_back(session);
+        udp_sessions[udp_recv_endpoint] = session;
         session->start();
         session->process(udp_recv_endpoint, data);
         udp_async_read();

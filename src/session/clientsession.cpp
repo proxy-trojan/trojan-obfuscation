@@ -21,8 +21,7 @@
 #include "proto/trojanrequest.h"
 #include "proto/udppacket.h"
 #include "ssl/sslsession.h"
-#include "obfuscation/obfuscation_manager.h"
-#include "core/rule_engine.h"
+
 using namespace std;
 using namespace boost::asio::ip;
 using namespace boost::asio::ssl;
@@ -30,11 +29,9 @@ using namespace boost::asio::ssl;
 ClientSession::ClientSession(const Config &config, boost::asio::io_context &io_context, context &ssl_context) :
     Session(config, io_context),
     status(HANDSHAKE),
-    is_direct(false),
     first_packet_recv(false),
     in_socket(io_context),
     out_socket(io_context, ssl_context),
-    direct_socket(io_context),
     target_port(0) {}
 
 tcp::socket& ClientSession::accept_socket() {
@@ -51,11 +48,7 @@ void ClientSession::start() {
     }
     auto ssl = out_socket.native_handle();
     
-    // Apply obfuscation if enabled
-    if (config.obfuscation.enabled) {
-        auto& obfuscation = get_obfuscation_manager();
-        obfuscation.apply_client_obfuscation(ssl);
-    }
+
     
     if (!config.ssl.sni.empty()) {
         SSL_set_tlsext_host_name(ssl, config.ssl.sni.c_str());
@@ -118,46 +111,7 @@ void ClientSession::out_async_write(const string &data) {
     });
 }
 
-// Direct connection methods
-void ClientSession::direct_async_read() {
-    auto self = shared_from_this();
-    direct_socket.async_read_some(boost::asio::buffer(out_read_buf.data(), out_read_buf.size()), [this, self](const boost::system::error_code error, size_t length) {
-        if (error) {
-            destroy();
-            return;
-        }
-        direct_recv(string((const char*)out_read_buf.data(), length));
-    });
-}
 
-void ClientSession::direct_async_write(const string &data) {
-    auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    boost::asio::async_write(direct_socket, boost::asio::buffer(*data_copy), [this, self, data_copy](const boost::system::error_code error, size_t) {
-        if (error) {
-            destroy();
-            return;
-        }
-        direct_sent();
-    });
-}
-
-void ClientSession::direct_recv(const string &data) {
-    if (data.length() > out_read_buf.size() * 0.75) {
-        resize_buffer(out_read_buf, data.length() * 2);
-    }
-    
-    if (status == DIRECT_FORWARD) {
-        recv_len += data.length();
-        in_async_write(data);
-    }
-}
-
-void ClientSession::direct_sent() {
-    if (status == DIRECT_FORWARD) {
-        in_async_read();
-    }
-}
 
 void ClientSession::udp_async_read() {
     auto self = shared_from_this();
@@ -233,22 +187,9 @@ void ClientSession::in_recv(const string &data) {
             target_host = req.address.address;
             target_port = req.address.port;
             is_udp = req.command == TrojanRequest::UDP_ASSOCIATE;
-            
-            // Check routing rules
-            RuleAction action = get_rule_engine().match(target_host, target_port);
-            
-            if (action == RuleAction::REJECT) {
-                Log::log_with_endpoint(in_endpoint, "REJECTED connection to " + target_host + ':' + to_string(target_port), Log::INFO);
-                in_async_write(string("\x05\x02\x00\x01\x00\x00\x00\x00\x00\x00", 10));
-                status = INVALID;
-                return;
-            }
-            
-            is_direct = (action == RuleAction::DIRECT);
-            
+
             if (is_udp) {
                 // UDP associate - always through proxy for now
-                is_direct = false;
                 udp::endpoint bindpoint(in_socket.local_endpoint().address(), 0);
                 boost::system::error_code ec;
                 udp_socket.open(bindpoint.protocol(), ec);
@@ -260,26 +201,18 @@ void ClientSession::in_recv(const string &data) {
                 Log::log_with_endpoint(in_endpoint, "requested UDP associate to " + target_host + ':' + to_string(target_port) + ", open UDP socket " + udp_socket.local_endpoint().address().to_string() + ':' + to_string(udp_socket.local_endpoint().port()) + " for relay", Log::INFO);
                 in_async_write(string("\x05\x00\x00", 3) + SOCKS5Address::generate(udp_socket.local_endpoint()));
             } else {
-                string route_type = is_direct ? "DIRECT" : "PROXY";
-                Log::log_with_endpoint(in_endpoint, "[" + route_type + "] " + target_host + ':' + to_string(target_port), Log::INFO);
+                Log::log_with_endpoint(in_endpoint, "[PROXY] " + target_host + ':' + to_string(target_port), Log::INFO);
                 in_async_write(string("\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", 10));
             }
             
             // Store the trojan request for proxy mode
-            if (!is_direct) {
-                out_write_buf = temp_buf;
-            }
+            out_write_buf = temp_buf;
             break;
         }
         case CONNECT: {
             sent_len += data.length();
             first_packet_recv = true;
-            if (is_direct) {
-                // Buffer data for direct connection
-                out_write_buf += data;
-            } else {
-                out_write_buf += data;
-            }
+            out_write_buf += data;
             break;
         }
         case FORWARD: {
@@ -287,11 +220,7 @@ void ClientSession::in_recv(const string &data) {
             out_async_write(data);
             break;
         }
-        case DIRECT_FORWARD: {
-            sent_len += data.length();
-            direct_async_write(data);
-            break;
-        }
+
         case UDP_FORWARD: {
             Log::log_with_endpoint(in_endpoint, "unexpected data from TCP port", Log::ERROR);
             destroy();
@@ -315,132 +244,82 @@ void ClientSession::in_sent() {
                 udp_async_read();
             }
             
+            
             auto self = shared_from_this();
             
-            if (is_direct) {
-                // Direct connection - connect to target directly
-                resolver.async_resolve(target_host, to_string(target_port), [this, self](const boost::system::error_code error, const tcp::resolver::results_type& results) {
-                    if (error || results.empty()) {
-                        Log::log_with_endpoint(in_endpoint, "cannot resolve " + target_host + ": " + error.message(), Log::ERROR);
-                        destroy();
-                        return;
-                    }
-                    auto iterator = results.begin();
-                    Log::log_with_endpoint(in_endpoint, "[DIRECT] " + target_host + " resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
-                    
-                    boost::system::error_code ec;
-                    direct_socket.open(iterator->endpoint().protocol(), ec);
-                    if (ec) {
-                        destroy();
-                        return;
-                    }
-                    if (config.tcp.no_delay) {
-                        direct_socket.set_option(tcp::no_delay(true));
-                    }
-                    if (config.tcp.keep_alive) {
-                        direct_socket.set_option(boost::asio::socket_base::keep_alive(true));
-                    }
-                    
-                    direct_socket.async_connect(*iterator, [this, self](const boost::system::error_code error) {
-                        if (error) {
-                            Log::log_with_endpoint(in_endpoint, "cannot connect to " + target_host + ':' + to_string(target_port) + ": " + error.message(), Log::ERROR);
-                            destroy();
-                            return;
-                        }
-                        Log::log_with_endpoint(in_endpoint, "[DIRECT] connected to " + target_host + ':' + to_string(target_port));
-                        
-                        boost::system::error_code ec;
-                        if (!first_packet_recv) {
-                            in_socket.cancel(ec);
-                        }
-                        status = DIRECT_FORWARD;
-                        direct_async_read();
-                        if (!out_write_buf.empty()) {
-                            direct_async_write(out_write_buf);
-                            out_write_buf.clear();
-                        } else {
-                            in_async_read();
-                        }
-                    });
-                });
-            } else {
-                // Proxy connection - connect to trojan server
-                resolver.async_resolve(config.remote_addr, to_string(config.remote_port), [this, self](const boost::system::error_code error, const tcp::resolver::results_type& results) {
-                    if (error || results.empty()) {
-                        Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + config.remote_addr + ": " + error.message(), Log::ERROR);
-                        destroy();
-                        return;
-                    }
-                    auto iterator = results.begin();
-                    Log::log_with_endpoint(in_endpoint, config.remote_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
-                    boost::system::error_code ec;
-                    out_socket.next_layer().open(iterator->endpoint().protocol(), ec);
-                    if (ec) {
-                        destroy();
-                        return;
-                    }
-                    if (config.tcp.no_delay) {
-                        out_socket.next_layer().set_option(tcp::no_delay(true));
-                    }
-                    if (config.tcp.keep_alive) {
-                        out_socket.next_layer().set_option(boost::asio::socket_base::keep_alive(true));
-                    }
+            // Proxy connection - connect to trojan server
+            resolver.async_resolve(config.remote_addr, to_string(config.remote_port), [this, self](const boost::system::error_code error, const tcp::resolver::results_type& results) {
+                if (error || results.empty()) {
+                    Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + config.remote_addr + ": " + error.message(), Log::ERROR);
+                    destroy();
+                    return;
+                }
+                auto iterator = results.begin();
+                Log::log_with_endpoint(in_endpoint, config.remote_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
+                boost::system::error_code ec;
+                out_socket.next_layer().open(iterator->endpoint().protocol(), ec);
+                if (ec) {
+                    destroy();
+                    return;
+                }
+                if (config.tcp.no_delay) {
+                    out_socket.next_layer().set_option(tcp::no_delay(true));
+                }
+                if (config.tcp.keep_alive) {
+                    out_socket.next_layer().set_option(boost::asio::socket_base::keep_alive(true));
+                }
 #ifdef TCP_FASTOPEN_CONNECT
-                    if (config.tcp.fast_open) {
-                        using fastopen_connect = boost::asio::detail::socket_option::boolean<IPPROTO_TCP, TCP_FASTOPEN_CONNECT>;
-                        boost::system::error_code ec;
-                        out_socket.next_layer().set_option(fastopen_connect(true), ec);
-                    }
+                if (config.tcp.fast_open) {
+                    using fastopen_connect = boost::asio::detail::socket_option::boolean<IPPROTO_TCP, TCP_FASTOPEN_CONNECT>;
+                    boost::system::error_code ec;
+                    out_socket.next_layer().set_option(fastopen_connect(true), ec);
+                }
 #endif // TCP_FASTOPEN_CONNECT
-                    out_socket.next_layer().async_connect(*iterator, [this, self](const boost::system::error_code error) {
+                out_socket.next_layer().async_connect(*iterator, [this, self](const boost::system::error_code error) {
+                    if (error) {
+                        Log::log_with_endpoint(in_endpoint, "cannot establish connection to remote server " + config.remote_addr + ':' + to_string(config.remote_port) + ": " + error.message(), Log::ERROR);
+                        destroy();
+                        return;
+                    }
+                    out_socket.async_handshake(stream_base::client, [this, self](const boost::system::error_code error) {
                         if (error) {
-                            Log::log_with_endpoint(in_endpoint, "cannot establish connection to remote server " + config.remote_addr + ':' + to_string(config.remote_port) + ": " + error.message(), Log::ERROR);
+                            Log::log_with_endpoint(in_endpoint, "SSL handshake failed with " + config.remote_addr + ':' + to_string(config.remote_port) + ": " + error.message(), Log::ERROR);
                             destroy();
                             return;
                         }
-                        out_socket.async_handshake(stream_base::client, [this, self](const boost::system::error_code error) {
-                            if (error) {
-                                Log::log_with_endpoint(in_endpoint, "SSL handshake failed with " + config.remote_addr + ':' + to_string(config.remote_port) + ": " + error.message(), Log::ERROR);
-                                destroy();
-                                return;
-                            }
-                            Log::log_with_endpoint(in_endpoint, "[PROXY] tunnel established for " + target_host + ':' + to_string(target_port));
-                            if (config.ssl.reuse_session) {
-                                auto ssl = out_socket.native_handle();
-                                if (!SSL_session_reused(ssl)) {
-                                    Log::log_with_endpoint(in_endpoint, "SSL session not reused");
-                                } else {
-                                    Log::log_with_endpoint(in_endpoint, "SSL session reused");
-                                }
-                            }
-                            boost::system::error_code ec;
-                            if (is_udp) {
-                                if (!first_packet_recv) {
-                                    udp_socket.cancel(ec);
-                                }
-                                status = UDP_FORWARD;
+                        Log::log_with_endpoint(in_endpoint, "[PROXY] tunnel established for " + target_host + ':' + to_string(target_port));
+                        if (config.ssl.reuse_session) {
+                            auto ssl = out_socket.native_handle();
+                            if (!SSL_session_reused(ssl)) {
+                                Log::log_with_endpoint(in_endpoint, "SSL session not reused");
                             } else {
-                                if (!first_packet_recv) {
-                                    in_socket.cancel(ec);
-                                }
-                                status = FORWARD;
+                                Log::log_with_endpoint(in_endpoint, "SSL session reused");
                             }
-                            out_async_read();
-                            out_async_write(out_write_buf);
-                        });
+                        }
+                        boost::system::error_code ec;
+                        if (is_udp) {
+                            if (!first_packet_recv) {
+                                udp_socket.cancel(ec);
+                            }
+                            status = UDP_FORWARD;
+                        } else {
+                            if (!first_packet_recv) {
+                                in_socket.cancel(ec);
+                            }
+                            status = FORWARD;
+                        }
+                        out_async_read();
+                        out_async_write(out_write_buf);
                     });
                 });
-            }
+            });
             break;
         }
         case FORWARD: {
             out_async_read();
             break;
         }
-        case DIRECT_FORWARD: {
-            direct_async_read();
-            break;
-        }
+
         case INVALID: {
             destroy();
             break;
@@ -539,19 +418,14 @@ void ClientSession::destroy() {
         return;
     }
     status = DESTROY;
-    string route_info = is_direct ? "[DIRECT]" : "[PROXY]";
-    Log::log_with_endpoint(in_endpoint, route_info + " disconnected from " + target_host + ", " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
+    // Removed direct routing info from log
+    Log::log_with_endpoint(in_endpoint, "disconnected from " + target_host + ", " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
     boost::system::error_code ec;
     resolver.cancel();
     if (in_socket.is_open()) {
         in_socket.cancel(ec);
         in_socket.shutdown(tcp::socket::shutdown_both, ec);
         in_socket.close(ec);
-    }
-    if (direct_socket.is_open()) {
-        direct_socket.cancel(ec);
-        direct_socket.shutdown(tcp::socket::shutdown_both, ec);
-        direct_socket.close(ec);
     }
     if (udp_socket.is_open()) {
         udp_socket.cancel(ec);

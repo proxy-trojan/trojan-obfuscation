@@ -52,7 +52,7 @@ if(ENABLE_MYSQL)
     add_definitions(-DENABLE_MYSQL)
 endif()
 
-option(FORCE_TCP_FASTOPEN "Force build with TCP Fast Open support" OFF)
+option(FORCE_TCP_FASTOPEN "Force build with TCP Fast Open support" ON)
 if(FORCE_TCP_FASTOPEN)
     add_definitions(-DTCP_FASTOPEN=23 -DTCP_FASTOPEN_CONNECT=30)
 endif()
