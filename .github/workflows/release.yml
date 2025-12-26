@@ -95,10 +95,10 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-13
+            runner: macos-15
             cmake_osx_arch: x86_64
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
             cmake_osx_arch: arm64
 
     runs-on: ${{ matrix.runner }}
@@ -112,18 +112,27 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Reinstall boost to ensure all components are available
-          brew reinstall boost
-          brew install openssl@3
+          # Unlink existing boost if present, then install fresh
+          brew unlink boost 2>/dev/null || true
+          brew install boost openssl@3
+          # Force link boost
+          brew link --overwrite boost 2>/dev/null || true
 
       - name: Build
         run: |
+          BOOST_ROOT=$(brew --prefix boost)
+          OPENSSL_ROOT=$(brew --prefix openssl@3)
+          
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_arch }} \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix boost);$(brew --prefix openssl@3)" \
-            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3) \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DBoost_NO_BOOST_CMAKE=ON \
+            -DBOOST_ROOT=$BOOST_ROOT \
+            -DBoost_INCLUDE_DIR=$BOOST_ROOT/include \
+            -DBoost_LIBRARY_DIR=$BOOST_ROOT/lib \
+            -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
             -DENABLE_MYSQL=OFF
           make -j$(sysctl -n hw.ncpu)
 
