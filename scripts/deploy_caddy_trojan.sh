@@ -18,6 +18,9 @@ INSTALL_DIR="/usr/local/trojan"
 CONFIG_DIR="/etc/trojan"
 LOG_DIR="/var/log/trojan"
 WEB_DIR="/var/www/html"
+REPO_URL="https://github.com/proxy-trojan/trojan-obfuscation"
+REPO_BRANCH="feature_1.0_no_obfus_and_no_rules"
+
 
 # Colors & Formatting
 RED='\033[0;31m'
@@ -80,6 +83,7 @@ setup_languages() {
     MSG_en_MENU_STATUS="Check Status"
     MSG_en_MENU_CONFIG="View Config"
     MSG_en_MENU_LOGS="View Logs"
+    MSG_en_MENU_RENEW="Renew Certificate"
     MSG_en_MENU_UNINSTALL="Uninstall"
     MSG_en_MENU_EXIT="Exit"
     MSG_en_STATUS_RUNNING="Running"
@@ -87,8 +91,12 @@ setup_languages() {
     MSG_en_STATUS_UNKNOWN="Unknown"
     MSG_en_UNINSTALL_CONFIRM="Are you sure you want to uninstall? This will delete config and data."
     MSG_en_UNINSTALL_DONE="Uninstallation complete."
+    MSG_en_PORT_OCCUPIED="Error: Port %s is occupied by %s. Please release it first."
+    MSG_en_CERT_RENEW_START="Starting certificate renewal..."
+    MSG_en_CERT_RENEW_SUCCESS="Certificate renewed successfully!"
     
     # CN Dictionary
+
     MSG_cn_BANNER_TITLE="Trojan + Caddy 一键部署脚本"
     MSG_cn_BANNER_SUB="安全、高速、隐蔽的代理解决方案"
     MSG_cn_ROOT_REQUIRED="错误：此脚本需要 root 权限运行。"
@@ -134,6 +142,7 @@ setup_languages() {
     MSG_cn_MENU_STATUS="服务状态检查"
     MSG_cn_MENU_CONFIG="查看配置信息"
     MSG_cn_MENU_LOGS="查看运行日志"
+    MSG_cn_MENU_RENEW="手动续期证书"
     MSG_cn_MENU_UNINSTALL="卸载服务"
     MSG_cn_MENU_EXIT="退出脚本"
     MSG_cn_STATUS_RUNNING="运行中"
@@ -141,6 +150,9 @@ setup_languages() {
     MSG_cn_STATUS_UNKNOWN="未知"
     MSG_cn_UNINSTALL_CONFIRM="确定要卸载吗？这将删除所有配置和数据。"
     MSG_cn_UNINSTALL_DONE="卸载完成。"
+    MSG_cn_PORT_OCCUPIED="错误：端口 %s 被程序 %s 占用。请先释放端口。"
+    MSG_cn_CERT_RENEW_START="开始续期证书..."
+    MSG_cn_CERT_RENEW_SUCCESS="证书续期成功！"
 }
 
 # Helper to get string
@@ -182,7 +194,7 @@ print_banner() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║                                                              ║"
-    echo "║          Trojan + Caddy Deployment Script v2.0               ║"
+    echo "║          Trojan + Caddy Deployment Script v2.1               ║"
     echo "║                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -193,6 +205,29 @@ check_root() {
         log_error "$(t ROOT_REQUIRED)"
         exit 1
     fi
+}
+
+check_port() {
+    local port=$1
+    if command -v lsof &>/dev/null; then
+        if lsof -i :$port >/dev/null; then
+            local pid=$(lsof -t -i :$port)
+            local name=$(ps -p $pid -o comm=)
+            log_error "$(printf "$(t PORT_OCCUPIED)" "$port" "$name")"
+            return 1
+        fi
+    elif command -v netstat &>/dev/null; then
+        if netstat -tuln | grep -q ":$port "; then
+            log_error "$(printf "$(t PORT_OCCUPIED)" "$port" "Unknown")"
+            return 1
+        fi
+    elif command -v ss &>/dev/null; then
+        if ss -tuln | grep -q ":$port "; then
+            log_error "$(printf "$(t PORT_OCCUPIED)" "$port" "Unknown")"
+            return 1
+        fi
+    fi
+    return 0
 }
 
 pause() {
@@ -367,12 +402,12 @@ install_dependencies() {
     case $PM in
         apt)
             pkg_install build-essential cmake libboost-system-dev libboost-program-options-dev \
-                        libssl-dev default-libmysqlclient-dev git curl wget socat
+                        libssl-dev default-libmysqlclient-dev git curl wget socat lsof
             ;;
         dnf|yum)
             pkg_install epel-release || true
             pkg_install gcc gcc-c++ make cmake boost-devel openssl-devel \
-                        mariadb-devel git curl wget socat
+                        mariadb-devel git curl wget socat lsof
             ;;
         pacman)
             pkg_install base-devel cmake boost openssl mariadb-libs git curl wget socat
@@ -685,6 +720,10 @@ do_install() {
         log_warn "$(t NET_FAIL)"
     fi
     
+    # Check Ports
+    check_port 80 || return
+    check_port 443 || return
+    
     detect_os
     
     echo ""
@@ -783,6 +822,54 @@ do_status() {
     pause
 }
 
+
+
+do_renew_cert() {
+    log_info "$(t CERT_RENEW_START)"
+    
+    if [[ -f ~/.acme.sh/acme.sh ]]; then
+        local acme_sh=~/.acme.sh/acme.sh
+        
+        # Determine reload command
+        detect_os
+        local reload_cmd=""
+         if [[ -f "docker-compose.yml" ]]; then
+            reload_cmd="docker restart trojan 2>/dev/null || true"
+        else
+            case $SM in
+                systemd) reload_cmd="systemctl reload trojan 2>/dev/null || true" ;;
+                openrc) reload_cmd="rc-service trojan reload 2>/dev/null || true" ;;
+                *) reload_cmd="pkill -HUP trojan || true" ;;
+            esac
+        fi
+        
+        # Read domain from config if possible
+        if [[ -z "$DOMAIN" ]]; then
+             if [[ -f "/etc/trojan/config.json" ]]; then
+                 # Very rough extraction, might be better to ask user or save it separately
+                 # For now, ask user
+                 echo ""
+                 read -r -p "$(t ENTER_DOMAIN) " DOMAIN
+             else
+                 log_error "Config not found. Please install first."
+                 pause
+                 return
+             fi
+        fi
+
+        $acme_sh --renew -d "$DOMAIN" --force --ecc --reloadcmd "$reload_cmd"
+        
+        if [[ $? -eq 0 ]]; then
+            log_info "$(t CERT_RENEW_SUCCESS)"
+        else
+            log_error "Certificate renewal failed."
+        fi
+    else
+        log_error "acme.sh not found."
+    fi
+    pause
+}
+
 do_config() {
     if [[ -f "/etc/trojan/config.json" ]]; then
         echo ""
@@ -842,17 +929,21 @@ show_menu() {
     echo -e "${CYAN}2.${NC} $(t MENU_STATUS)"
     echo -e "${CYAN}3.${NC} $(t MENU_CONFIG)"
     echo -e "${CYAN}4.${NC} $(t MENU_LOGS)"
-    echo -e "${CYAN}5.${NC} $(t MENU_UNINSTALL)"
+    echo -e "${CYAN}5.${NC} $(t MENU_RENEW)"
+    echo -e "${CYAN}6.${NC} $(t MENU_UNINSTALL)"
     echo -e "${CYAN}0.${NC} $(t MENU_EXIT)"
+    
+    echo -e "\n${BLUE}Tip: Run via one-click:${NC} ${YELLOW}bash <(curl -sL ${REPO_URL/github.com/raw.githubusercontent.com}/$REPO_BRANCH/install.sh)${NC}"
     echo ""
-    read -r -p "Select [0-5]: " choice
+    read -r -p "Select [0-6]: " choice
     
     case $choice in
         1) do_install ;;
         2) do_status ;;
         3) do_config ;;
         4) do_logs ;;
-        5) do_uninstall ;;
+        5) do_renew_cert ;;
+        6) do_uninstall ;;
         0) exit 0 ;;
         *) echo "Invalid choice"; sleep 1 ;;
     esac
