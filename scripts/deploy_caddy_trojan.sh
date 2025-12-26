@@ -938,16 +938,23 @@ do_status() {
         local timeout_cmd=""
         if command -v timeout &>/dev/null; then timeout_cmd="timeout 3"; fi
         
-        if echo "Q" | $timeout_cmd openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" -quiet 2>/dev/null; then
-            echo -e "${GREEN}$(t CONN_OK)${NC}"
+        local check_out
+        check_out=$(echo "Q" | $timeout_cmd openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" 2>&1)
+        local check_ret=$?
+        
+        if [[ $check_ret -eq 0 ]]; then
+             echo -e "${GREEN}$(t CONN_OK)${NC}"
         else
-            echo -e "${RED}$(t CONN_FAIL)${NC}"
-             # Check if process listening
-             local port_443_pid=""
-             if command -v lsof &>/dev/null; then port_443_pid=$(lsof -t -i :443); fi
-             if [[ -z "$port_443_pid" ]]; then
-                 echo -e "${RED}Error: Nothing is listening on Port 443.${NC}"
-             fi
+             echo -e "${RED}$(t CONN_FAIL)${NC}"
+             echo -e "Debug Info:"
+             echo "$check_out" | grep -iE "error|errno|fail|refused|timeout" | head -n 3
+             
+             echo -e "\nPort 443 Status:"
+             if command -v ss &>/dev/null; then ss -tuln | grep :443;
+             elif command -v netstat &>/dev/null; then netstat -tuln | grep :443; fi
+             
+             echo -e "\nCertificate Check:"
+             ls -lh /etc/trojan/server.crt /etc/trojan/server.key 2>/dev/null
         fi
     fi
     pause
