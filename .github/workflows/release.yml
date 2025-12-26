@@ -114,10 +114,20 @@ jobs:
 
       - name: Build Boost from source
         run: |
-          # Download Boost 1.84.0 (stable version with good CMake support)
-          curl -L -o boost.tar.gz https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.gz
-          tar -xzf boost.tar.gz
-          cd boost_1_84_0
+          # Download Boost 1.84.0 from GitHub releases
+          BOOST_VERSION="1.84.0"
+          BOOST_VERSION_UNDERSCORE="1_84_0"
+          curl -L -o boost.tar.bz2 "https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-b2-nodocs.tar.gz"
+          
+          # Verify download
+          if [ ! -s boost.tar.bz2 ] || [ $(stat -f%z boost.tar.bz2) -lt 10000000 ]; then
+            echo "Download failed or file too small, trying alternative URL..."
+            curl -L -o boost.tar.bz2 "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2"
+          fi
+          
+          # Extract
+          tar -xjf boost.tar.bz2 || tar -xzf boost.tar.bz2
+          cd boost* || cd boost_*
           
           # Bootstrap and build only required libraries
           ./bootstrap.sh --with-libraries=system,program_options --prefix=$HOME/boost-install
