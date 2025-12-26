@@ -94,7 +94,13 @@ setup_languages() {
     MSG_en_PORT_OCCUPIED="Error: Port %s is occupied by %s. Please release it first."
     MSG_en_CERT_RENEW_START="Starting certificate renewal..."
     MSG_en_CERT_RENEW_SUCCESS="Certificate renewed successfully!"
-    
+    MSG_en_CDN_WARN="Warning: Domain resolves to %s (likely CDN/Cloudflare). Trojan TCP cannot connect through proxies. Please use DNS-Only mode."
+    MSG_en_FIREWALL_CHECK="Checking firewall settings..."
+    MSG_en_FIREWALL_OPEN="Opening ports 80 and 443..."
+    MSG_en_CONN_CHECK="Performing local connectivity check..."
+    MSG_en_CONN_OK="Connection Test: OK (Local handshake successful)"
+    MSG_en_CONN_FAIL="Connection Test: FAILED (Local handshake failed)"
+
     # CN Dictionary
 
     MSG_cn_BANNER_TITLE="Trojan + Caddy 一键部署脚本"
@@ -153,6 +159,12 @@ setup_languages() {
     MSG_cn_PORT_OCCUPIED="错误：端口 %s 被程序 %s 占用。请先释放端口。"
     MSG_cn_CERT_RENEW_START="开始续期证书..."
     MSG_cn_CERT_RENEW_SUCCESS="证书续期成功！"
+    MSG_cn_CDN_WARN="警告：域名解析到 %s (可能是 CDN/Cloudflare)。Trojan TCP 无法通过代理连接，请使用 DNS-Only 模式。"
+    MSG_cn_FIREWALL_CHECK="正在检查防火墙设置..."
+    MSG_cn_FIREWALL_OPEN="正在开放 80 和 443 端口..."
+    MSG_cn_CONN_CHECK="正在执行本地连接检查..."
+    MSG_cn_CONN_OK="连接测试：正常 (本地握手成功)"
+    MSG_cn_CONN_FAIL="连接测试：失败 (本地握手失败)"
 }
 
 # Helper to get string
@@ -236,6 +248,59 @@ check_port() {
         fi
     fi
     return 0
+}
+
+check_domain_ip() {
+    local domain=$1
+    local ip=""
+    
+    if command -v dig &>/dev/null; then
+        ip=$(dig +short "$domain" | tail -n 1)
+    elif command -v nslookup &>/dev/null; then
+        ip=$(nslookup "$domain" | grep 'Address:' | tail -n 1 | awk '{print $2}')
+    elif command -v getent &>/dev/null; then
+        ip=$(getent hosts "$domain" | awk '{print $1}')
+    fi
+    
+    if [[ -n "$ip" ]]; then
+        # Check for Cloudflare ranges (simplified check)
+        # Cloudflare IPs often start with 104. or 172. or 162. or 188. 
+        # But this is not exhaustive.
+        if echo "$ip" | grep -Eq "^(104\.|172\.(6[4-9]|7[0-1])\.|188\.114\.)"; then
+             log_warn "$(printf "$(t CDN_WARN)" "$ip")"
+             return 1
+        fi
+    fi
+    return 0
+}
+
+configure_firewall() {
+    log_info "$(t FIREWALL_CHECK)"
+    log_info "$(t FIREWALL_OPEN)"
+    
+    if command -v ufw &>/dev/null; then
+        if ufw status | grep -q "Status: active"; then
+             ufw allow 80/tcp
+             ufw allow 443/tcp
+             ufw reload
+        fi
+    elif command -v firewall-cmd &>/dev/null; then
+        if systemctl is-active firewalld &>/dev/null; then
+            firewall-cmd --permanent --add-port=80/tcp
+            firewall-cmd --permanent --add-port=443/tcp
+            firewall-cmd --reload
+        fi
+    elif command -v iptables &>/dev/null; then
+         # Basic iptables check/add if not present
+         if ! iptables -C INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null; then
+             iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+         fi
+         if ! iptables -C INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null; then
+             iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+         fi
+         # Should save iptables but that distro specific (netfilter-persistent etc)
+         # Just leave as runtime open mostly for now
+    fi
 }
 
 pause() {
@@ -748,6 +813,8 @@ do_install() {
         if [[ -z "$DOMAIN" ]]; then log_warn "$(t DOMAIN_EMPTY)"; fi
     done
     
+    check_domain_ip "$DOMAIN"
+    
     # Save domain for future use
     mkdir -p /etc/trojan
     echo "$DOMAIN" > /etc/trojan/.domain
@@ -784,6 +851,8 @@ do_install() {
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         return
     fi
+    
+    configure_firewall
     
     log_info "$(t INSTALL_START)"
     
@@ -844,6 +913,26 @@ do_status() {
         detect_os
         echo -n "Trojan: "; svc_status trojan
         echo -n "Caddy:  "; svc_status caddy
+        echo -n "Trojan: "; svc_status trojan
+        echo -n "Caddy:  "; svc_status caddy
+    fi
+    
+    echo "------------------------------"
+    echo "$(t CONN_CHECK)"
+    if command -v openssl &>/dev/null; then
+        # We try to connect to localhost 443 
+        # Note: If docker, localhost might work if bound to host.
+        if echo "Q" | openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" -quiet 2>/dev/null; then
+            echo -e "${GREEN}$(t CONN_OK)${NC}"
+        else
+            echo -e "${RED}$(t CONN_FAIL)${NC}"
+             # Check if process listening
+             local port_443_pid=""
+             if command -v lsof &>/dev/null; then port_443_pid=$(lsof -t -i :443); fi
+             if [[ -z "$port_443_pid" ]]; then
+                 echo -e "${RED}Error: Nothing is listening on Port 443.${NC}"
+             fi
+        fi
     fi
     pause
 }
