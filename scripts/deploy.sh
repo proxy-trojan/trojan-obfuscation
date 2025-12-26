@@ -881,15 +881,23 @@ setup_ssl_certificate() {
 
 setup_acme_certificate() {
     log_info "使用 acme.sh 申请 Let's Encrypt 证书..."
-    
+
+    local acme_sh=~/.acme.sh/acme.sh
+
     # 安装 acme.sh
-    if [[ ! -f ~/.acme.sh/acme.sh ]]; then
+    if [[ ! -f "$acme_sh" ]]; then
         curl -sS https://get.acme.sh | sh -s email="$EMAIL"
         source ~/.bashrc 2>/dev/null || true
     fi
-    
-    local acme_sh=~/.acme.sh/acme.sh
-    
+
+    # 切换到 Let's Encrypt 作为默认 CA（避免 ZeroSSL 需要额外注册的问题）
+    log_info "设置 Let's Encrypt 为默认 CA..."
+    $acme_sh --set-default-ca --server letsencrypt
+
+    # 注册账户（如果尚未注册）
+    log_info "注册 ACME 账户..."
+    $acme_sh --register-account -m "$EMAIL" --server letsencrypt 2>/dev/null || true
+
     # 确保 80 端口可用
     if ss -tlnp | grep -q ':80 '; then
         log_warn "端口 80 被占用，尝试停止相关服务..."
@@ -898,11 +906,11 @@ setup_acme_certificate() {
         systemctl stop apache2 2>/dev/null || true
         systemctl stop httpd 2>/dev/null || true
     fi
-    
+
     # 申请证书
     log_info "申请证书中，请确保域名 $DOMAIN 已解析到本服务器..."
-    
-    $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256 || {
+
+    $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256 --server letsencrypt || {
         log_error "证书申请失败，请检查:"
         log_error "  1. 域名是否正确解析到本服务器"
         log_error "  2. 端口 80 是否可访问"

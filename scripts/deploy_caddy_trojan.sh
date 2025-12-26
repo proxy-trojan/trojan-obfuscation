@@ -569,18 +569,32 @@ install_trojan() {
 # ==================== SSL Setup ====================
 setup_ssl() {
     log_info "$(t SSL_SETUP)"
-    
+
     svc_stop caddy
     svc_stop trojan
-    
+
+    local acme_sh=~/.acme.sh/acme.sh
+
     if [[ ! -f ~/.acme.sh/acme.sh ]]; then
+        # 安装 acme.sh，不指定默认 CA（避免 ZeroSSL 注册问题）
         curl -sS https://get.acme.sh | sh -s email="$EMAIL"
         source ~/.bashrc 2>/dev/null || true
     fi
-    
-    local acme_sh=~/.acme.sh/acme.sh
-    
-    if ! $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256; then
+
+    # 确保 acme.sh 路径正确
+    if [[ ! -f "$acme_sh" ]]; then
+        acme_sh="$HOME/.acme.sh/acme.sh"
+    fi
+
+    # 先切换到 Let's Encrypt 作为默认 CA（ZeroSSL 需要额外的 EAB 凭证，容易出问题）
+    log_info "Setting Let's Encrypt as default CA..."
+    $acme_sh --set-default-ca --server letsencrypt
+
+    # 注册账户到 Let's Encrypt（必须在申请证书前完成）
+    log_info "Registering account with Let's Encrypt..."
+    $acme_sh --register-account -m "$EMAIL" --server letsencrypt 2>/dev/null || true
+
+    if ! $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256 --server letsencrypt; then
         # Check if failure was due to existing valid cert (skipped)
         if [[ -f "$HOME/.acme.sh/${DOMAIN}_ecc/${DOMAIN}.key" ]] || [[ -f "$HOME/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]]; then
             log_info "Certificate seems to exist. Continuing..."
