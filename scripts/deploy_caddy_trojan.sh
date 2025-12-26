@@ -161,6 +161,14 @@ t() {
     eval echo \$$key
 }
 
+# Generate Trojan URL
+generate_trojan_url() {
+    local password=$1
+    local domain=$2
+    # Safe to assume alphanumeric password specific to this script's generation
+    echo "trojan://${password}@${domain}:443?security=tls&type=tcp&headerType=none&sni=${domain}#${domain}"
+}
+
 # ==================== Global Helper Functions ====================
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -601,6 +609,9 @@ configure_trojan() {
     }
 }
 EOF
+    # Save metadata for script usage
+    echo "$PASSWORD" > /etc/trojan/.password
+    chmod 600 /etc/trojan/.password
 }
 
 setup_services_host() {
@@ -732,6 +743,11 @@ do_install() {
         if [[ -z "$DOMAIN" ]]; then log_warn "$(t DOMAIN_EMPTY)"; fi
     done
     
+    # Save domain for future use
+    mkdir -p /etc/trojan
+    echo "$DOMAIN" > /etc/trojan/.domain
+    chmod 644 /etc/trojan/.domain
+    
     read -r -p "$(t ENTER_EMAIL) " EMAIL
     EMAIL=${EMAIL:-"admin@${DOMAIN}"}
     
@@ -797,6 +813,11 @@ do_install() {
     echo -e "  Port:     ${GREEN}443${NC}"
     echo -e "  Password: ${GREEN}$PASSWORD${NC}"
     echo ""
+    
+    TROJAN_URL=$(generate_trojan_url "$PASSWORD" "$DOMAIN")
+    echo -e "  ${YELLOW}Trojan URL (Click to Copy/Import):${NC}"
+    echo -e "  ${TROJAN_URL}"
+    echo ""
     echo "$(t NON_COMPLIANT)"
     
     pause
@@ -845,7 +866,9 @@ do_renew_cert() {
         
         # Read domain from config if possible
         if [[ -z "$DOMAIN" ]]; then
-             if [[ -f "/etc/trojan/config.json" ]]; then
+             if [[ -f "/etc/trojan/.domain" ]]; then
+                 DOMAIN=$(cat /etc/trojan/.domain)
+             elif [[ -f "/etc/trojan/config.json" ]]; then
                  # Very rough extraction, might be better to ask user or save it separately
                  # For now, ask user
                  echo ""
@@ -871,14 +894,48 @@ do_renew_cert() {
 }
 
 do_config() {
-    if [[ -f "/etc/trojan/config.json" ]]; then
-        echo ""
-        echo "Trojan Config (/etc/trojan/config.json):"
-        echo "----------------------------------------"
-        grep -E '"local_port"|"password"|"cert"|"remote_port"' /etc/trojan/config.json
-    else
-        log_error "Config not found."
+    echo ""
+    echo "Trojan Config Information:"
+    echo "----------------------------------------"
+    
+    local domain=""
+    local password=""
+    
+    # Try to read from metadata files first
+    if [[ -f "/etc/trojan/.domain" ]]; then
+        domain=$(cat /etc/trojan/.domain)
     fi
+    
+    if [[ -f "/etc/trojan/.password" ]]; then
+        password=$(cat /etc/trojan/.password)
+    fi
+    
+    # Fallback to config.json parsing if metadata missing
+    if [[ -z "$password" ]] && [[ -f "/etc/trojan/config.json" ]]; then
+        # Crude extraction for "password": [ "value" ]
+        password=$(grep -A 1 '"password"' /etc/trojan/config.json | tail -n 1 | cut -d'"' -f2)
+    fi
+    
+    if [[ -z "$domain" ]]; then
+        echo -e "${RED}Domain not found (deployment might be incomplete).${NC}"
+    else
+        echo -e "Domain:   ${GREEN}${domain}${NC}"
+    fi
+    
+    if [[ -z "$password" ]]; then
+         echo -e "${RED}Password not found.${NC}"
+    else
+        echo -e "Password: ${GREEN}${password}${NC}"
+    fi
+    
+    echo -e "Port:     ${GREEN}443${NC}"
+    
+    if [[ -n "$domain" ]] && [[ -n "$password" ]]; then
+        echo ""
+        echo -e "${YELLOW}Trojan URL:${NC}"
+        generate_trojan_url "$password" "$domain"
+    fi
+    
     pause
 }
 
