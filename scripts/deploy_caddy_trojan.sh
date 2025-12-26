@@ -934,7 +934,11 @@ do_status() {
     if command -v openssl &>/dev/null; then
         # We try to connect to localhost 443 
         # Note: If docker, localhost might work if bound to host.
-        if echo "Q" | openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" -quiet 2>/dev/null; then
+        # Use timeout to prevent hanging if Caddy accepts but waits (default 3s)
+        local timeout_cmd=""
+        if command -v timeout &>/dev/null; then timeout_cmd="timeout 3"; fi
+        
+        if echo "Q" | $timeout_cmd openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" -quiet 2>/dev/null; then
             echo -e "${GREEN}$(t CONN_OK)${NC}"
         else
             echo -e "${RED}$(t CONN_FAIL)${NC}"
