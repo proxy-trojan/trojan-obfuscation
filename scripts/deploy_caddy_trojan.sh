@@ -94,7 +94,8 @@ setup_languages() {
     MSG_en_PORT_OCCUPIED="Error: Port %s is occupied by %s. Please release it first."
     MSG_en_CERT_RENEW_START="Starting certificate renewal..."
     MSG_en_CERT_RENEW_SUCCESS="Certificate renewed successfully!"
-    MSG_en_CDN_WARN="Warning: Domain resolves to %s (likely CDN/Cloudflare). Trojan TCP cannot connect through proxies. Please use DNS-Only mode."
+    MSG_en_CDN_WARN="Warning: Domain resolves to IP %s, but local IP is %s. You are likely using CDN/Cloudflare Proxy. Trojan TCP REQUIRES DNS-Only (Direct) mode."
+    MSG_en_CDN_CONFIRM="This configuration WILL NOT WORK with Cloudflare Orange Cloud. Continue anyway?"
     MSG_en_FIREWALL_CHECK="Checking firewall settings..."
     MSG_en_FIREWALL_OPEN="Opening ports 80 and 443..."
     MSG_en_CONN_CHECK="Performing local connectivity check..."
@@ -159,7 +160,8 @@ setup_languages() {
     MSG_cn_PORT_OCCUPIED="错误：端口 %s 被程序 %s 占用。请先释放端口。"
     MSG_cn_CERT_RENEW_START="开始续期证书..."
     MSG_cn_CERT_RENEW_SUCCESS="证书续期成功！"
-    MSG_cn_CDN_WARN="警告：域名解析到 %s (可能是 CDN/Cloudflare)。Trojan TCP 无法通过代理连接，请使用 DNS-Only 模式。"
+    MSG_cn_CDN_WARN="警告：域名解析IP (%s) 与本机公网IP (%s) 不一致。您可能开启了 CDN (Cloudflare) 代理。Trojan TCP 必须使用 DNS-Only (直连) 模式，否则无法连接。"
+    MSG_cn_CDN_CONFIRM="此配置在 Cloudflare 开启代理 (橙色云朵) 状态下 **将无法工作**。是否继续？"
     MSG_cn_FIREWALL_CHECK="正在检查防火墙设置..."
     MSG_cn_FIREWALL_OPEN="正在开放 80 和 443 端口..."
     MSG_cn_CONN_CHECK="正在执行本地连接检查..."
@@ -253,6 +255,10 @@ check_port() {
 check_domain_ip() {
     local domain=$1
     local ip=""
+    local local_ip=""
+    
+    # Get Public IP
+    local_ip=$(curl -s4 ifconfig.co || curl -s4 ip.sb)
     
     if command -v dig &>/dev/null; then
         ip=$(dig +short "$domain" | tail -n 1)
@@ -262,14 +268,15 @@ check_domain_ip() {
         ip=$(getent hosts "$domain" | awk '{print $1}')
     fi
     
-    if [[ -n "$ip" ]]; then
-        # Check for Cloudflare ranges (simplified check)
-        # Cloudflare IPs often start with 104. or 172. or 162. or 188. 
-        # But this is not exhaustive.
-        if echo "$ip" | grep -Eq "^(104\.|172\.(6[4-9]|7[0-1])\.|188\.114\.)"; then
-             log_warn "$(printf "$(t CDN_WARN)" "$ip")"
-             return 1
-        fi
+    if [[ -n "$ip" ]] && [[ -n "$local_ip" ]]; then
+       if [[ "$ip" != "$local_ip" ]]; then
+            log_warn "$(printf "$(t CDN_WARN)" "$ip" "$local_ip")"
+            read -r -p "$(t CDN_CONFIRM) [y/N] " confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+            return 1
+       fi
     fi
     return 0
 }
@@ -591,8 +598,9 @@ setup_ssl() {
         reload_cmd="docker restart trojan 2>/dev/null || true"
     else
         case $SM in
-            systemd) reload_cmd="systemctl reload trojan 2>/dev/null || true" ;;
-            openrc) reload_cmd="rc-service trojan reload 2>/dev/null || true" ;;
+            # Only reload if the service is already active to avoid "unit not found" or "failed" errors on first install
+            systemd) reload_cmd="systemctl is-active --quiet trojan && systemctl reload trojan || true" ;;
+            openrc) reload_cmd="rc-service trojan status >/dev/null 2>&1 && rc-service trojan reload || true" ;;
             *) reload_cmd="pkill -HUP trojan || true" ;;
         esac
     fi
@@ -680,8 +688,12 @@ configure_trojan() {
 }
 EOF
     # Save metadata for script usage
+    # Save metadata for script usage
     echo "$PASSWORD" > /etc/trojan/.password
     chmod 600 /etc/trojan/.password
+    
+    # Ensure config allows read for service
+    chmod 644 "$trojan_conf"
 }
 
 setup_services_host() {
