@@ -87,7 +87,7 @@ jobs:
             dist/*.sha256
 
   # ============================================
-  # macOS Builds (x86_64 and arm64 Universal)
+  # macOS Builds (x86_64 and arm64)
   # ============================================
   build-macos:
     strategy:
@@ -96,13 +96,16 @@ jobs:
         include:
           - arch: x86_64
             runner: macos-15
-            cmake_osx_arch: x86_64
+            triplet: x64-osx
           - arch: arm64
             runner: macos-15
-            cmake_osx_arch: arm64
+            triplet: arm64-osx
 
     runs-on: ${{ matrix.runner }}
     name: macOS ${{ matrix.arch }}
+
+    env:
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
 
     steps:
       - name: Checkout code
@@ -110,29 +113,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2cbc495aa94'
+
+      - name: Install dependencies via vcpkg
         run: |
-          # Unlink existing boost if present, then install fresh
-          brew unlink boost 2>/dev/null || true
-          brew install boost openssl@3
-          # Force link boost
-          brew link --overwrite boost 2>/dev/null || true
+          vcpkg install boost-system boost-program-options boost-asio openssl --triplet ${{ matrix.triplet }}
 
       - name: Build
         run: |
-          BOOST_ROOT=$(brew --prefix boost)
-          OPENSSL_ROOT=$(brew --prefix openssl@3)
-          
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_arch }} \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -DBoost_NO_BOOST_CMAKE=ON \
-            -DBOOST_ROOT=$BOOST_ROOT \
-            -DBoost_INCLUDE_DIR=$BOOST_ROOT/include \
-            -DBoost_LIBRARY_DIR=$BOOST_ROOT/lib \
-            -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DENABLE_MYSQL=OFF
           make -j$(sysctl -n hw.ncpu)
 
