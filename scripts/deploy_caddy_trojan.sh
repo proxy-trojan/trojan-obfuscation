@@ -508,10 +508,15 @@ setup_ssl() {
     
     local acme_sh=~/.acme.sh/acme.sh
     
-    $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256 || {
-        log_error "$(t SSL_FAIL)"
-        exit 1
-    }
+    if ! $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256; then
+        # Check if failure was due to existing valid cert (skipped)
+        if [[ -f "$HOME/.acme.sh/${DOMAIN}_ecc/${DOMAIN}.key" ]] || [[ -f "$HOME/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]]; then
+            log_info "Certificate seems to exist. Continuing..."
+        else
+            log_error "$(t SSL_FAIL)"
+            exit 1
+        fi
+    fi
     
     mkdir -p /etc/trojan
     
