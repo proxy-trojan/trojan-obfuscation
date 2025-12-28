@@ -24,9 +24,9 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runner: ubuntu-22.04
+            runner: ubuntu-latest
           - arch: aarch64
-            runner: ubuntu-22.04-arm64
+            runner: ubuntu-latest-arm64
 
     runs-on: ${{ matrix.runner }}
     name: Linux ${{ matrix.arch }}
