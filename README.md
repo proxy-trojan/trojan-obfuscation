@@ -77,6 +77,42 @@ docker run -d --name trojan \
   trojan-pro
 ```
 
+## Quick Deployment (Recommended)
+
+We provide an all-in-one deployment script that handles Trojan + Caddy setup automatically:
+
+```bash
+# Interactive deployment
+bash <(curl -sL https://raw.githubusercontent.com/proxy-trojan/trojan-obfuscation/main/scripts/deploy_caddy_trojan.sh)
+
+# Non-interactive deployment
+./scripts/deploy_caddy_trojan.sh --domain example.com --email admin@example.com --password yourpass --mode host --core download --auto
+```
+
+### Deployment Features
+
+| Feature | Description |
+|---------|-------------|
+| **Installation Modes** | Download pre-compiled binary (fast) or compile from source |
+| **Certificate Options** | Domain certs (Let's Encrypt/ZeroSSL/Buypass) or IP certs (6-day short-lived) |
+| **Notifications** | Telegram, DingTalk, Feishu, Slack, Bark, ServerChan |
+| **Management** | Backup/restore configurations, multi-user password management |
+| **Optimization** | TCP BBR congestion control, health check |
+
+### CLI Options
+
+```bash
+Options:
+  --domain <domain>      Domain name for certificate
+  --email <email>        Email for certificate registration
+  --password <pass>      Trojan password
+  --mode <host|docker>   Installation mode
+  --core <download|compile>  Core installation method
+  --cert-type <domain|ip>    Certificate type
+  --ca <letsencrypt|zerossl|buypass>  Certificate Authority
+  --auto                 Non-interactive mode
+```
+
 ## Configuration
 
 ### Server Configuration (`server.json`)
