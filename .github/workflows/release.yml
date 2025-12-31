@@ -23,8 +23,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Use Ubuntu 20.04 for x86_64 for better glibc compatibility (glibc 2.31)
           - arch: x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-20.04
+          # Use Ubuntu 22.04 for aarch64 (oldest available ARM runner, glibc 2.35)
           - arch: aarch64
             runner: ubuntu-24.04-arm
 
