@@ -1323,19 +1323,20 @@ install_minimal_dependencies() {
 
     case $PM in
         apt)
-            pkg_install curl wget socat lsof ca-certificates
+            # libssl for OpenSSL runtime, ca-certificates for SSL verification
+            pkg_install curl wget socat lsof ca-certificates libssl-dev
             ;;
         dnf|yum)
-            pkg_install curl wget socat lsof ca-certificates
+            pkg_install curl wget socat lsof ca-certificates openssl-libs
             ;;
         pacman)
-            pkg_install curl wget socat
+            pkg_install curl wget socat openssl
             ;;
         zypper)
-            pkg_install curl wget socat
+            pkg_install curl wget socat libopenssl1_1
             ;;
         apk)
-            pkg_install curl wget socat ca-certificates
+            pkg_install curl wget socat ca-certificates libssl3
             ;;
     esac
 }

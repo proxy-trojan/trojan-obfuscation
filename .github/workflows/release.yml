@@ -60,10 +60,17 @@ jobs:
 
       - name: Verify static linking
         run: |
-          echo "=== Checking binary dependencies ==="
+          echo "=== Binary dependencies ==="
           ldd build/trojan || true
+          echo ""
           echo "=== Checking for Boost dependencies (should be none) ==="
           ldd build/trojan 2>/dev/null | grep -i boost && echo "WARNING: Dynamic Boost found!" || echo "OK: No dynamic Boost dependencies"
+          echo ""
+          echo "=== GLIBC version requirements ==="
+          objdump -T build/trojan | grep GLIBC | sed 's/.*GLIBC_/GLIBC_/g' | cut -d')' -f1 | sort -V | uniq
+          echo ""
+          echo "=== Build system glibc version ==="
+          ldd --version | head -1
 
       - name: Strip binary
         run: strip build/trojan
