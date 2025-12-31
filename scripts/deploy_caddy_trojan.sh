@@ -1237,12 +1237,12 @@ download_precompiled_core() {
 
     # Create temp directory
     local tmp_dir=$(mktemp -d)
-    trap "rm -rf $tmp_dir" EXIT
 
     # Download binary
     log_info "Downloading: $filename"
     if ! curl -sL -o "$tmp_dir/$filename" "$download_url"; then
         log_warn "$(t CORE_DOWNLOAD_FAIL)"
+        rm -rf "$tmp_dir"
         return 1
     fi
 
@@ -1253,11 +1253,15 @@ download_precompiled_core() {
         if command -v sha256sum &>/dev/null; then
             if ! sha256sum -c "${filename}.sha256" &>/dev/null; then
                 log_warn "$(t CORE_VERIFY_FAIL)"
+                cd - >/dev/null
+                rm -rf "$tmp_dir"
                 return 1
             fi
         elif command -v shasum &>/dev/null; then
             if ! shasum -a 256 -c "${filename}.sha256" &>/dev/null; then
                 log_warn "$(t CORE_VERIFY_FAIL)"
+                cd - >/dev/null
+                rm -rf "$tmp_dir"
                 return 1
             fi
         fi
@@ -1284,15 +1288,27 @@ download_precompiled_core() {
             install -m 0755 "$found_binary" /usr/local/bin/trojan
         else
             log_warn "$(t CORE_DOWNLOAD_FAIL)"
+            cd - >/dev/null
+            rm -rf "$tmp_dir"
             return 1
         fi
     fi
     cd - >/dev/null
 
+    # Cleanup temp directory
+    rm -rf "$tmp_dir"
+
     # Verify installation
-    if command -v /usr/local/bin/trojan &>/dev/null; then
+    if [[ -x /usr/local/bin/trojan ]]; then
         log_info "$(t CORE_DOWNLOAD_SUCCESS)"
-        log_info "Version: $(/usr/local/bin/trojan --version 2>&1 | head -1 || echo $version)"
+        # trojan outputs version to stderr with [FATAL] prefix, extract version number
+        local version_output
+        version_output=$(/usr/local/bin/trojan -v 2>&1 | grep -oE 'trojan [0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+        if [[ -n "$version_output" ]]; then
+            log_info "Installed: $version_output"
+        else
+            log_info "Installed: $version"
+        fi
         return 0
     else
         log_warn "$(t CORE_DOWNLOAD_FAIL)"
@@ -2019,7 +2035,7 @@ do_install() {
 
         show_step 6 start
         sleep 2  # Wait for services to start
-        do_health_check
+        do_health_check || true  # Don't exit on health check failure
         show_step 6 done
     else
         # Host Mode
@@ -2050,12 +2066,12 @@ do_install() {
         show_step 5 done
 
         show_step 6 start
-        enable_bbr
+        enable_bbr || true  # BBR is optional, don't exit on failure
         show_step 6 done
 
         show_step 7 start
         sleep 2  # Wait for services to start
-        do_health_check
+        do_health_check || true  # Don't exit on health check failure
         show_step 7 done
     fi
 
