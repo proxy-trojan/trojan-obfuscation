@@ -52,8 +52,16 @@ jobs:
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBOOST_USE_STATIC_LIBS=ON \
             -DENABLE_MYSQL=OFF
           make -j$(nproc)
+
+      - name: Verify static linking
+        run: |
+          echo "=== Checking binary dependencies ==="
+          ldd build/trojan || true
+          echo "=== Checking for Boost dependencies (should be none) ==="
+          ldd build/trojan 2>/dev/null | grep -i boost && echo "WARNING: Dynamic Boost found!" || echo "OK: No dynamic Boost dependencies"
 
       - name: Strip binary
         run: strip build/trojan
@@ -150,7 +158,7 @@ jobs:
           else
             OPENSSL_ROOT="$(brew --prefix openssl@3)"
           fi
-          
+
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -158,6 +166,7 @@ jobs:
             -DBOOST_ROOT=$HOME/boost-install \
             -DBoost_NO_BOOST_CMAKE=ON \
             -DBoost_NO_SYSTEM_PATHS=ON \
+            -DBOOST_USE_STATIC_LIBS=ON \
             -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
             -DENABLE_MYSQL=OFF \
             -Wno-dev
@@ -229,6 +238,7 @@ jobs:
           cmake .. \
             -G "MSYS Makefiles" \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DBOOST_USE_STATIC_LIBS=ON \
             -DENABLE_MYSQL=OFF
           make -j$(nproc)
 

@@ -22,6 +22,13 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(trojan ${CMAKE_THREAD_LIBS_INIT})
 
+# Use static Boost libraries for portable binaries (especially on Linux)
+option(BOOST_USE_STATIC_LIBS "Use static Boost libraries" ON)
+if(BOOST_USE_STATIC_LIBS)
+    set(Boost_USE_STATIC_LIBS ON)
+    set(Boost_USE_STATIC_RUNTIME OFF)
+endif()
+
 find_package(Boost 1.66.0 REQUIRED COMPONENTS system program_options)
 target_include_directories(trojan PRIVATE ${Boost_INCLUDE_DIR})
 target_link_libraries(trojan ${Boost_LIBRARIES})
