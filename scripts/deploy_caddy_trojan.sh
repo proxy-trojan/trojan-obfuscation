@@ -783,7 +783,7 @@ request_ip_certificate() {
     local max_retry=3
 
     while [[ $retry -lt $max_retry ]]; do
-        ((retry++))
+        ((retry++)) || true
 
         if $acme_sh --issue --server letsencrypt \
             -d "$ip" \
@@ -1550,7 +1550,7 @@ setup_ssl() {
             break
         fi
 
-        ((attempt++))
+        ((attempt++)) || true
         progress_update "$(printf "$(t ACME_ISSUE)" "$ca")"
 
         # Set CA server
@@ -1569,7 +1569,7 @@ setup_ssl() {
         # Try to issue certificate with retry
         local retry=0
         while [[ $retry -lt $ACME_MAX_RETRY ]]; do
-            ((retry++))
+            ((retry++)) || true
 
             progress_update "$(t ACME_STANDALONE)"
 
@@ -2647,7 +2647,7 @@ do_restore() {
         local size=$(du -h "$f" | cut -f1)
         local date=$(basename "$f" | grep -oE '[0-9]{8}_[0-9]{6}')
         echo -e "  ${CYAN}$i)${NC} $date ($size)"
-        ((i++))
+        ((i++)) || true
     done
 
     echo ""
@@ -2701,7 +2701,7 @@ do_manage_users() {
         while IFS= read -r pwd; do
             if [[ -n "$pwd" ]] && [[ "$pwd" != "[" ]] && [[ "$pwd" != "]" ]]; then
                 echo -e "  ${CYAN}$i)${NC} $pwd"
-                ((i++))
+                ((i++)) || true
             fi
         done <<< "$passwords"
 
