@@ -673,7 +673,18 @@ EOF
 }
 
 generate_config_card() {
-    local server_ip=$(curl -s4 ifconfig.me 2>/dev/null || curl -s4 ip.sb 2>/dev/null || echo "YOUR_SERVER_IP")
+    # Get Public IP - try multiple services for reliability
+    local server_ip=""
+    server_ip=$(curl -s4 --connect-timeout 5 ip.sb 2>/dev/null)
+    if [[ -z "$server_ip" ]]; then
+        server_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null)
+    fi
+    if [[ -z "$server_ip" ]]; then
+        server_ip=$(curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null)
+    fi
+    if [[ -z "$server_ip" ]]; then
+        server_ip="YOUR_SERVER_IP"
+    fi
     
     cat > "$CLIENT_CONFIG_DIR/README.txt" << EOF
 ╔══════════════════════════════════════════════════════════════════════╗

@@ -563,8 +563,18 @@ check_domain_ip() {
     local ip=""
     local local_ip=""
     
-    # Get Public IP
-    local_ip=$(curl -s4 ifconfig.co || curl -s4 ip.sb)
+    # Get Public IP - try multiple services for reliability
+    # ip.sb is more reliable in many regions
+    local_ip=$(curl -s4 --connect-timeout 5 ip.sb 2>/dev/null)
+    if [[ -z "$local_ip" ]]; then
+        local_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null)
+    fi
+    if [[ -z "$local_ip" ]]; then
+        local_ip=$(curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null)
+    fi
+    if [[ -z "$local_ip" ]]; then
+        local_ip=$(curl -s4 --connect-timeout 5 ifconfig.co 2>/dev/null)
+    fi
     
     if command -v dig &>/dev/null; then
         ip=$(dig +short "$domain" | tail -n 1)
@@ -862,7 +872,17 @@ acme_pre_check() {
     local resolved_ip=""
     local local_ip=""
 
-    local_ip=$(curl -s4 ifconfig.co 2>/dev/null || curl -s4 ip.sb 2>/dev/null)
+    # Get Public IP - try multiple services for reliability
+    local_ip=$(curl -s4 --connect-timeout 5 ip.sb 2>/dev/null)
+    if [[ -z "$local_ip" ]]; then
+        local_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null)
+    fi
+    if [[ -z "$local_ip" ]]; then
+        local_ip=$(curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null)
+    fi
+    if [[ -z "$local_ip" ]]; then
+        local_ip=$(curl -s4 --connect-timeout 5 ifconfig.co 2>/dev/null)
+    fi
 
     if command -v dig &>/dev/null; then
         resolved_ip=$(dig +short "$domain" | tail -n 1)
@@ -1852,8 +1872,18 @@ do_install() {
         if [[ -n "$CLI_DOMAIN" ]]; then
             DOMAIN="$CLI_DOMAIN"
         else
-            # Auto-detect server IP
-            local detected_ip=$(curl -s4 ifconfig.co 2>/dev/null || curl -s4 ip.sb 2>/dev/null)
+            # Auto-detect server IP - try multiple services for reliability
+            local detected_ip=""
+            detected_ip=$(curl -s4 --connect-timeout 5 ip.sb 2>/dev/null)
+            if [[ -z "$detected_ip" ]]; then
+                detected_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null)
+            fi
+            if [[ -z "$detected_ip" ]]; then
+                detected_ip=$(curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null)
+            fi
+            if [[ -z "$detected_ip" ]]; then
+                detected_ip=$(curl -s4 --connect-timeout 5 ifconfig.co 2>/dev/null)
+            fi
             echo ""
             if [[ -n "$detected_ip" ]]; then
                 echo -e "Detected IP: ${GREEN}$detected_ip${NC}"
