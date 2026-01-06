@@ -22,6 +22,7 @@
 
 #include <list>
 #include <map>
+#include <atomic>
 #include <boost/version.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl.hpp>
@@ -32,6 +33,16 @@
 #include <thread>
 #include <vector>
 #include <mutex>
+#include <memory>
+
+// 每个 worker 的独立上下文
+struct WorkerContext {
+    std::unique_ptr<boost::asio::io_context> io_context;
+    std::unique_ptr<boost::asio::ip::tcp::acceptor> acceptor;
+    std::thread thread;
+    
+    WorkerContext() : io_context(std::make_unique<boost::asio::io_context>()) {}
+};
 
 class Service {
 private:
@@ -39,20 +50,39 @@ private:
         MAX_LENGTH = 8192
     };
     const Config &config;
+    
+    // 多 io_context 架构
+    std::vector<std::unique_ptr<WorkerContext>> workers;
+    int thread_num;
+    bool use_multi_io_context;  // 是否启用多 io_context 模式
+    
+    // 单 io_context 模式的后备（用于不支持 SO_REUSEPORT 的平台）
     boost::asio::io_context io_context;
     boost::asio::ip::tcp::acceptor socket_acceptor;
+    std::vector<std::thread> thread_pool;
+    
+    // 共享资源
     boost::asio::ssl::context ssl_context;
     Authenticator *auth;
     std::string plain_http_response;
+    
+    // UDP 相关（保持单 io_context，UDP 流量通常较小）
     boost::asio::ip::udp::socket udp_socket;
     std::map<boost::asio::ip::udp::endpoint, std::weak_ptr<UDPForwardSession> > udp_sessions;
     std::mutex udp_sessions_mutex;
     std::mutex udp_socket_mutex;
-    std::vector<std::thread> thread_pool;
     uint8_t udp_read_buf[MAX_LENGTH]{};
     boost::asio::ip::udp::endpoint udp_recv_endpoint;
-    void async_accept();
+    
+    // Round-robin 分配（用于 UDP session）
+    std::atomic<size_t> next_worker{0};
+    boost::asio::io_context& get_worker_io_context();
+    
+    void async_accept();  // 单 io_context 模式
+    void async_accept_worker(size_t worker_index);  // 多 io_context 模式
     void udp_async_read();
+    void setup_acceptor(boost::asio::ip::tcp::acceptor& acceptor, const boost::asio::ip::tcp::endpoint& endpoint);
+    
 public:
     explicit Service(Config &config, bool test = false);
     void run();

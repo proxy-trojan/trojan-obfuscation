@@ -1698,8 +1698,8 @@ configure_trojan() {
         "prefer_ipv4": false,
         "no_delay": true,
         "keep_alive": true,
-        "reuse_port": false,
-        "fast_open": false,
+        "reuse_port": true,
+        "fast_open": true,
         "fast_open_qlen": 20
     }
 }

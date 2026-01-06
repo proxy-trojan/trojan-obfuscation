@@ -47,6 +47,8 @@ typedef boost::asio::detail::socket_option::boolean<SOL_SOCKET, SO_REUSEPORT> re
 
 Service::Service(Config &config, bool test) :
     config(config),
+    thread_num(0),
+    use_multi_io_context(false),
     socket_acceptor(io_context),
     ssl_context(context::sslv23),
     auth(nullptr),
@@ -56,28 +58,48 @@ Service::Service(Config &config, bool test) :
         throw runtime_error("NAT is not supported");
     }
 #endif // ENABLE_NAT
+
+    // 计算线程数
+    thread_num = config.threads;
+    if (thread_num <= 0) {
+        thread_num = std::thread::hardware_concurrency();
+        if (thread_num <= 0) {
+            thread_num = 1;
+        }
+    }
+
+    // 判断是否启用多 io_context 模式
+#ifdef ENABLE_REUSE_PORT
+    use_multi_io_context = (thread_num > 1 && config.tcp.reuse_port);
+#else
+    use_multi_io_context = false;
+#endif
+
     if (!test) {
         tcp::resolver resolver(io_context);
         tcp::endpoint listen_endpoint = *resolver.resolve(config.local_addr, to_string(config.local_port)).begin();
-        socket_acceptor.open(listen_endpoint.protocol());
-        socket_acceptor.set_option(tcp::acceptor::reuse_address(true));
 
-        if (config.tcp.reuse_port) {
-#ifdef ENABLE_REUSE_PORT
-            socket_acceptor.set_option(reuse_port(true));
-#else  // ENABLE_REUSE_PORT
-            Log::log_with_date_time("SO_REUSEPORT is not supported", Log::WARN);
-#endif // ENABLE_REUSE_PORT
+        if (use_multi_io_context) {
+            // 多 io_context 模式：每个 worker 有独立的 acceptor
+            Log::log_with_date_time("using multi io_context mode with " + to_string(thread_num) + " workers", Log::WARN);
+            for (int i = 0; i < thread_num; ++i) {
+                auto worker = make_unique<WorkerContext>();
+                worker->acceptor = make_unique<tcp::acceptor>(*worker->io_context);
+                setup_acceptor(*worker->acceptor, listen_endpoint);
+                workers.push_back(std::move(worker));
+            }
+        } else {
+            // 单 io_context 模式
+            setup_acceptor(socket_acceptor, listen_endpoint);
         }
 
-        socket_acceptor.bind(listen_endpoint);
-        socket_acceptor.listen();
         if (config.run_type == Config::FORWARD) {
             auto udp_bind_endpoint = udp::endpoint(listen_endpoint.address(), listen_endpoint.port());
             udp_socket.open(udp_bind_endpoint.protocol());
             udp_socket.bind(udp_bind_endpoint);
         }
     }
+
     Log::level = config.log_level;
     auto native_context = ssl_context.native_handle();
     ssl_context.set_options(context::default_workarounds | context::no_sslv2 | context::no_sslv3 | context::single_dh_use);
@@ -244,26 +266,6 @@ Service::Service(Config &config, bool test) :
 #endif // ENABLE_TLS13_CIPHERSUITES
     }
 
-    if (!test) {
-        if (config.tcp.no_delay) {
-            socket_acceptor.set_option(tcp::no_delay(true));
-        }
-        if (config.tcp.keep_alive) {
-            socket_acceptor.set_option(boost::asio::socket_base::keep_alive(true));
-        }
-        if (config.tcp.fast_open) {
-#ifdef TCP_FASTOPEN
-            using fastopen = boost::asio::detail::socket_option::integer<IPPROTO_TCP, TCP_FASTOPEN>;
-            boost::system::error_code ec;
-            socket_acceptor.set_option(fastopen(config.tcp.fast_open_qlen), ec);
-#else // TCP_FASTOPEN
-            Log::log_with_date_time("TCP_FASTOPEN is not supported", Log::WARN);
-#endif // TCP_FASTOPEN
-#ifndef TCP_FASTOPEN_CONNECT
-            Log::log_with_date_time("TCP_FASTOPEN_CONNECT is not supported", Log::WARN);
-#endif // TCP_FASTOPEN_CONNECT
-        }
-    }
     if (Log::keylog) {
 #ifdef ENABLE_SSL_KEYLOG
         SSL_CTX_set_keylog_callback(native_context, [](const SSL*, const char *line) {
@@ -276,12 +278,53 @@ Service::Service(Config &config, bool test) :
     }
 }
 
-void Service::run() {
-    async_accept();
-    if (config.run_type == Config::FORWARD) {
-        udp_async_read();
+void Service::setup_acceptor(tcp::acceptor& acceptor, const tcp::endpoint& endpoint) {
+    acceptor.open(endpoint.protocol());
+    acceptor.set_option(tcp::acceptor::reuse_address(true));
+
+#ifdef ENABLE_REUSE_PORT
+    if (config.tcp.reuse_port) {
+        acceptor.set_option(reuse_port(true));
     }
-    tcp::endpoint local_endpoint = socket_acceptor.local_endpoint();
+#endif
+
+    acceptor.bind(endpoint);
+    acceptor.listen();
+
+    if (config.tcp.no_delay) {
+        acceptor.set_option(tcp::no_delay(true));
+    }
+    if (config.tcp.keep_alive) {
+        acceptor.set_option(boost::asio::socket_base::keep_alive(true));
+    }
+    if (config.tcp.fast_open) {
+#ifdef TCP_FASTOPEN
+        using fastopen = boost::asio::detail::socket_option::integer<IPPROTO_TCP, TCP_FASTOPEN>;
+        boost::system::error_code ec;
+        acceptor.set_option(fastopen(config.tcp.fast_open_qlen), ec);
+#else
+        Log::log_with_date_time("TCP_FASTOPEN is not supported", Log::WARN);
+#endif
+    }
+}
+
+boost::asio::io_context& Service::get_worker_io_context() {
+    if (use_multi_io_context && !workers.empty()) {
+        auto index = next_worker.fetch_add(1, std::memory_order_relaxed) % workers.size();
+        return *workers[index]->io_context;
+    }
+    return io_context;
+}
+
+void Service::run() {
+    tcp::endpoint local_endpoint;
+    
+    if (use_multi_io_context) {
+        local_endpoint = workers[0]->acceptor->local_endpoint();
+    } else {
+        local_endpoint = socket_acceptor.local_endpoint();
+    }
+
     string rt;
     if (config.run_type == Config::SERVER) {
         rt = "server";
@@ -294,35 +337,74 @@ void Service::run() {
     }
     Log::log_with_date_time(string("trojan service (") + rt + ") started at " + local_endpoint.address().to_string() + ':' + to_string(local_endpoint.port()), Log::WARN);
 
-    int thread_num = config.threads;
-    if (thread_num <= 0) {
-        thread_num = std::thread::hardware_concurrency();
-        if (thread_num <= 0) {
-            thread_num = 1;
+    if (use_multi_io_context) {
+        // 多 io_context 模式
+        Log::log_with_date_time("starting " + to_string(thread_num) + " worker threads (multi io_context)", Log::WARN);
+        
+        if (config.run_type == Config::FORWARD) {
+            udp_async_read();
         }
-    }
 
-    if (thread_num > 1) {
-        Log::log_with_date_time("starting " + to_string(thread_num) + " worker threads", Log::WARN);
-        for (int i = 0; i < thread_num; ++i) {
-            thread_pool.emplace_back([this]() {
-                io_context.run();
+        // 启动每个 worker 的 accept 循环和线程
+        for (size_t i = 0; i < workers.size(); ++i) {
+            async_accept_worker(i);
+            workers[i]->thread = std::thread([this, i]() {
+                workers[i]->io_context->run();
             });
         }
-        for (auto &t : thread_pool) {
-            if (t.joinable()) {
-                t.join();
+
+        // 主线程运行 UDP（如果需要）
+        if (config.run_type == Config::FORWARD) {
+            io_context.run();
+        }
+
+        // 等待所有 worker 线程结束
+        for (auto& worker : workers) {
+            if (worker->thread.joinable()) {
+                worker->thread.join();
             }
         }
     } else {
-        io_context.run();
+        // 单 io_context 模式
+        async_accept();
+        if (config.run_type == Config::FORWARD) {
+            udp_async_read();
+        }
+
+        if (thread_num > 1) {
+            Log::log_with_date_time("starting " + to_string(thread_num) + " worker threads (shared io_context)", Log::WARN);
+            for (int i = 0; i < thread_num; ++i) {
+                thread_pool.emplace_back([this]() {
+                    io_context.run();
+                });
+            }
+            for (auto &t : thread_pool) {
+                if (t.joinable()) {
+                    t.join();
+                }
+            }
+        } else {
+            io_context.run();
+        }
     }
+    
     Log::log_with_date_time("trojan service stopped", Log::WARN);
 }
 
 void Service::stop() {
     boost::system::error_code ec;
-    socket_acceptor.cancel(ec);
+    
+    if (use_multi_io_context) {
+        for (auto& worker : workers) {
+            if (worker->acceptor) {
+                worker->acceptor->cancel(ec);
+            }
+            worker->io_context->stop();
+        }
+    } else {
+        socket_acceptor.cancel(ec);
+    }
+    
     if (udp_socket.is_open()) {
         udp_socket.cancel(ec);
         udp_socket.close(ec);
@@ -330,8 +412,7 @@ void Service::stop() {
     io_context.stop();
 }
 
-
-
+// 单 io_context 模式的 accept
 void Service::async_accept() {
     shared_ptr<Session>session(nullptr);
     if (config.run_type == Config::SERVER) {
@@ -345,7 +426,6 @@ void Service::async_accept() {
     }
     socket_acceptor.async_accept(session->accept_socket(), [this, session](const boost::system::error_code error) {
         if (error == boost::asio::error::operation_aborted) {
-            // got cancel signal, stop calling myself
             return;
         }
         if (!error) {
@@ -360,10 +440,41 @@ void Service::async_accept() {
     });
 }
 
+// 多 io_context 模式的 accept
+void Service::async_accept_worker(size_t worker_index) {
+    auto& worker = workers[worker_index];
+    auto& worker_io_context = *worker->io_context;
+    
+    shared_ptr<Session>session(nullptr);
+    if (config.run_type == Config::SERVER) {
+        session = make_shared<ServerSession>(config, worker_io_context, ssl_context, auth, plain_http_response);
+    } else if (config.run_type == Config::FORWARD) {
+        session = make_shared<ForwardSession>(config, worker_io_context, ssl_context);
+    } else if (config.run_type == Config::NAT) {
+        session = make_shared<NATSession>(config, worker_io_context, ssl_context);
+    } else {
+        session = make_shared<ClientSession>(config, worker_io_context, ssl_context);
+    }
+    
+    worker->acceptor->async_accept(session->accept_socket(), [this, session, worker_index](const boost::system::error_code error) {
+        if (error == boost::asio::error::operation_aborted) {
+            return;
+        }
+        if (!error) {
+            boost::system::error_code ec;
+            auto endpoint = session->accept_socket().remote_endpoint(ec);
+            if (!ec) {
+                Log::log_with_endpoint(endpoint, "incoming connection (worker " + to_string(worker_index) + ")");
+                session->start();
+            }
+        }
+        async_accept_worker(worker_index);
+    });
+}
+
 void Service::udp_async_read() {
     udp_socket.async_receive_from(boost::asio::buffer(udp_read_buf, MAX_LENGTH), udp_recv_endpoint, [this](const boost::system::error_code error, size_t length) {
         if (error == boost::asio::error::operation_aborted) {
-            // got cancel signal, stop calling myself
             return;
         }
         if (error) {
@@ -386,7 +497,10 @@ void Service::udp_async_read() {
             }
         }
         Log::log_with_endpoint(tcp::endpoint(udp_recv_endpoint.address(), udp_recv_endpoint.port()), "new UDP session");
-        auto session = make_shared<UDPForwardSession>(config, io_context, ssl_context, udp_recv_endpoint, [this](const udp::endpoint &endpoint, const string &data) {
+        
+        // UDP session 使用 round-robin 分配到各个 worker
+        auto& target_io_context = get_worker_io_context();
+        auto session = make_shared<UDPForwardSession>(config, target_io_context, ssl_context, udp_recv_endpoint, [this](const udp::endpoint &endpoint, const string &data) {
             boost::system::error_code ec;
             {
                 std::lock_guard<std::mutex> lock(udp_socket_mutex);
@@ -409,6 +523,9 @@ void Service::udp_async_read() {
 }
 
 boost::asio::io_context &Service::service() {
+    if (use_multi_io_context && !workers.empty()) {
+        return *workers[0]->io_context;
+    }
     return io_context;
 }
 
@@ -417,9 +534,18 @@ void Service::reload_cert() {
         Log::log_with_date_time("reloading certificate and private key. . . ", Log::WARN);
         ssl_context.use_certificate_chain_file(config.ssl.cert);
         ssl_context.use_private_key_file(config.ssl.key, context::pem);
-        boost::system::error_code ec;
-        socket_acceptor.cancel(ec);
-        async_accept();
+        
+        if (use_multi_io_context) {
+            boost::system::error_code ec;
+            for (size_t i = 0; i < workers.size(); ++i) {
+                workers[i]->acceptor->cancel(ec);
+                async_accept_worker(i);
+            }
+        } else {
+            boost::system::error_code ec;
+            socket_acceptor.cancel(ec);
+            async_accept();
+        }
         Log::log_with_date_time("certificate and private key reloaded", Log::WARN);
     } else {
         Log::log_with_date_time("cannot reload certificate and private key: wrong run_type", Log::ERROR);

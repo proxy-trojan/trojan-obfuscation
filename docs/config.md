@@ -190,8 +190,8 @@ The NAT config is for transparent proxy. You'll need to [setup iptables rules](h
         "prefer_ipv4": false,
         "no_delay": true,
         "keep_alive": true,
-        "reuse_port": false,
-        "fast_open": false,
+        "reuse_port": true,
+        "fast_open": true,
         "fast_open_qlen": 20
     },
     "mysql": {
@@ -234,9 +234,37 @@ The NAT config is for transparent proxy. You'll need to [setup iptables rules](h
     - `prefer_ipv4`: whether to connect to the IPv4 address when there are both IPv6 and IPv4 addresses for a domain
     - `no_delay`: whether to disable Nagle's algorithm
     - `keep_alive`: whether to enable TCP Keep Alive
-    - `reuse_port`: whether to enable TCP port reuse (kernel support required)
+    - `reuse_port`: whether to enable TCP port reuse (Linux only, enables multi io_context mode for better performance)
     - `fast_open`: whether to enable TCP Fast Open (kernel support required)
     - `fast_open_qlen`: the server's limit on the size of the queue of TFO requests that have not yet completed the three-way handshake
+
+## Performance Tuning
+
+### Multi io_context Mode (Linux Server)
+
+When running on Linux with `reuse_port: true` and `threads > 1`, trojan-pro automatically enables **multi io_context mode**:
+
+- Each worker thread has its own independent `io_context` and `acceptor`
+- The kernel distributes incoming connections across workers via `SO_REUSEPORT`
+- Eliminates lock contention between threads, significantly improving throughput under high concurrency
+
+**Recommended server configuration:**
+
+```json
+{
+    "threads": 0,
+    "tcp": {
+        "reuse_port": true,
+        "fast_open": true,
+        "no_delay": true,
+        "keep_alive": true
+    }
+}
+```
+
+- `threads: 0` means auto-detect CPU cores
+- On non-Linux systems (macOS, Windows), it falls back to shared io_context mode automatically
+
 - `mysql`: see [Authenticator](authenticator)
 
 [Homepage](.) | [Prev Page](protocol) | [Next Page](authenticator)
