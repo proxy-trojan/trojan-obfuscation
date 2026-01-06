@@ -35,6 +35,8 @@ UDPForwardSession::UDPForwardSession(const Config &config, boost::asio::io_conte
     gc_timer(io_context) {
     udp_recv_endpoint = endpoint;
     in_endpoint = tcp::endpoint(endpoint.address(), endpoint.port());
+    // 预分配写缓冲区
+    out_write_data.reserve(DEFAULT_BUFFER_SIZE);
 }
 
 tcp::socket& UDPForwardSession::accept_socket() {
@@ -83,7 +85,7 @@ void UDPForwardSession::start() {
             boost::system::error_code ec;
             out_socket.next_layer().set_option(fastopen_connect(true), ec);
         }
-#endif // TCP_FASTOPEN_CONNECT
+#endif
         out_socket.next_layer().async_connect(*iterator, [this, self](const boost::system::error_code error) {
             if (error) {
                 Log::log_with_endpoint(in_endpoint, "cannot establish connection to remote server " + config.remote_addr + ':' + to_string(config.remote_port) + ": " + error.message(), Log::ERROR);
@@ -133,10 +135,14 @@ void UDPForwardSession::out_async_read() {
     });
 }
 
-void UDPForwardSession::out_async_write(const string &data) {
+// 零拷贝写入
+void UDPForwardSession::out_async_write_buffer(const uint8_t* data, size_t length) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    boost::asio::async_write(out_socket, boost::asio::buffer(*data_copy), [this, self, data_copy](const boost::system::error_code error, size_t) {
+    if (out_write_data.capacity() < length) {
+        out_write_data.reserve(std::max(length, out_write_data.capacity() * 2));
+    }
+    out_write_data.assign(data, data + length);
+    boost::asio::async_write(out_socket, boost::asio::buffer(out_write_data.data(), out_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
@@ -145,8 +151,11 @@ void UDPForwardSession::out_async_write(const string &data) {
     });
 }
 
-void UDPForwardSession::timer_async_wait()
-{
+void UDPForwardSession::out_async_write(const string &data) {
+    out_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+}
+
+void UDPForwardSession::timer_async_wait() {
     gc_timer.expires_after(chrono::seconds(config.udp_timeout));
     auto self = shared_from_this();
     gc_timer.async_wait([this, self](const boost::system::error_code error) {
@@ -179,12 +188,11 @@ void UDPForwardSession::out_recv(size_t length) {
     if (length > out_read_buf.size() * 0.75) {
         resize_buffer(out_read_buf, length * 2);
     }
-    string_view data((const char*)out_read_buf.data(), length);
 
     if (status == FORWARD || status == FORWARDING) {
         gc_timer.cancel();
         timer_async_wait();
-        udp_data_buf += string(data);
+        udp_data_buf += string(reinterpret_cast<const char*>(out_read_buf.data()), length);
         for (;;) {
             UDPPacket packet;
             size_t packet_len;

@@ -31,7 +31,12 @@ ServerSession::ServerSession(const Config &config, boost::asio::io_context &io_c
     out_socket(io_context),
     udp_resolver(io_context),
     auth(auth),
-    plain_http_response(plain_http_response) {}
+    plain_http_response(plain_http_response) {
+    // 预分配写缓冲区
+    in_write_data.reserve(DEFAULT_BUFFER_SIZE);
+    out_write_data.reserve(DEFAULT_BUFFER_SIZE);
+    udp_write_data.reserve(DEFAULT_BUFFER_SIZE);
+}
 
 tcp::socket& ServerSession::accept_socket() {
     return (tcp::socket&)in_socket.next_layer();
@@ -74,16 +79,25 @@ void ServerSession::in_async_read() {
     });
 }
 
-void ServerSession::in_async_write(const string &data) {
+// 零拷贝写入 - 直接从缓冲区写入
+void ServerSession::in_async_write_buffer(const uint8_t* data, size_t length) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    boost::asio::async_write(in_socket, boost::asio::buffer(*data_copy), [this, self, data_copy](const boost::system::error_code error, size_t) {
+    // 复制到成员缓冲区，避免每次分配
+    if (in_write_data.capacity() < length) {
+        in_write_data.reserve(std::max(length, in_write_data.capacity() * 2));
+    }
+    in_write_data.assign(data, data + length);
+    boost::asio::async_write(in_socket, boost::asio::buffer(in_write_data.data(), in_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
         }
         in_sent();
     });
+}
+
+void ServerSession::in_async_write(const string &data) {
+    in_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
 void ServerSession::out_async_read() {
@@ -97,16 +111,25 @@ void ServerSession::out_async_read() {
     });
 }
 
-void ServerSession::out_async_write(const string &data) {
+// 零拷贝写入 - 直接从缓冲区写入
+void ServerSession::out_async_write_buffer(const uint8_t* data, size_t length) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    boost::asio::async_write(out_socket, boost::asio::buffer(*data_copy), [this, self, data_copy](const boost::system::error_code error, size_t) {
+    // 复制到成员缓冲区，避免每次分配
+    if (out_write_data.capacity() < length) {
+        out_write_data.reserve(std::max(length, out_write_data.capacity() * 2));
+    }
+    out_write_data.assign(data, data + length);
+    boost::asio::async_write(out_socket, boost::asio::buffer(out_write_data.data(), out_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
         }
         out_sent();
     });
+}
+
+void ServerSession::out_async_write(const string &data) {
+    out_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
 void ServerSession::udp_async_read() {
@@ -122,8 +145,12 @@ void ServerSession::udp_async_read() {
 
 void ServerSession::udp_async_write(const string &data, const udp::endpoint &endpoint) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    udp_socket.async_send_to(boost::asio::buffer(*data_copy), endpoint, [this, self, data_copy](const boost::system::error_code error, size_t) {
+    // 复制到成员缓冲区
+    if (udp_write_data.capacity() < data.size()) {
+        udp_write_data.reserve(std::max(data.size(), udp_write_data.capacity() * 2));
+    }
+    udp_write_data.assign(data.begin(), data.end());
+    udp_socket.async_send_to(boost::asio::buffer(udp_write_data.data(), udp_write_data.size()), endpoint, [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
@@ -136,9 +163,9 @@ void ServerSession::in_recv(size_t length) {
     if (length > in_read_buf.size() * 0.75) {
         resize_buffer(in_read_buf, length * 2);
     }
-    std::string_view data((const char*)in_read_buf.data(), length);
     
     if (status == HANDSHAKE) {
+        string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
         TrojanRequest req;
         bool valid = req.parse(data) != -1;
         if (valid) {
@@ -242,9 +269,10 @@ void ServerSession::in_recv(size_t length) {
         });
     } else if (status == FORWARD) {
         sent_len += length;
-        out_async_write(string(data));
+        // 零拷贝：直接从读缓冲区写入
+        out_async_write_buffer(in_read_buf.data(), length);
     } else if (status == UDP_FORWARD) {
-        udp_data_buf += string(data);
+        udp_data_buf += string(reinterpret_cast<const char*>(in_read_buf.data()), length);
         udp_sent();
     }
 }
@@ -261,11 +289,11 @@ void ServerSession::out_recv(size_t length) {
     if (length > out_read_buf.size() * 0.75) {
         resize_buffer(out_read_buf, length * 2);
     }
-    std::string_view data((const char*)out_read_buf.data(), length);
     
     if (status == FORWARD) {
         recv_len += length;
-        in_async_write(string(data));
+        // 零拷贝：直接从读缓冲区写入
+        in_async_write_buffer(out_read_buf.data(), length);
     }
 }
 
@@ -279,15 +307,12 @@ void ServerSession::udp_recv(size_t length, const udp::endpoint &endpoint) {
     if (length > udp_read_buf.size() * 0.75) {
         resize_buffer(udp_read_buf, length * 2);
     }
-    std::string_view data((const char*)udp_read_buf.data(), length);
     
     if (status == UDP_FORWARD) {
         Log::log_with_endpoint(in_endpoint, "received a UDP packet of length " + to_string(length) + " bytes from " + endpoint.address().to_string() + ':' + to_string(endpoint.port()));
         recv_len += length;
-        // Construct string only when needed for UDPPacket::generate which takes string
-        // Actually UDPPacket::generate (at least one overload) takes string payload.
-        // But here we are generating a Trojan UDP packet from RAW UDP data.
-        in_async_write(UDPPacket::generate(endpoint, string(data)));
+        string data(reinterpret_cast<const char*>(udp_read_buf.data()), length);
+        in_async_write(UDPPacket::generate(endpoint, data));
     }
 }
 

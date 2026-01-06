@@ -19,6 +19,7 @@
 
 #include "session.h"
 #include <algorithm>
+#include <cstring>
 
 Session::Session(const Config &config, boost::asio::io_context &io_context) : config(config),
                                                                               recv_len(0),
@@ -32,10 +33,13 @@ Session::Session(const Config &config, boost::asio::io_context &io_context) : co
 Session::~Session() = default;
 
 void Session::initialize_buffers() {
-    // 初始化为默认大小
+    // 初始化为默认大小 (16KB)
     in_read_buf.resize(DEFAULT_BUFFER_SIZE);
     out_read_buf.resize(DEFAULT_BUFFER_SIZE);
     udp_read_buf.resize(DEFAULT_BUFFER_SIZE);
+    // 写缓冲区初始化
+    in_write_buf.reserve(DEFAULT_BUFFER_SIZE);
+    out_write_buf_data.reserve(DEFAULT_BUFFER_SIZE);
 }
 
 void Session::resize_buffer(std::vector<uint8_t>& buffer, size_t required_size) {
@@ -45,4 +49,16 @@ void Session::resize_buffer(std::vector<uint8_t>& buffer, size_t required_size) 
         size_t new_size = std::min(MAX_BUFFER_SIZE, std::max(buffer.size() * 2, required_size));
         buffer.resize(new_size);
     }
+}
+
+void Session::prepare_write_buffer(std::vector<uint8_t>& write_buf, const uint8_t* data, size_t length) {
+    // 确保写缓冲区足够大
+    if (write_buf.capacity() < length) {
+        write_buf.reserve(std::max(length, write_buf.capacity() * 2));
+    }
+    write_buf.assign(data, data + length);
+}
+
+void Session::prepare_write_buffer(std::vector<uint8_t>& write_buf, const std::string& data) {
+    prepare_write_buffer(write_buf, reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }

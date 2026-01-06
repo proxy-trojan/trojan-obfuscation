@@ -37,9 +37,14 @@ private:
     UDPWrite in_write;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket>out_socket;
     boost::asio::steady_timer gc_timer;
+    
+    // 零拷贝写缓冲区
+    std::vector<uint8_t> out_write_data;
+    
     void destroy();
     void in_recv(const std::string &data);
     void out_async_read();
+    void out_async_write_buffer(const uint8_t* data, size_t length);
     void out_async_write(const std::string &data);
     void out_recv(size_t length);
     void out_sent();

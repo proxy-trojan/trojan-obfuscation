@@ -29,8 +29,9 @@
 
 class Session : public std::enable_shared_from_this<Session> {
 protected:
-    static constexpr size_t DEFAULT_BUFFER_SIZE = 8192; // 默认缓冲区大小
-    static constexpr size_t MAX_BUFFER_SIZE = 65536;    // 最大缓冲区大小
+    // 优化：增大默认缓冲区到 16KB，减少系统调用次数
+    static constexpr size_t DEFAULT_BUFFER_SIZE = 16384;
+    static constexpr size_t MAX_BUFFER_SIZE = 65536;
     static constexpr size_t SSL_SHUTDOWN_TIMEOUT = 30;
     const Config &config;
     
@@ -39,11 +40,19 @@ protected:
     std::vector<uint8_t> out_read_buf;
     std::vector<uint8_t> udp_read_buf;
     
+    // 写缓冲区 - 用于零拷贝优化
+    std::vector<uint8_t> in_write_buf;
+    std::vector<uint8_t> out_write_buf_data;
+    
     // 初始化缓冲区大小
     void initialize_buffers();
     
     // 动态调整缓冲区大小以适应数据量
     void resize_buffer(std::vector<uint8_t>& buffer, size_t required_size);
+    
+    // 零拷贝写入辅助函数
+    void prepare_write_buffer(std::vector<uint8_t>& write_buf, const uint8_t* data, size_t length);
+    void prepare_write_buffer(std::vector<uint8_t>& write_buf, const std::string& data);
     
     // 获取当前缓冲区大小常量（保持向后兼容性）
     static constexpr size_t MAX_LENGTH = DEFAULT_BUFFER_SIZE;
