@@ -17,6 +17,7 @@ set -e
 CONFIG_DIR="/etc/trojan"
 BACKUP_DIR="/etc/trojan/backups"
 WEB_DIR="/var/www/html"
+DOCKER_COMPOSE_FILE="/etc/trojan/docker-compose.yml"
 REPO_URL="https://github.com/proxy-trojan/trojan-obfuscation"
 REPO_BRANCH="feature_1.0_no_obfus_and_no_rules"
 RELEASE_API_URL="https://api.github.com/repos/proxy-trojan/trojan-obfuscation/releases/latest"
@@ -427,7 +428,7 @@ setup_languages() {
 # Helper to get string
 t() {
     local key="MSG_${LANG_CUR}_$1"
-    eval echo \$$key
+    eval echo \"\${$key}\"
 }
 
 # Generate Trojan URL
@@ -823,7 +824,7 @@ request_ip_certificate() {
 
     # Determine reload command
     local reload_cmd=""
-    if [[ -f "docker-compose.yml" ]]; then
+    if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
         reload_cmd="docker restart trojan 2>/dev/null || true"
     else
         case $SM in
@@ -875,6 +876,7 @@ acme_pre_check() {
         progress_update "$(t ACME_DNS_OK) ($resolved_ip)"
     elif [[ -n "$resolved_ip" ]]; then
         log_warn "Domain resolves to $resolved_ip, but server IP is $local_ip"
+        all_ok=false
         if [[ "$CLI_AUTO" != true ]]; then
             echo -e "${YELLOW}$(t ACME_DNS_FAIL)${NC}"
             read -r -p "[A]bort / [C]ontinue: " dns_action
@@ -884,6 +886,7 @@ acme_pre_check() {
         fi
     else
         log_warn "Could not resolve domain DNS"
+        all_ok=false
     fi
 
     # Check port availability
@@ -897,6 +900,7 @@ acme_pre_check() {
             if [[ -n "$proc" ]] && [[ "$proc" != "caddy" ]] && [[ "$proc" != "trojan" ]]; then
                 log_warn "Port $port is occupied by $proc"
                 port_ok=false
+                all_ok=false
             fi
         fi
     done
@@ -905,6 +909,8 @@ acme_pre_check() {
         progress_update "$(t ACME_PORT_OK)"
     fi
 
+    # Return status based on all_ok (0 = success, 1 = warning but continue)
+    # Note: We don't fail here, just warn - the actual cert request will fail if there's a real problem
     return 0
 }
 
@@ -1611,7 +1617,7 @@ setup_ssl() {
     mkdir -p /etc/trojan
 
     local reload_cmd=""
-    if [[ -f "docker-compose.yml" ]]; then
+    if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
         reload_cmd="docker restart trojan 2>/dev/null || true"
     else
         case $SM in
@@ -1781,7 +1787,8 @@ install_docker() {
 setup_docker_compose() {
     log_info "$(t DOCKER_COMPOSE_GEN)"
     
-    cat > docker-compose.yml << EOF
+    mkdir -p "$(dirname "$DOCKER_COMPOSE_FILE")"
+    cat > "$DOCKER_COMPOSE_FILE" << EOF
 services:
   trojan:
     build: .
@@ -1813,10 +1820,11 @@ EOF
 start_docker() {
     log_info "$(t DOCKER_START)"
     
+    local compose_dir="$(dirname "$DOCKER_COMPOSE_FILE")"
     if docker compose version &>/dev/null; then
-        docker compose up -d --build
+        docker compose -f "$DOCKER_COMPOSE_FILE" up -d --build
     else
-        docker-compose up -d --build
+        docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --build
     fi
     
     log_info "$(t DOCKER_SUCCESS)"
@@ -1985,8 +1993,8 @@ do_install() {
                 echo -e "${CYAN}║${NC}               $(t CUSTOM_BUILD)"
             fi
         fi
-        if [[ "$NOTIFY_ENABLED" == true ]]; then
-            echo -e "${CYAN}║${NC}  Notify:     ${GREEN}$NOTIFY_TYPE${NC}"
+        if [[ -n "$NOTIFY_HOOK" ]]; then
+            echo -e "${CYAN}║${NC}  Notify:     ${GREEN}$NOTIFY_HOOK${NC}"
         fi
         echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
         echo ""
@@ -2122,7 +2130,13 @@ do_status() {
     echo " Service Status"
     echo "=============================="
     
-    if command -v docker &>/dev/null && [[ -f "docker-compose.yml" ]]; then
+    # Read domain from config
+    local domain=""
+    if [[ -f "/etc/trojan/.domain" ]]; then
+        domain=$(cat /etc/trojan/.domain)
+    fi
+    
+    if command -v docker &>/dev/null && [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
         echo -e "Mode: ${BLUE}Docker${NC}"
         echo "------------------------------"
         docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "trojan|caddy"
@@ -2136,7 +2150,7 @@ do_status() {
     
     echo "------------------------------"
     echo "$(t CONN_CHECK)"
-    if command -v openssl &>/dev/null; then
+    if command -v openssl &>/dev/null && [[ -n "$domain" ]]; then
         # We try to connect to localhost 443 
         # Note: If docker, localhost might work if bound to host.
         # Use timeout to prevent hanging if Caddy accepts but waits (default 3s)
@@ -2144,7 +2158,7 @@ do_status() {
         if command -v timeout &>/dev/null; then timeout_cmd="timeout 3"; fi
         
         local check_out
-        check_out=$(echo "Q" | $timeout_cmd openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" 2>&1)
+        check_out=$(echo "Q" | $timeout_cmd openssl s_client -connect 127.0.0.1:443 -servername "$domain" 2>&1)
         local check_ret=$?
         
         if [[ $check_ret -eq 0 ]]; then
@@ -2161,6 +2175,8 @@ do_status() {
              echo -e "\nCertificate Check:"
              ls -lh /etc/trojan/server.crt /etc/trojan/server.key 2>/dev/null
         fi
+    elif command -v openssl &>/dev/null; then
+        echo -e "${YELLOW}Domain not configured, skipping TLS check${NC}"
     fi
     pause
 }
@@ -2176,7 +2192,7 @@ do_renew_cert() {
         # Determine reload command
         detect_os
         local reload_cmd=""
-         if [[ -f "docker-compose.yml" ]]; then
+         if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
             reload_cmd="docker restart trojan 2>/dev/null || true"
         else
             case $SM in
@@ -2268,11 +2284,11 @@ do_logs() {
     
     case $svc in
         1) 
-            if [[ -f "docker-compose.yml" ]]; then docker logs -f trojan --tail 50
+            if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then docker logs -f trojan --tail 50
             else tail -f /var/log/trojan/trojan.log 2>/dev/null || journalctl -u trojan -f -n 50; fi 
             ;;
         2) 
-            if [[ -f "docker-compose.yml" ]]; then docker logs -f caddy --tail 50
+            if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then docker logs -f caddy --tail 50
             else tail -f /var/log/caddy/access.log 2>/dev/null || journalctl -u caddy -f -n 50; fi 
             ;;
     esac
@@ -2286,9 +2302,13 @@ do_uninstall() {
 
         log_info "Stopping services..."
 
-        if [[ -f "docker-compose.yml" ]]; then
-            if docker compose version &>/dev/null; then docker compose down; else docker-compose down; fi
-            rm -f docker-compose.yml
+        if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
+            if docker compose version &>/dev/null; then 
+                docker compose -f "$DOCKER_COMPOSE_FILE" down
+            else 
+                docker-compose -f "$DOCKER_COMPOSE_FILE" down
+            fi
+            rm -f "$DOCKER_COMPOSE_FILE"
         else
             # Stop services first
             svc_stop trojan
@@ -2316,16 +2336,7 @@ do_uninstall() {
         log_info "Removing binary..."
         rm -f /usr/local/bin/trojan
 
-        # Remove config directories
-        log_info "Removing configuration..."
-        rm -rf /etc/trojan
-        rm -rf /etc/caddy
-
-        # Remove log directory
-        log_info "Removing logs..."
-        rm -rf /var/log/trojan
-
-        # Remove acme.sh certs for the domain (optional)
+        # Remove acme.sh certs for the domain (optional) - must be done BEFORE removing /etc/trojan
         if [[ -f /etc/trojan/.domain ]]; then
             local domain=$(cat /etc/trojan/.domain 2>/dev/null)
             if [[ -n "$domain" ]] && [[ -d ~/.acme.sh/${domain}_ecc ]]; then
@@ -2336,6 +2347,15 @@ do_uninstall() {
                 fi
             fi
         fi
+
+        # Remove config directories
+        log_info "Removing configuration..."
+        rm -rf /etc/trojan
+        rm -rf /etc/caddy
+
+        # Remove log directory
+        log_info "Removing logs..."
+        rm -rf /var/log/trojan
 
         # Verify cleanup
         echo ""
@@ -2527,9 +2547,10 @@ do_update_core() {
     log_info "$(t UPDATE_CHECK)"
 
     # Get current version
+    # Note: trojan outputs version to stderr with [FATAL] prefix
     local current_version="unknown"
     if command -v /usr/local/bin/trojan &>/dev/null; then
-        current_version=$(/usr/local/bin/trojan --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+        current_version=$(/usr/local/bin/trojan -v 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
     fi
 
     # Get latest version
