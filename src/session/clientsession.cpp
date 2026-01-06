@@ -32,7 +32,12 @@ ClientSession::ClientSession(const Config &config, boost::asio::io_context &io_c
     first_packet_recv(false),
     in_socket(io_context),
     out_socket(io_context, ssl_context),
-    target_port(0) {}
+    target_port(0) {
+    // 预分配写缓冲区
+    in_write_data.reserve(DEFAULT_BUFFER_SIZE);
+    out_write_data.reserve(DEFAULT_BUFFER_SIZE);
+    udp_write_data.reserve(DEFAULT_BUFFER_SIZE);
+}
 
 tcp::socket& ClientSession::accept_socket() {
     return in_socket;
@@ -47,8 +52,6 @@ void ClientSession::start() {
         return;
     }
     auto ssl = out_socket.native_handle();
-    
-
     
     if (!config.ssl.sni.empty()) {
         SSL_set_tlsext_host_name(ssl, config.ssl.sni.c_str());
@@ -76,16 +79,24 @@ void ClientSession::in_async_read() {
     });
 }
 
-void ClientSession::in_async_write(const string &data) {
+// 零拷贝写入
+void ClientSession::in_async_write_buffer(const uint8_t* data, size_t length) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    boost::asio::async_write(in_socket, boost::asio::buffer(*data_copy), [this, self, data_copy](const boost::system::error_code error, size_t) {
+    if (in_write_data.capacity() < length) {
+        in_write_data.reserve(std::max(length, in_write_data.capacity() * 2));
+    }
+    in_write_data.assign(data, data + length);
+    boost::asio::async_write(in_socket, boost::asio::buffer(in_write_data.data(), in_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
         }
         in_sent();
     });
+}
+
+void ClientSession::in_async_write(const string &data) {
+    in_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
 void ClientSession::out_async_read() {
@@ -99,10 +110,14 @@ void ClientSession::out_async_read() {
     });
 }
 
-void ClientSession::out_async_write(const string &data) {
+// 零拷贝写入
+void ClientSession::out_async_write_buffer(const uint8_t* data, size_t length) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    boost::asio::async_write(out_socket, boost::asio::buffer(*data_copy), [this, self, data_copy](const boost::system::error_code error, size_t) {
+    if (out_write_data.capacity() < length) {
+        out_write_data.reserve(std::max(length, out_write_data.capacity() * 2));
+    }
+    out_write_data.assign(data, data + length);
+    boost::asio::async_write(out_socket, boost::asio::buffer(out_write_data.data(), out_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
@@ -111,7 +126,9 @@ void ClientSession::out_async_write(const string &data) {
     });
 }
 
-
+void ClientSession::out_async_write(const string &data) {
+    out_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+}
 
 void ClientSession::udp_async_read() {
     auto self = shared_from_this();
@@ -129,8 +146,11 @@ void ClientSession::udp_async_read() {
 
 void ClientSession::udp_async_write(const string &data, const udp::endpoint &endpoint) {
     auto self = shared_from_this();
-    auto data_copy = make_shared<string>(data);
-    udp_socket.async_send_to(boost::asio::buffer(*data_copy), endpoint, [this, self, data_copy](const boost::system::error_code error, size_t) {
+    if (udp_write_data.capacity() < data.size()) {
+        udp_write_data.reserve(std::max(data.size(), udp_write_data.capacity() * 2));
+    }
+    udp_write_data.assign(data.begin(), data.end());
+    udp_socket.async_send_to(boost::asio::buffer(udp_write_data.data(), udp_write_data.size()), endpoint, [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
@@ -143,7 +163,7 @@ void ClientSession::in_recv(size_t length) {
     if (length > in_read_buf.size() * 0.75) {
         resize_buffer(in_read_buf, length * 2);
     }
-    std::string_view data((const char*)in_read_buf.data(), length);
+    string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
     
     switch (status) {
         case HANDSHAKE: {
@@ -175,7 +195,6 @@ void ClientSession::in_recv(size_t length) {
                 return;
             }
             
-            // Parse SOCKS5 request to get target address
             TrojanRequest req;
             string temp_buf = config.password.cbegin()->first + "\r\n" + string(data.substr(1, 1)) + string(data.substr(3)) + "\r\n";
             if (req.parse(temp_buf) == -1) {
@@ -190,7 +209,6 @@ void ClientSession::in_recv(size_t length) {
             is_udp = req.command == TrojanRequest::UDP_ASSOCIATE;
 
             if (is_udp) {
-                // UDP associate - always through proxy for now
                 udp::endpoint bindpoint(in_socket.local_endpoint().address(), 0);
                 boost::system::error_code ec;
                 udp_socket.open(bindpoint.protocol(), ec);
@@ -206,7 +224,6 @@ void ClientSession::in_recv(size_t length) {
                 in_async_write(string("\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", 10));
             }
             
-            // Store the trojan request for proxy mode
             out_write_buf = temp_buf;
             break;
         }
@@ -218,10 +235,10 @@ void ClientSession::in_recv(size_t length) {
         }
         case FORWARD: {
             sent_len += length;
-            out_async_write(string(data));
+            // 零拷贝：直接从读缓冲区写入
+            out_async_write_buffer(in_read_buf.data(), length);
             break;
         }
-
         case UDP_FORWARD: {
             Log::log_with_endpoint(in_endpoint, "unexpected data from TCP port", Log::ERROR);
             destroy();
@@ -245,10 +262,7 @@ void ClientSession::in_sent() {
                 udp_async_read();
             }
             
-            
             auto self = shared_from_this();
-            
-            // Proxy connection - connect to trojan server
             resolver.async_resolve(config.remote_addr, to_string(config.remote_port), [this, self](const boost::system::error_code error, const tcp::resolver::results_type& results) {
                 if (error || results.empty()) {
                     Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + config.remote_addr + ": " + error.message(), Log::ERROR);
@@ -275,7 +289,7 @@ void ClientSession::in_sent() {
                     boost::system::error_code ec;
                     out_socket.next_layer().set_option(fastopen_connect(true), ec);
                 }
-#endif // TCP_FASTOPEN_CONNECT
+#endif
                 out_socket.next_layer().async_connect(*iterator, [this, self](const boost::system::error_code error) {
                     if (error) {
                         Log::log_with_endpoint(in_endpoint, "cannot establish connection to remote server " + config.remote_addr + ':' + to_string(config.remote_port) + ": " + error.message(), Log::ERROR);
@@ -320,7 +334,6 @@ void ClientSession::in_sent() {
             out_async_read();
             break;
         }
-
         case INVALID: {
             destroy();
             break;
@@ -333,13 +346,13 @@ void ClientSession::out_recv(size_t length) {
     if (length > out_read_buf.size() * 0.75) {
         resize_buffer(out_read_buf, length * 2);
     }
-    std::string_view data((const char*)out_read_buf.data(), length);
     
     if (status == FORWARD) {
         recv_len += length;
-        in_async_write(string(data));
+        // 零拷贝：直接从读缓冲区写入
+        in_async_write_buffer(out_read_buf.data(), length);
     } else if (status == UDP_FORWARD) {
-        udp_data_buf += string(data);
+        udp_data_buf += string(reinterpret_cast<const char*>(out_read_buf.data()), length);
         udp_sent();
     }
 }
@@ -356,7 +369,7 @@ void ClientSession::udp_recv(size_t length, const udp::endpoint&) {
     if (length > udp_read_buf.size() * 0.75) {
         resize_buffer(udp_read_buf, length * 2);
     }
-    std::string_view data((const char*)udp_read_buf.data(), length);
+    string_view data(reinterpret_cast<const char*>(udp_read_buf.data()), length);
     
     if (length == 0) {
         return;
@@ -421,7 +434,6 @@ void ClientSession::destroy() {
         return;
     }
     status = DESTROY;
-    // Removed direct routing info from log
     Log::log_with_endpoint(in_endpoint, "disconnected from " + target_host + ", " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
     boost::system::error_code ec;
     resolver.cancel();

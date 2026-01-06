@@ -43,12 +43,20 @@ private:
 
     std::string target_host;  // Target host for logging
     uint16_t target_port;     // Target port
+    
+    // 零拷贝写缓冲区
+    std::vector<uint8_t> in_write_data;
+    std::vector<uint8_t> out_write_data;
+    std::vector<uint8_t> udp_write_data;
+    
     void destroy();
     void in_async_read();
+    void in_async_write_buffer(const uint8_t* data, size_t length);
     void in_async_write(const std::string &data);
     void in_recv(size_t length);
     void in_sent();
     void out_async_read();
+    void out_async_write_buffer(const uint8_t* data, size_t length);
     void out_async_write(const std::string &data);
     void out_recv(size_t length);
     void out_sent();
