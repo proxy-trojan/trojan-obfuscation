@@ -769,21 +769,18 @@ request_ip_certificate() {
 
     mkdir -p /etc/trojan
 
-    # Install acme.sh if not present
-    local acme_sh=~/.acme.sh/acme.sh
+    # Install acme.sh if not present - use absolute path to avoid sudo issues
+    local acme_home="/root/.acme.sh"
+    local acme_sh="$acme_home/acme.sh"
     if [[ ! -f "$acme_sh" ]]; then
         progress_update "Installing acme.sh..."
         curl -sS https://get.acme.sh | sh -s email="${EMAIL:-admin@localhost}"
-        source ~/.bashrc 2>/dev/null || true
-    fi
-
-    if [[ ! -f "$acme_sh" ]]; then
-        acme_sh="$HOME/.acme.sh/acme.sh"
+        source "$acme_home/acme.sh.env" 2>/dev/null || true
     fi
 
     # Register account with Let's Encrypt
     progress_update "Registering account with Let's Encrypt..."
-    $acme_sh --register-account -m "${EMAIL:-admin@localhost}" --server letsencrypt 2>/dev/null || true
+    "$acme_sh" --register-account -m "${EMAIL:-admin@localhost}" --server letsencrypt 2>/dev/null || true
 
     # Request IP certificate with short-lived profile
     # 6 days validity, auto-renew 1 day before expiry
@@ -796,7 +793,7 @@ request_ip_certificate() {
     while [[ $retry -lt $max_retry ]]; do
         ((retry++)) || true
 
-        if $acme_sh --issue --server letsencrypt \
+        if "$acme_sh" --issue --server letsencrypt \
             -d "$ip" \
             --standalone \
             --keylength ec-256 \
@@ -807,7 +804,7 @@ request_ip_certificate() {
         fi
 
         # Check if cert already exists
-        if [[ -f "$HOME/.acme.sh/${ip}_ecc/${ip}.key" ]] && [[ -f "$HOME/.acme.sh/${ip}_ecc/fullchain.cer" ]]; then
+        if [[ -f "$acme_home/${ip}_ecc/${ip}.key" ]] && [[ -f "$acme_home/${ip}_ecc/fullchain.cer" ]]; then
             log_info "Certificate already exists. Using existing certificate."
             cert_obtained=true
             break
@@ -830,7 +827,7 @@ request_ip_certificate() {
 
     # Set auto-renew to 1 day before expiry (for 6-day certificate)
     progress_update "Configuring auto-renewal (1 day before expiry)..."
-    $acme_sh --set-cert-renew-days 1 -d "$ip" --ecc 2>/dev/null || true
+    "$acme_sh" --set-cert-renew-days 1 -d "$ip" --ecc 2>/dev/null || true
 
     # Determine reload command
     local reload_cmd=""
@@ -846,7 +843,7 @@ request_ip_certificate() {
 
     # Install certificate
     progress_update "Installing certificate..."
-    $acme_sh --install-cert -d "$ip" --ecc \
+    "$acme_sh" --install-cert -d "$ip" --ecc \
         --key-file /etc/trojan/server.key \
         --fullchain-file /etc/trojan/server.crt \
         --reloadcmd "$reload_cmd"
@@ -854,6 +851,13 @@ request_ip_certificate() {
     if [[ -f /etc/trojan/server.crt ]] && [[ -f /etc/trojan/server.key ]]; then
         chmod 644 /etc/trojan/server.crt
         chmod 600 /etc/trojan/server.key
+        
+        # Verify cron job exists for auto-renewal
+        if ! crontab -l 2>/dev/null | grep -q acme.sh; then
+            log_warn "Auto-renewal cron job not found, installing..."
+            "$acme_sh" --install-cronjob 2>/dev/null || true
+        fi
+        
         log_info "$(t CERT_SELF_SIGNED_OK)"
         return 0
     else
@@ -1457,17 +1461,14 @@ setup_ssl() {
         return $?
     fi
 
-    # Domain certificate via ACME
-    local acme_sh=~/.acme.sh/acme.sh
-
-    if [[ ! -f ~/.acme.sh/acme.sh ]]; then
-        progress_update "Installing acme.sh..."
-        curl -sS https://get.acme.sh | sh -s email="$EMAIL"
-        source ~/.bashrc 2>/dev/null || true
-    fi
+    # Domain certificate via ACME - use absolute path to avoid sudo issues
+    local acme_home="/root/.acme.sh"
+    local acme_sh="$acme_home/acme.sh"
 
     if [[ ! -f "$acme_sh" ]]; then
-        acme_sh="$HOME/.acme.sh/acme.sh"
+        progress_update "Installing acme.sh..."
+        curl -sS https://get.acme.sh | sh -s email="$EMAIL"
+        source "$acme_home/acme.sh.env" 2>/dev/null || true
     fi
 
     # Configure acme.sh notify hook if enabled
@@ -1481,28 +1482,28 @@ setup_ssl() {
                 if [[ -n "$NOTIFY_TOKEN" ]] && [[ -n "$NOTIFY_CHAT" ]]; then
                     export TELEGRAM_BOT_APITOKEN="$NOTIFY_TOKEN"
                     export TELEGRAM_BOT_CHATID="$NOTIFY_CHAT"
-                    $acme_sh --set-notify --notify-hook telegram --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook telegram --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             slack)
                 # SLACK_WEBHOOK_URL should be set
                 if [[ -n "$NOTIFY_TOKEN" ]]; then
                     export SLACK_WEBHOOK_URL="$NOTIFY_TOKEN"
-                    $acme_sh --set-notify --notify-hook slack --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook slack --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             dingtalk)
                 # DINGTALK_WEBHOOK should be set
                 if [[ -n "$NOTIFY_TOKEN" ]]; then
                     export DINGTALK_WEBHOOK="$NOTIFY_TOKEN"
-                    $acme_sh --set-notify --notify-hook dingtalk --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook dingtalk --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             feishu)
                 # FEISHU_WEBHOOK should be set
                 if [[ -n "$NOTIFY_TOKEN" ]]; then
                     export FEISHU_WEBHOOK="$NOTIFY_TOKEN"
-                    $acme_sh --set-notify --notify-hook feishu --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook feishu --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             bark)
@@ -1510,14 +1511,14 @@ setup_ssl() {
                 if [[ -n "$NOTIFY_TOKEN" ]]; then
                     export BARK_API_URL="${NOTIFY_SOURCE:-https://api.day.app}"
                     export BARK_DEVICE_KEY="$NOTIFY_TOKEN"
-                    $acme_sh --set-notify --notify-hook bark --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook bark --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             serverchan)
                 # SERVERCHAN_SCKEY should be set
                 if [[ -n "$NOTIFY_TOKEN" ]]; then
                     export SERVERCHAN_SCKEY="$NOTIFY_TOKEN"
-                    $acme_sh --set-notify --notify-hook serverchan --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook serverchan --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             pushover)
@@ -1525,7 +1526,7 @@ setup_ssl() {
                 if [[ -n "$NOTIFY_TOKEN" ]] && [[ -n "$NOTIFY_CHAT" ]]; then
                     export PUSHOVER_TOKEN="$NOTIFY_TOKEN"
                     export PUSHOVER_USER="$NOTIFY_CHAT"
-                    $acme_sh --set-notify --notify-hook pushover --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook pushover --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             mailgun)
@@ -1534,7 +1535,7 @@ setup_ssl() {
                     export MAILGUN_API_KEY="$NOTIFY_TOKEN"
                     export MAILGUN_TO="$NOTIFY_CHAT"
                     export MAILGUN_FROM="${NOTIFY_SOURCE:-acme@$DOMAIN}"
-                    $acme_sh --set-notify --notify-hook mailgun --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook mailgun --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             sendgrid)
@@ -1543,14 +1544,14 @@ setup_ssl() {
                     export SENDGRID_API_KEY="$NOTIFY_TOKEN"
                     export SENDGRID_TO="$NOTIFY_CHAT"
                     export SENDGRID_FROM="${NOTIFY_SOURCE:-acme@$DOMAIN}"
-                    $acme_sh --set-notify --notify-hook sendgrid --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook sendgrid --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
             *)
                 # Generic webhook - user provides full URL
                 if [[ -n "$NOTIFY_TOKEN" ]]; then
                     export WEBHOOK_URL="$NOTIFY_TOKEN"
-                    $acme_sh --set-notify --notify-hook "$NOTIFY_HOOK" --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
+                    "$acme_sh" --set-notify --notify-hook "$NOTIFY_HOOK" --notify-level "$NOTIFY_LEVEL" 2>/dev/null || true
                 fi
                 ;;
         esac
@@ -1590,8 +1591,8 @@ setup_ssl() {
 
         # Register account
         progress_update "$(printf "$(t ACME_REGISTER)" "$ca")"
-        $acme_sh --set-default-ca --server "$server_url" 2>/dev/null || true
-        $acme_sh --register-account -m "$EMAIL" --server "$server_url" 2>/dev/null || true
+        "$acme_sh" --set-default-ca --server "$server_url" 2>/dev/null || true
+        "$acme_sh" --register-account -m "$EMAIL" --server "$server_url" 2>/dev/null || true
 
         # Try to issue certificate with retry
         local retry=0
@@ -1600,14 +1601,14 @@ setup_ssl() {
 
             progress_update "$(t ACME_STANDALONE)"
 
-            if $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256 --server "$server_url" 2>&1; then
+            if "$acme_sh" --issue -d "$DOMAIN" --standalone --keylength ec-256 --server "$server_url" 2>&1; then
                 cert_obtained=true
                 progress_update "$(printf "$(t ACME_SUCCESS)" "$ca")"
                 break
             fi
 
             # Check if cert already exists
-            if [[ -f "$HOME/.acme.sh/${DOMAIN}_ecc/${DOMAIN}.key" ]] && [[ -f "$HOME/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]]; then
+            if [[ -f "$acme_home/${DOMAIN}_ecc/${DOMAIN}.key" ]] && [[ -f "$acme_home/${DOMAIN}_ecc/fullchain.cer" ]]; then
                 log_info "Certificate already exists. Using existing certificate."
                 cert_obtained=true
                 break
@@ -1648,13 +1649,19 @@ setup_ssl() {
     fi
 
     progress_update "$(t ACME_INSTALL)"
-    $acme_sh --install-cert -d "$DOMAIN" --ecc \
+    "$acme_sh" --install-cert -d "$DOMAIN" --ecc \
         --key-file /etc/trojan/server.key \
         --fullchain-file /etc/trojan/server.crt \
         --reloadcmd "$reload_cmd"
 
     chmod 644 /etc/trojan/server.crt
     chmod 600 /etc/trojan/server.key
+    
+    # Verify cron job exists for auto-renewal
+    if ! crontab -l 2>/dev/null | grep -q acme.sh; then
+        log_warn "Auto-renewal cron job not found, installing..."
+        "$acme_sh" --install-cronjob 2>/dev/null || true
+    fi
 }
 
 # ==================== Trojan/Caddy Config ====================
@@ -1675,11 +1682,18 @@ EOF
 
 configure_trojan() {
     # Auto-detect CPU cores for thread configuration
-    local CPU_CORES=4
+    # Minimum 2 threads for better concurrency even on single-core systems
+    local CPU_CORES=2
     if command -v nproc &>/dev/null; then
         CPU_CORES=$(nproc)
+        if [[ $CPU_CORES -lt 2 ]]; then
+            CPU_CORES=2
+        fi
     elif [[ "$(uname)" == "Darwin" ]]; then
         CPU_CORES=$(sysctl -n hw.ncpu)
+        if [[ $CPU_CORES -lt 2 ]]; then
+            CPU_CORES=2
+        fi
     fi
 
     local trojan_conf="/etc/trojan/config.json"
@@ -2216,9 +2230,11 @@ do_status() {
 do_renew_cert() {
     log_info "$(t CERT_RENEW_START)"
     
-    if [[ -f ~/.acme.sh/acme.sh ]]; then
-        local acme_sh=~/.acme.sh/acme.sh
-        
+    # Use absolute path for acme.sh
+    local acme_home="/root/.acme.sh"
+    local acme_sh="$acme_home/acme.sh"
+    
+    if [[ -f "$acme_sh" ]]; then
         # Determine reload command
         detect_os
         local reload_cmd=""
@@ -2248,7 +2264,7 @@ do_renew_cert() {
              fi
         fi
 
-        $acme_sh --renew -d "$DOMAIN" --force --ecc --reloadcmd "$reload_cmd"
+        "$acme_sh" --renew -d "$DOMAIN" --force --ecc --reloadcmd "$reload_cmd"
         
         if [[ $? -eq 0 ]]; then
             log_info "$(t CERT_RENEW_SUCCESS)"

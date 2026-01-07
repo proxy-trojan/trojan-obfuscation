@@ -20,6 +20,7 @@ NC='\033[0m' # No Color
 # NOTE:
 # This script deploys *trojan-pro* (this repository). It expects to run from within
 # the repo checkout so it can call scripts/build-trojan-core.sh.
+SCRIPT_VERSION="1.1.0"
 INSTALL_DIR="/usr/local/trojan"
 CONFIG_DIR="/etc/trojan"
 LOG_DIR="/var/log/trojan"
@@ -40,7 +41,7 @@ print_banner() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║                                                              ║"
-    echo "║          Trojan + Caddy 一键部署脚本 v1.0                    ║"
+    echo "║          Trojan + Caddy 一键部署脚本 v${SCRIPT_VERSION}                   ║"
     echo "║                                                              ║"
     echo "║  支持系统: Debian/Ubuntu, CentOS/RHEL, Alpine, Arch         ║"
     echo "║  推荐方案: Caddy (自动HTTPS) + Trojan (代理服务)            ║"
@@ -139,6 +140,104 @@ check_network() {
         exit 1
     fi
     log_info "网络连接正常"
+}
+
+# 检查端口是否被占用
+check_port_available() {
+    local port=$1
+    if ss -tlnp 2>/dev/null | grep -q ":${port} " || netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
+        return 1
+    fi
+    return 0
+}
+
+# 检查域名 DNS 解析
+check_dns_resolution() {
+    local domain=$1
+    log_step "检查域名 DNS 解析..."
+    
+    # 获取本机公网 IP
+    local server_ip=""
+    server_ip=$(curl -s4 --connect-timeout 5 ip.sb 2>/dev/null)
+    if [[ -z "$server_ip" ]]; then
+        server_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null)
+    fi
+    
+    if [[ -z "$server_ip" ]]; then
+        log_warn "无法获取本机公网 IP，跳过 DNS 检查"
+        return 0
+    fi
+    
+    # 解析域名
+    local domain_ip=""
+    if command -v dig &>/dev/null; then
+        domain_ip=$(dig +short "$domain" A 2>/dev/null | head -1)
+    elif command -v nslookup &>/dev/null; then
+        domain_ip=$(nslookup "$domain" 2>/dev/null | awk '/^Address: / { print $2 }' | head -1)
+    elif command -v host &>/dev/null; then
+        domain_ip=$(host "$domain" 2>/dev/null | awk '/has address/ { print $4 }' | head -1)
+    fi
+    
+    if [[ -z "$domain_ip" ]]; then
+        log_warn "无法解析域名 $domain，请确保 DNS 已正确配置"
+        if ! confirm "是否继续？" "n"; then
+            exit 1
+        fi
+        return 0
+    fi
+    
+    if [[ "$domain_ip" != "$server_ip" ]]; then
+        log_warn "域名 $domain 解析到 $domain_ip，但本机 IP 为 $server_ip"
+        log_warn "Let's Encrypt 证书申请可能会失败"
+        if ! confirm "是否继续？" "n"; then
+            exit 1
+        fi
+    else
+        log_info "DNS 解析正确: $domain -> $server_ip"
+    fi
+}
+
+# 启用 TCP BBR 拥塞控制
+enable_bbr() {
+    log_step "检查并启用 TCP BBR..."
+    
+    # 检查内核版本 (BBR 需要 4.9+)
+    local kernel_version=$(uname -r | cut -d. -f1-2)
+    local kernel_major=$(echo "$kernel_version" | cut -d. -f1)
+    local kernel_minor=$(echo "$kernel_version" | cut -d. -f2)
+    
+    if [[ $kernel_major -lt 4 ]] || { [[ $kernel_major -eq 4 ]] && [[ $kernel_minor -lt 9 ]]; }; then
+        log_warn "内核版本 $kernel_version 不支持 BBR (需要 4.9+)，跳过"
+        return 0
+    fi
+    
+    # 检查是否已启用
+    if sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
+        log_info "BBR 已启用"
+        return 0
+    fi
+    
+    # 检查 BBR 模块是否可用
+    if ! modprobe tcp_bbr 2>/dev/null; then
+        log_warn "BBR 模块不可用，跳过"
+        return 0
+    fi
+    
+    # 启用 BBR
+    cat >> /etc/sysctl.conf << 'EOF'
+
+# TCP BBR 拥塞控制 (由 trojan 部署脚本添加)
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+    
+    sysctl -p &>/dev/null
+    
+    if sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
+        log_info "BBR 已成功启用"
+    else
+        log_warn "BBR 启用失败，但不影响基本功能"
+    fi
 }
 
 # ==================== 包管理器封装 ====================
@@ -334,11 +433,18 @@ configure_trojan() {
     log_step "配置 Trojan..."
 
     # Auto-detect CPU cores for thread configuration
-    local CPU_CORES=4
+    # Minimum 2 threads for better concurrency even on single-core systems
+    local CPU_CORES=2
     if command -v nproc &>/dev/null; then
         CPU_CORES=$(nproc)
+        if [[ $CPU_CORES -lt 2 ]]; then
+            CPU_CORES=2
+        fi
     elif [[ "$(uname)" == "Darwin" ]]; then
         CPU_CORES=$(sysctl -n hw.ncpu)
+        if [[ $CPU_CORES -lt 2 ]]; then
+            CPU_CORES=2
+        fi
     fi
     
     local cert_path="/etc/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
@@ -375,7 +481,6 @@ configure_trojan() {
         "session_ticket": false,
         "session_timeout": 600,
         "plain_http_response": "",
-        "curves": "",
         "curves": "",
         "dhparam": ""
     },
@@ -893,21 +998,24 @@ setup_ssl_certificate() {
 setup_acme_certificate() {
     log_info "使用 acme.sh 申请 Let's Encrypt 证书..."
 
-    local acme_sh=~/.acme.sh/acme.sh
+    # 确保使用绝对路径，避免 sudo 环境问题
+    local acme_home="/root/.acme.sh"
+    local acme_sh="$acme_home/acme.sh"
 
     # 安装 acme.sh
     if [[ ! -f "$acme_sh" ]]; then
         curl -sS https://get.acme.sh | sh -s email="$EMAIL"
-        source ~/.bashrc 2>/dev/null || true
+        # 重新加载环境
+        source "$acme_home/acme.sh.env" 2>/dev/null || true
     fi
 
     # 切换到 Let's Encrypt 作为默认 CA（避免 ZeroSSL 需要额外注册的问题）
     log_info "设置 Let's Encrypt 为默认 CA..."
-    $acme_sh --set-default-ca --server letsencrypt
+    "$acme_sh" --set-default-ca --server letsencrypt
 
     # 注册账户（如果尚未注册）
     log_info "注册 ACME 账户..."
-    $acme_sh --register-account -m "$EMAIL" --server letsencrypt 2>/dev/null || true
+    "$acme_sh" --register-account -m "$EMAIL" --server letsencrypt 2>/dev/null || true
 
     # 确保 80 端口可用
     if ss -tlnp | grep -q ':80 '; then
@@ -921,7 +1029,7 @@ setup_acme_certificate() {
     # 申请证书
     log_info "申请证书中，请确保域名 $DOMAIN 已解析到本服务器..."
 
-    $acme_sh --issue -d "$DOMAIN" --standalone --keylength ec-256 --server letsencrypt || {
+    "$acme_sh" --issue -d "$DOMAIN" --standalone --keylength ec-256 --server letsencrypt || {
         log_error "证书申请失败，请检查:"
         log_error "  1. 域名是否正确解析到本服务器"
         log_error "  2. 端口 80 是否可访问"
@@ -931,13 +1039,19 @@ setup_acme_certificate() {
     
     # 安装证书
     mkdir -p /etc/trojan
-    $acme_sh --install-cert -d "$DOMAIN" --ecc \
+    "$acme_sh" --install-cert -d "$DOMAIN" --ecc \
         --key-file /etc/trojan/server.key \
         --fullchain-file /etc/trojan/server.crt \
         --reloadcmd "systemctl reload trojan 2>/dev/null || true"
     
     chmod 600 /etc/trojan/server.key
     chmod 644 /etc/trojan/server.crt
+    
+    # 验证 cron 任务是否存在
+    if ! crontab -l 2>/dev/null | grep -q acme.sh; then
+        log_warn "未检测到 acme.sh 自动续期 cron 任务，尝试添加..."
+        "$acme_sh" --install-cronjob 2>/dev/null || true
+    fi
     
     log_info "Let's Encrypt 证书申请成功"
 }
@@ -1117,6 +1231,7 @@ uninstall_all() {
     systemctl stop trojan 2>/dev/null || true
     systemctl stop caddy 2>/dev/null || true
     systemctl disable trojan 2>/dev/null || true
+    systemctl disable caddy 2>/dev/null || true
     systemctl disable caddy 2>/dev/null || true
     
     log_step "删除文件..."
@@ -1323,10 +1438,16 @@ client_config_menu() {
 }
 
 regenerate_client_config() {
-    # 读取现有配置
+    # 读取现有配置 - 使用兼容性更好的方式 (Alpine 等系统可能没有 grep -P)
     if [[ -f "$CONFIG_DIR/config.json" ]]; then
-        DOMAIN=$(grep -oP '"remote_addr":\s*"\K[^"]+' "$CONFIG_DIR/config.json" 2>/dev/null || echo "")
-        PASSWORD=$(grep -oP '"password":\s*\[\s*"\K[^"]+' "$CONFIG_DIR/config.json" 2>/dev/null || echo "")
+        if command -v jq &>/dev/null; then
+            DOMAIN=$(jq -r '.remote_addr // empty' "$CONFIG_DIR/config.json" 2>/dev/null || echo "")
+            PASSWORD=$(jq -r '.password[0] // empty' "$CONFIG_DIR/config.json" 2>/dev/null || echo "")
+        else
+            # 兼容性 fallback: 使用 sed
+            DOMAIN=$(sed -n 's/.*"remote_addr"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_DIR/config.json" 2>/dev/null | head -1)
+            PASSWORD=$(sed -n 's/.*"password"[[:space:]]*:[[:space:]]*\[[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_DIR/config.json" 2>/dev/null | head -1)
+        fi
     fi
     
     if [[ -z "$DOMAIN" ]] || [[ -z "$PASSWORD" ]]; then
@@ -1348,7 +1469,20 @@ full_install() {
     detect_os
     detect_arch
     
+    # 检查端口 443 是否被占用
+    if ! check_port_available 443; then
+        log_warn "端口 443 已被占用"
+        ss -tlnp 2>/dev/null | grep ':443 ' || netstat -tlnp 2>/dev/null | grep ':443 '
+        if ! confirm "是否继续安装？(可能需要手动停止占用服务)" "n"; then
+            exit 1
+        fi
+    fi
+    
     collect_user_input
+    
+    # 检查 DNS 解析
+    check_dns_resolution "$DOMAIN"
+    
     configure_obfuscation_options
     
     pkg_update
@@ -1366,6 +1500,9 @@ full_install() {
     setup_systemd_services
     configure_firewall
     
+    # 启用 BBR
+    enable_bbr
+    
     # 生成客户端配置
     generate_client_configs
     
@@ -1381,7 +1518,20 @@ install_trojan_only() {
     detect_os
     detect_arch
     
+    # 检查端口 443 是否被占用
+    if ! check_port_available 443; then
+        log_warn "端口 443 已被占用"
+        ss -tlnp 2>/dev/null | grep ':443 ' || netstat -tlnp 2>/dev/null | grep ':443 '
+        if ! confirm "是否继续安装？(可能需要手动停止占用服务)" "n"; then
+            exit 1
+        fi
+    fi
+    
     collect_user_input
+    
+    # 检查 DNS 解析
+    check_dns_resolution "$DOMAIN"
+    
     configure_obfuscation_options
     
     pkg_update
@@ -1392,6 +1542,9 @@ install_trojan_only() {
     setup_ssl_certificate
     setup_systemd_services
     configure_firewall
+    
+    # 启用 BBR
+    enable_bbr
     
     # 生成客户端配置
     generate_client_configs
@@ -1422,6 +1575,14 @@ install_caddy_only() {
 
 reconfigure() {
     log_step "重新配置..."
+    
+    # 备份旧配置
+    local backup_dir="/etc/trojan/backup-$(date +%Y%m%d%H%M%S)"
+    if [[ -d "$CONFIG_DIR" ]]; then
+        log_info "备份旧配置到 $backup_dir"
+        mkdir -p "$backup_dir"
+        cp -r "$CONFIG_DIR"/* "$backup_dir/" 2>/dev/null || true
+    fi
     
     collect_user_input
     configure_obfuscation_options
@@ -1457,6 +1618,9 @@ main() {
         --client|-c)
             show_client_config
             ;;
+        --version|-v)
+            echo "Trojan + Caddy 部署脚本 v${SCRIPT_VERSION}"
+            ;;
         --help|-h)
             echo "用法: $0 [选项]"
             echo ""
@@ -1466,6 +1630,7 @@ main() {
             echo "  --status, -s     查看状态"
             echo "  --export, -e     导出客户端配置"
             echo "  --client, -c     查看客户端配置"
+            echo "  --version, -v    显示版本"
             echo "  --help, -h       显示帮助"
             echo ""
             echo "无参数运行将显示交互式菜单"
