@@ -774,13 +774,13 @@ request_ip_certificate() {
     local acme_sh="$acme_home/acme.sh"
     if [[ ! -f "$acme_sh" ]]; then
         progress_update "Installing acme.sh..."
-        curl -sS https://get.acme.sh | sh -s email="${EMAIL:-admin@localhost}"
+        curl -sS https://get.acme.sh | sh -s email="${EMAIL:-noreply@example.com}"
         source "$acme_home/acme.sh.env" 2>/dev/null || true
     fi
 
     # Register account with Let's Encrypt
     progress_update "Registering account with Let's Encrypt..."
-    "$acme_sh" --register-account -m "${EMAIL:-admin@localhost}" --server letsencrypt 2>/dev/null || true
+    "$acme_sh" --register-account -m "${EMAIL:-noreply@example.com}" --server letsencrypt 2>/dev/null || true
 
     # Request IP certificate with short-lived profile
     # 6 days validity, auto-renew 1 day before expiry
@@ -1955,7 +1955,7 @@ do_install() {
             EMAIL=${EMAIL:-"admin@${DOMAIN}"}
         fi
     else
-        EMAIL="admin@localhost"
+        EMAIL="noreply@example.com"
     fi
 
     # Password
