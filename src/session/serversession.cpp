@@ -188,12 +188,15 @@ void ServerSession::in_recv(size_t length) {
         const unsigned char *alpn_out;
         unsigned int alpn_len;
         SSL_get0_alpn_selected(in_socket.native_handle(), &alpn_out, &alpn_len);
-        string selected_alpn;
+        SessionContext session_context;
+        session_context.source_ip = in_endpoint.address().to_string();
+        session_context.source_port = in_endpoint.port();
+        session_context.tls_handshake_completed = true;
         if (alpn_out != nullptr) {
-            selected_alpn.assign(reinterpret_cast<const char*>(alpn_out), alpn_len);
+            session_context.selected_alpn.assign(reinterpret_cast<const char*>(alpn_out), alpn_len);
         }
 
-        auto gate_result = session_gate.evaluate(data, selected_alpn);
+        auto gate_result = session_gate.evaluate(data, session_context);
         if (gate_result.valid_trojan_request && gate_result.authenticated) {
             if (gate_result.used_external_authenticator) {
                 auth_password = gate_result.auth_record_password;
@@ -214,8 +217,8 @@ void ServerSession::in_recv(size_t length) {
             Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
         }
 
-        const string query_addr = gate_result.query_addr;
-        const string query_port = to_string(gate_result.query_port);
+        const string query_addr = gate_result.target.host;
+        const string query_port = to_string(gate_result.target.port);
         out_write_buf = gate_result.outbound_payload;
 
         if (gate_result.path == SessionGate::Path::AUTHENTICATED_UDP) {

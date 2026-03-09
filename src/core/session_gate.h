@@ -6,6 +6,7 @@
 #include "config.h"
 #include "authenticator.h"
 #include "proto/trojanrequest.h"
+#include "session_types.h"
 
 class SessionGate {
 public:
@@ -15,21 +16,20 @@ public:
         FALLBACK
     };
 
-    struct Result {
+    struct SessionDecision {
         Path path{Path::FALLBACK};
         bool valid_trojan_request{false};
         bool authenticated{false};
         bool used_external_authenticator{false};
         TrojanRequest request;
-        std::string query_addr;
-        uint16_t query_port{0};
+        ConnectTarget target;
         std::string outbound_payload;
         std::string auth_record_password;
     };
 
     SessionGate(const Config &config, Authenticator *auth);
 
-    Result evaluate(const std::string_view &data, const std::string &selected_alpn) const;
+    SessionDecision evaluate(const std::string_view &data, const SessionContext &context) const;
 
 private:
     const Config &config;
