@@ -4,10 +4,10 @@ using namespace std;
 
 SessionGate::SessionGate(const Config &config, Authenticator *auth) : config(config), auth(auth) {}
 
-SessionGate::SessionDecision SessionGate::evaluate(const string_view &data, const SessionContext &context) const {
+SessionGate::SessionDecision SessionGate::evaluate(const SessionGateInput &input) const {
     SessionDecision result;
     result.request = TrojanRequest();
-    result.valid_trojan_request = result.request.parse(data) != -1;
+    result.valid_trojan_request = result.request.parse(input.initial_data) != -1;
 
     if (result.valid_trojan_request) {
         auto password_iterator = config.password.find(result.request.password);
@@ -31,13 +31,13 @@ SessionGate::SessionDecision SessionGate::evaluate(const string_view &data, cons
 
     result.target.host = config.remote_addr;
     result.target.is_fallback = true;
-    if (!context.selected_alpn.empty()) {
-        auto it = config.ssl.alpn_port_override.find(context.selected_alpn);
+    if (!input.context.selected_alpn.empty()) {
+        auto it = config.ssl.alpn_port_override.find(input.context.selected_alpn);
         result.target.port = it == config.ssl.alpn_port_override.end() ? config.remote_port : it->second;
     } else {
         result.target.port = config.remote_port;
     }
-    result.outbound_payload = string(data);
+    result.outbound_payload = string(input.initial_data);
     result.path = Path::FALLBACK;
     return result;
 }

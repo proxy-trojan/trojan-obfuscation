@@ -185,18 +185,9 @@ void ServerSession::in_recv(size_t length) {
     
     if (status == HANDSHAKE) {
         string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
-        const unsigned char *alpn_out;
-        unsigned int alpn_len;
-        SSL_get0_alpn_selected(in_socket.native_handle(), &alpn_out, &alpn_len);
-        SessionContext session_context;
-        session_context.source_ip = in_endpoint.address().to_string();
-        session_context.source_port = in_endpoint.port();
-        session_context.tls_handshake_completed = true;
-        if (alpn_out != nullptr) {
-            session_context.selected_alpn.assign(reinterpret_cast<const char*>(alpn_out), alpn_len);
-        }
+        auto gate_input = edge_context_builder.build_gate_input(in_endpoint, in_socket, data);
 
-        auto gate_result = session_gate.evaluate(data, session_context);
+        auto gate_result = session_gate.evaluate(gate_input);
         if (gate_result.valid_trojan_request && gate_result.authenticated) {
             if (gate_result.used_external_authenticator) {
                 auth_password = gate_result.auth_record_password;

@@ -29,7 +29,7 @@ public:
 
     SessionGate(const Config &config, Authenticator *auth);
 
-    SessionDecision evaluate(const std::string_view &data, const SessionContext &context) const;
+    SessionDecision evaluate(const SessionGateInput &input) const;
 
 private:
     const Config &config;
