@@ -40,6 +40,8 @@ ServerSession::ServerSession(const Config &config,
     out_socket(io_context),
     udp_resolver(io_context),
     auth(auth),
+    session_gate(config, auth),
+    outbound_dialer(config),
     release_connection_slot(std::move(release_connection_slot)),
     release_fallback_slot(std::move(release_fallback_slot)),
     record_auth_success(std::move(record_auth_success)),
@@ -183,58 +185,49 @@ void ServerSession::in_recv(size_t length) {
     
     if (status == HANDSHAKE) {
         string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
-        TrojanRequest req;
-        bool valid = req.parse(data) != -1;
-        if (valid) {
-            auto password_iterator = config.password.find(req.password);
-            if (password_iterator == config.password.end()) {
-                valid = false;
-                if (auth && auth->auth(req.password)) {
-                    valid = true;
-                    auth_password = req.password;
-                    if (record_auth_success) {
-                        record_auth_success();
-                    }
-                    Log::log_with_endpoint(in_endpoint, "authenticated by external authenticator", Log::INFO);
+        const unsigned char *alpn_out;
+        unsigned int alpn_len;
+        SSL_get0_alpn_selected(in_socket.native_handle(), &alpn_out, &alpn_len);
+        string selected_alpn;
+        if (alpn_out != nullptr) {
+            selected_alpn.assign(reinterpret_cast<const char*>(alpn_out), alpn_len);
+        }
+
+        auto gate_result = session_gate.evaluate(data, selected_alpn);
+        if (gate_result.valid_trojan_request && gate_result.authenticated) {
+            if (gate_result.used_external_authenticator) {
+                auth_password = gate_result.auth_record_password;
+                if (record_auth_success) {
+                    record_auth_success();
                 }
+                Log::log_with_endpoint(in_endpoint, "authenticated by external authenticator", Log::INFO);
             } else {
                 if (record_auth_success) {
                     record_auth_success();
                 }
                 Log::log_with_endpoint(in_endpoint, "authenticated by configured credential", Log::INFO);
             }
-            if (!valid) {
-                if (record_auth_failure) {
-                    record_auth_failure(in_endpoint);
-                }
-                Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
+        } else if (gate_result.valid_trojan_request) {
+            if (record_auth_failure) {
+                record_auth_failure(in_endpoint);
             }
+            Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
         }
-        string query_addr = valid ? req.address.address : config.remote_addr;
-        string query_port = to_string([&]() {
-            if (valid) {
-                return req.address.port;
-            }
-            const unsigned char *alpn_out;
-            unsigned int alpn_len;
-            SSL_get0_alpn_selected(in_socket.native_handle(), &alpn_out, &alpn_len);
-            if (alpn_out == nullptr) {
-                return config.remote_port;
-            }
-            auto it = config.ssl.alpn_port_override.find(string(alpn_out, alpn_out + alpn_len));
-            return it == config.ssl.alpn_port_override.end() ? config.remote_port : it->second;
-        }());
-        if (valid) {
-            out_write_buf = req.payload;
-            if (req.command == TrojanRequest::UDP_ASSOCIATE) {
-                Log::log_with_endpoint(in_endpoint, "requested UDP associate to " + req.address.address + ':' + to_string(req.address.port), Log::INFO);
-                status = UDP_FORWARD;
-                udp_data_buf = out_write_buf;
-                udp_sent();
-                return;
-            } else {
-                Log::log_with_endpoint(in_endpoint, "requested connection to " + req.address.address + ':' + to_string(req.address.port), Log::INFO);
-            }
+
+        const string query_addr = gate_result.query_addr;
+        const string query_port = to_string(gate_result.query_port);
+        out_write_buf = gate_result.outbound_payload;
+
+        if (gate_result.path == SessionGate::Path::AUTHENTICATED_UDP) {
+            Log::log_with_endpoint(in_endpoint, "requested UDP associate to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port), Log::INFO);
+            status = UDP_FORWARD;
+            udp_data_buf = out_write_buf;
+            udp_sent();
+            return;
+        }
+
+        if (gate_result.path == SessionGate::Path::AUTHENTICATED_TCP) {
+            Log::log_with_endpoint(in_endpoint, "requested connection to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port), Log::INFO);
         } else {
             if (record_fallback_connection) {
                 fallback_slot_acquired = record_fallback_connection();
@@ -245,62 +238,40 @@ void ServerSession::in_recv(size_t length) {
                 }
             }
             Log::log_with_endpoint(in_endpoint, "not trojan request, connecting to " + query_addr + ':' + query_port, Log::WARN);
-            out_write_buf = string(data);
         }
+
         sent_len += out_write_buf.length();
         auto self = shared_from_this();
-        resolver.async_resolve(query_addr, query_port, [this, self, query_addr, query_port](const boost::system::error_code error, const tcp::resolver::results_type& results) {
-            if (error || results.empty()) {
-                Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + query_addr + ": " + error.message(), Log::ERROR);
+        outbound_dialer.resolve_tcp(
+            resolver,
+            in_endpoint,
+            query_addr,
+            query_port,
+            [this, self, query_addr, query_port](tcp::resolver::results_type::const_iterator iterator) {
+                outbound_dialer.connect_tcp(
+                    out_socket,
+                    iterator,
+                    in_endpoint,
+                    query_addr,
+                    query_port,
+                    [this, self]() {
+                        status = FORWARD;
+                        out_async_read();
+                        if (!out_write_buf.empty()) {
+                            out_async_write(out_write_buf);
+                        } else {
+                            in_async_read();
+                        }
+                    },
+                    [this, self](const string &message) {
+                        Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
+                        destroy();
+                    });
+            },
+            [this, self](const string &message) {
+                Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
                 destroy();
-                return;
-            }
-            auto iterator = results.begin();
-            if (config.tcp.prefer_ipv4) {
-                for (auto it = results.begin(); it != results.end(); ++it) {
-                    const auto &addr = it->endpoint().address();
-                    if (addr.is_v4()) {
-                        iterator = it;
-                        break;
-                    }
-                }
-            }
-            Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
-            boost::system::error_code ec;
-            out_socket.open(iterator->endpoint().protocol(), ec);
-            if (ec) {
-                destroy();
-                return;
-            }
-            if (config.tcp.no_delay) {
-                out_socket.set_option(tcp::no_delay(true));
-            }
-            if (config.tcp.keep_alive) {
-                out_socket.set_option(boost::asio::socket_base::keep_alive(true));
-            }
-#ifdef TCP_FASTOPEN_CONNECT
-            if (config.tcp.fast_open) {
-                using fastopen_connect = boost::asio::detail::socket_option::boolean<IPPROTO_TCP, TCP_FASTOPEN_CONNECT>;
-                boost::system::error_code ec;
-                out_socket.set_option(fastopen_connect(true), ec);
-            }
-#endif // TCP_FASTOPEN_CONNECT
-            out_socket.async_connect(*iterator, [this, self, query_addr, query_port](const boost::system::error_code error) {
-                if (error) {
-                    Log::log_with_endpoint(in_endpoint, "cannot establish connection to remote server " + query_addr + ':' + query_port + ": " + error.message(), Log::ERROR);
-                    destroy();
-                    return;
-                }
-                Log::log_with_endpoint(in_endpoint, "tunnel established");
-                status = FORWARD;
-                out_async_read();
-                if (!out_write_buf.empty()) {
-                    out_async_write(out_write_buf);
-                } else {
-                    in_async_read();
-                }
             });
-        });
     } else if (status == FORWARD) {
         sent_len += length;
         // 零拷贝：直接从读缓冲区写入

@@ -50,6 +50,9 @@ Service::Service(Config &config, bool test) :
     thread_num(0),
     use_multi_io_context(false),
     socket_acceptor(io_context),
+    abuse_controller(config.abuse_control),
+    runtime_metrics(),
+    fallback_controller(config.abuse_control, runtime_metrics),
     ssl_context(context::sslv23),
     auth(nullptr),
     udp_socket(io_context) {
@@ -316,52 +319,11 @@ boost::asio::io_context& Service::get_worker_io_context() {
     return io_context;
 }
 
-bool Service::try_acquire_connection_slot(const tcp::endpoint& endpoint) {
-    if (!config.abuse_control.enabled || config.abuse_control.per_ip_max_connections <= 0) {
-        return true;
-    }
-    const string ip = endpoint.address().to_string();
-    lock_guard<mutex> lock(abuse_control_state.mutex);
-    auto &stats = abuse_control_state.per_ip[ip];
-    if (stats.active_connections >= static_cast<size_t>(config.abuse_control.per_ip_max_connections)) {
-        return false;
-    }
-    ++stats.active_connections;
-    return true;
-}
-
 void Service::release_connection_slot(const tcp::endpoint& endpoint) {
     auto active = runtime_metrics.active_sessions.load(std::memory_order_relaxed);
     while (active > 0 && !runtime_metrics.active_sessions.compare_exchange_weak(active, active - 1, std::memory_order_relaxed)) {
     }
-    if (!config.abuse_control.enabled || config.abuse_control.per_ip_max_connections <= 0) {
-        return;
-    }
-    const string ip = endpoint.address().to_string();
-    lock_guard<mutex> lock(abuse_control_state.mutex);
-    auto it = abuse_control_state.per_ip.find(ip);
-    if (it == abuse_control_state.per_ip.end()) {
-        return;
-    }
-    if (it->second.active_connections > 0) {
-        --it->second.active_connections;
-    }
-    if (it->second.active_connections == 0 && it->second.auth_fail_count == 0 && it->second.cooldown_until <= std::chrono::steady_clock::now()) {
-        abuse_control_state.per_ip.erase(it);
-    }
-}
-
-bool Service::is_ip_in_cooldown(const tcp::endpoint& endpoint) {
-    if (!config.abuse_control.enabled || config.abuse_control.auth_fail_max <= 0 || config.abuse_control.cooldown_seconds <= 0) {
-        return false;
-    }
-    const string ip = endpoint.address().to_string();
-    lock_guard<mutex> lock(abuse_control_state.mutex);
-    auto it = abuse_control_state.per_ip.find(ip);
-    if (it == abuse_control_state.per_ip.end()) {
-        return false;
-    }
-    return it->second.cooldown_until > std::chrono::steady_clock::now();
+    abuse_controller.release_connection_slot(endpoint);
 }
 
 void Service::record_auth_success() {
@@ -370,53 +332,15 @@ void Service::record_auth_success() {
 
 void Service::record_auth_failure(const tcp::endpoint& endpoint) {
     ++runtime_metrics.auth_failure_total;
-    if (!config.abuse_control.enabled || config.abuse_control.auth_fail_max <= 0 || config.abuse_control.auth_fail_window_seconds <= 0) {
-        return;
-    }
-    const auto now = std::chrono::steady_clock::now();
-    const string ip = endpoint.address().to_string();
-    lock_guard<mutex> lock(abuse_control_state.mutex);
-    auto &stats = abuse_control_state.per_ip[ip];
-    if (stats.auth_fail_window_start.time_since_epoch().count() == 0 ||
-        now - stats.auth_fail_window_start > std::chrono::seconds(config.abuse_control.auth_fail_window_seconds)) {
-        stats.auth_fail_window_start = now;
-        stats.auth_fail_count = 1;
-    } else {
-        ++stats.auth_fail_count;
-    }
-    if (stats.auth_fail_count >= static_cast<size_t>(config.abuse_control.auth_fail_max)) {
-        stats.cooldown_until = now + std::chrono::seconds(config.abuse_control.cooldown_seconds);
-        stats.auth_fail_count = 0;
-        stats.auth_fail_window_start = now;
-        Log::log_with_endpoint(endpoint, "authentication failure threshold reached; entering cooldown", Log::WARN);
-    }
-}
-
-bool Service::try_acquire_fallback_slot() {
-    if (!config.abuse_control.enabled || config.abuse_control.fallback_max_active <= 0) {
-        ++runtime_metrics.fallback_connections_total;
-        ++runtime_metrics.active_fallback_sessions;
-        return true;
-    }
-    auto current = runtime_metrics.active_fallback_sessions.load(std::memory_order_relaxed);
-    while (current < static_cast<uint64_t>(config.abuse_control.fallback_max_active)) {
-        if (runtime_metrics.active_fallback_sessions.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {
-            ++runtime_metrics.fallback_connections_total;
-            return true;
-        }
-    }
-    ++runtime_metrics.rejected_fallback_total;
-    return false;
+    abuse_controller.record_auth_failure(endpoint);
 }
 
 void Service::release_fallback_slot() {
-    auto active = runtime_metrics.active_fallback_sessions.load(std::memory_order_relaxed);
-    while (active > 0 && !runtime_metrics.active_fallback_sessions.compare_exchange_weak(active, active - 1, std::memory_order_relaxed)) {
-    }
+    fallback_controller.release_slot();
 }
 
 bool Service::record_fallback_connection() {
-    return try_acquire_fallback_slot();
+    return fallback_controller.try_acquire_slot();
 }
 
 void Service::run() {
@@ -491,16 +415,7 @@ void Service::run() {
         }
     }
 
-    Log::log_with_date_time(
-        "runtime metrics: accepted=" + to_string(runtime_metrics.accepted_connections_total.load()) +
-        ", rejected=" + to_string(runtime_metrics.rejected_connections_total.load()) +
-        ", rejected_fallback=" + to_string(runtime_metrics.rejected_fallback_total.load()) +
-        ", auth_success=" + to_string(runtime_metrics.auth_success_total.load()) +
-        ", auth_failure=" + to_string(runtime_metrics.auth_failure_total.load()) +
-        ", fallback=" + to_string(runtime_metrics.fallback_connections_total.load()) +
-        ", active=" + to_string(runtime_metrics.active_sessions.load()) +
-        ", active_fallback=" + to_string(runtime_metrics.active_fallback_sessions.load()),
-        Log::WARN);
+    Log::log_with_date_time(runtime_metrics.summary(), Log::WARN);
     Log::log_with_date_time("trojan service stopped", Log::WARN);
 }
 
@@ -550,13 +465,13 @@ void Service::async_accept() {
             boost::system::error_code ec;
             auto endpoint = session->accept_socket().remote_endpoint(ec);
             if (!ec) {
-                if (is_ip_in_cooldown(endpoint)) {
+                if (abuse_controller.is_ip_in_cooldown(endpoint)) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: IP is in authentication cooldown", Log::WARN);
                     boost::system::error_code close_ec;
                     session->accept_socket().shutdown(tcp::socket::shutdown_both, close_ec);
                     session->accept_socket().close(close_ec);
-                } else if (!try_acquire_connection_slot(endpoint)) {
+                } else if (!abuse_controller.try_acquire_connection_slot(endpoint)) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: per-IP concurrent connection limit reached", Log::WARN);
                     boost::system::error_code close_ec;
@@ -603,13 +518,13 @@ void Service::async_accept_worker(size_t worker_index) {
             boost::system::error_code ec;
             auto endpoint = session->accept_socket().remote_endpoint(ec);
             if (!ec) {
-                if (is_ip_in_cooldown(endpoint)) {
+                if (abuse_controller.is_ip_in_cooldown(endpoint)) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: IP is in authentication cooldown", Log::WARN);
                     boost::system::error_code close_ec;
                     session->accept_socket().shutdown(tcp::socket::shutdown_both, close_ec);
                     session->accept_socket().close(close_ec);
-                } else if (!try_acquire_connection_slot(endpoint)) {
+                } else if (!abuse_controller.try_acquire_connection_slot(endpoint)) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: per-IP concurrent connection limit reached", Log::WARN);
                     boost::system::error_code close_ec;

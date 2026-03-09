@@ -24,6 +24,8 @@
 #include <boost/asio/ssl.hpp>
 #include <functional>
 #include "core/authenticator.h"
+#include "core/outbound_dialer.h"
+#include "core/session_gate.h"
 
 class ServerSession : public Session {
 private:
@@ -37,6 +39,8 @@ private:
     boost::asio::ip::tcp::socket out_socket;
     boost::asio::ip::udp::resolver udp_resolver;
     Authenticator *auth;
+    SessionGate session_gate;
+    OutboundDialer outbound_dialer;
     std::function<void(const boost::asio::ip::tcp::endpoint&)> release_connection_slot;
     std::function<void()> release_fallback_slot;
     std::function<void()> record_auth_success;
