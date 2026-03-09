@@ -24,13 +24,29 @@ using namespace std;
 using namespace boost::asio::ip;
 using namespace boost::asio::ssl;
 
-ServerSession::ServerSession(const Config &config, boost::asio::io_context &io_context, context &ssl_context, Authenticator *auth, const string &plain_http_response) :
+ServerSession::ServerSession(const Config &config,
+                             boost::asio::io_context &io_context,
+                             context &ssl_context,
+                             Authenticator *auth,
+                             const string &plain_http_response,
+                             function<void(const tcp::endpoint&)> release_connection_slot,
+                             function<void()> release_fallback_slot,
+                             function<void()> record_auth_success,
+                             function<void(const tcp::endpoint&)> record_auth_failure,
+                             function<bool()> record_fallback_connection) :
     Session(config, io_context),
     status(HANDSHAKE),
     in_socket(io_context, ssl_context),
     out_socket(io_context),
     udp_resolver(io_context),
     auth(auth),
+    release_connection_slot(std::move(release_connection_slot)),
+    release_fallback_slot(std::move(release_fallback_slot)),
+    record_auth_success(std::move(record_auth_success)),
+    record_auth_failure(std::move(record_auth_failure)),
+    record_fallback_connection(std::move(record_fallback_connection)),
+    connection_slot_acquired(false),
+    fallback_slot_acquired(false),
     plain_http_response(plain_http_response) {
     // 预分配写缓冲区
     in_write_data.reserve(DEFAULT_BUFFER_SIZE);
@@ -50,6 +66,7 @@ void ServerSession::start() {
         destroy();
         return;
     }
+    connection_slot_acquired = true;
     auto self = shared_from_this();
     in_socket.async_handshake(stream_base::server, [this, self](const boost::system::error_code error) {
         if (error) {
@@ -175,13 +192,22 @@ void ServerSession::in_recv(size_t length) {
                 if (auth && auth->auth(req.password)) {
                     valid = true;
                     auth_password = req.password;
-                    Log::log_with_endpoint(in_endpoint, "authenticated by authenticator (" + req.password.substr(0, 7) + ')', Log::INFO);
+                    if (record_auth_success) {
+                        record_auth_success();
+                    }
+                    Log::log_with_endpoint(in_endpoint, "authenticated by external authenticator", Log::INFO);
                 }
             } else {
-                Log::log_with_endpoint(in_endpoint, "authenticated as " + password_iterator->second, Log::INFO);
+                if (record_auth_success) {
+                    record_auth_success();
+                }
+                Log::log_with_endpoint(in_endpoint, "authenticated by configured credential", Log::INFO);
             }
             if (!valid) {
-                Log::log_with_endpoint(in_endpoint, "valid trojan request structure but possibly incorrect password (" + req.password + ')', Log::WARN);
+                if (record_auth_failure) {
+                    record_auth_failure(in_endpoint);
+                }
+                Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
             }
         }
         string query_addr = valid ? req.address.address : config.remote_addr;
@@ -210,6 +236,14 @@ void ServerSession::in_recv(size_t length) {
                 Log::log_with_endpoint(in_endpoint, "requested connection to " + req.address.address + ':' + to_string(req.address.port), Log::INFO);
             }
         } else {
+            if (record_fallback_connection) {
+                fallback_slot_acquired = record_fallback_connection();
+                if (!fallback_slot_acquired) {
+                    Log::log_with_endpoint(in_endpoint, "fallback rejected: active fallback session budget exhausted", Log::WARN);
+                    destroy();
+                    return;
+                }
+            }
             Log::log_with_endpoint(in_endpoint, "not trojan request, connecting to " + query_addr + ':' + query_port, Log::WARN);
             out_write_buf = string(data);
         }
@@ -374,6 +408,14 @@ void ServerSession::destroy() {
     }
     status = DESTROY;
     Log::log_with_endpoint(in_endpoint, "disconnected, " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
+    if (connection_slot_acquired && release_connection_slot) {
+        release_connection_slot(in_endpoint);
+        connection_slot_acquired = false;
+    }
+    if (fallback_slot_acquired && release_fallback_slot) {
+        release_fallback_slot();
+        fallback_slot_acquired = false;
+    }
     if (auth && !auth_password.empty()) {
         auth->record(auth_password, recv_len, sent_len);
     }

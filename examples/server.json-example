@@ -48,5 +48,13 @@
         "key": "",
         "cert": "",
         "ca": ""
+    },
+    "abuse_control": {
+        "enabled": true,
+        "per_ip_max_connections": 64,
+        "auth_fail_window_seconds": 60,
+        "auth_fail_max": 20,
+        "cooldown_seconds": 60,
+        "fallback_max_active": 32
     }
 }

@@ -1,0 +1,44 @@
+name: CI Smoke
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke-linux:
+    runs-on: ubuntu-22.04
+    name: Linux smoke test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libboost-system-dev \
+            libboost-program-options-dev \
+            libssl-dev \
+            openssl \
+            python3
+
+      - name: Configure
+        run: |
+          cmake -S . -B build/ci \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_MYSQL=OFF \
+            -DENABLE_SSL_KEYLOG=OFF
+
+      - name: Build
+        run: |
+          cmake --build build/ci -j"$(nproc)"
+
+      - name: Run smoke tests
+        run: |
+          ctest --test-dir build/ci --output-on-failure -j"$(nproc)"

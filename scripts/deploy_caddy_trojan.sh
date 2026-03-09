@@ -1741,6 +1741,14 @@ configure_trojan() {
         "reuse_port": true,
         "fast_open": true,
         "fast_open_qlen": 20
+    },
+    "abuse_control": {
+        "enabled": true,
+        "per_ip_max_connections": 64,
+        "auth_fail_window_seconds": 60,
+        "auth_fail_max": 20,
+        "cooldown_seconds": 60,
+        "fallback_max_active": 32
     }
 }
 EOF
@@ -1750,6 +1758,13 @@ EOF
     
     # Ensure config allows read for service
     chmod 644 "$trojan_conf"
+
+    log_info "Validating Trojan configuration..."
+    if ! /usr/local/bin/trojan -t -c "$trojan_conf" >/tmp/trojan-config-check.log 2>&1; then
+        log_error "Trojan configuration validation failed: $trojan_conf"
+        tail -20 /tmp/trojan-config-check.log 2>/dev/null || true
+        exit 1
+    fi
 }
 
 setup_services_host() {

@@ -27,7 +27,12 @@ using namespace std;
 Authenticator::Authenticator(const Config &config) {
     mysql_init(&con);
     Log::log_with_date_time("connecting to MySQL server " + config.mysql.server_addr + ':' + to_string(config.mysql.server_port), Log::INFO);
-    if (!config.mysql.ca.empty()) {
+    const bool has_tls_ca = !config.mysql.ca.empty();
+    const bool is_local_mysql = config.mysql.server_addr == "127.0.0.1" || config.mysql.server_addr == "localhost" || config.mysql.server_addr == "::1";
+    if (!has_tls_ca && !is_local_mysql) {
+        Log::log_with_date_time("WARNING: MySQL authentication is connecting to a non-local server without mysql.ca configured; transport security is not guaranteed", Log::WARN);
+    }
+    if (has_tls_ca) {
         if (!config.mysql.key.empty() && !config.mysql.cert.empty()) {
             mysql_ssl_set(&con, config.mysql.key.c_str(), config.mysql.cert.c_str(), config.mysql.ca.c_str(), nullptr, nullptr);
         } else {

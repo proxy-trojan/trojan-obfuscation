@@ -4,22 +4,22 @@ We'll only cover the build process on Linux since we will be providing Windows a
 
 ## Dependencies
 
-Install these dependencies before you build (note that the test has some [additional dependencies](https://github.com/trojan-gfw/trojan/blob/master/tests/LinuxSmokeTest/README.md)):
+Install these dependencies before you build. The current Linux smoke/integration tests also require `python3` and `openssl`.
 
 - [CMake](https://cmake.org/) >= 3.7.2
 - [Boost](http://www.boost.org/) >= 1.66.0
 - [OpenSSL](https://www.openssl.org/) >= 1.1.0
 - [libmysqlclient](https://dev.mysql.com/downloads/connector/c/)
 
-For Debian users, run `sudo apt -y install build-essential cmake libboost-system-dev libboost-program-options-dev libssl-dev default-libmysqlclient-dev` to install all the necessary dependencies.
+For Debian users, run `sudo apt -y install build-essential cmake libboost-system-dev libboost-program-options-dev libssl-dev default-libmysqlclient-dev python3 openssl` to install all the necessary dependencies.
 
 ## Clone
 
 Type in
 
 ```bash
-git clone https://github.com/trojan-gfw/trojan.git
-cd trojan/
+git clone https://github.com/proxy-trojan/trojan-obfuscation.git
+cd trojan-obfuscation/
 ```
 
 to clone the project and go into the directory.
@@ -29,15 +29,15 @@ to clone the project and go into the directory.
 Type in
 
 ```bash
-mkdir build
+mkdir -p build
 cd build/
-cmake ..
-make
-ctest
+cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_SSL_KEYLOG=OFF
+make -j$(nproc)
+ctest --output-on-failure -j2
 sudo make install
 ```
 
-to build, test, and install trojan. If everything goes well you'll be able to use trojan.
+to build, test, and install Trojan-Pro. If everything goes well you'll be able to use `trojan`.
 
 The `cmake ..` command can be extended with the following options:
 
@@ -52,8 +52,8 @@ The `cmake ..` command can be extended with the following options:
     - `-DENABLE_REUSE_PORT=ON`: build with `SO_REUSEPORT` support (default).
     - `-DENABLE_REUSE_PORT=OFF`: build without `SO_REUSEPORT` support.
 - `ENABLE_SSL_KEYLOG` (OpenSSL >= 1.1.1)
-    - `-DENABLE_SSL_KEYLOG=ON`: build with SSL KeyLog support (default).
-    - `-DENABLE_SSL_KEYLOG=OFF`: build without SSL KeyLog support.
+    - `-DENABLE_SSL_KEYLOG=ON`: build with SSL KeyLog support explicitly for debugging.
+    - `-DENABLE_SSL_KEYLOG=OFF`: build without SSL KeyLog support (default and recommended for release builds).
 - `ENABLE_TLS13_CIPHERSUITES` (OpenSSL >= 1.1.1)
     - `-DENABLE_TLS13_CIPHERSUITES=ON`: build with TLS1.3 ciphersuites support (default).
     - `-DENABLE_TLS13_CIPHERSUITES=OFF`: build without TLS1.3 ciphersuites support.
@@ -67,5 +67,22 @@ The `cmake ..` command can be extended with the following options:
 - `-DSYSTEMD_SERVICE_PATH=/path/to/systemd/system`: the path to which the systemd service will be installed (defaults to `/lib/systemd/system`).
 
 After installation, config examples will be installed to `${CMAKE_INSTALL_DOCDIR}/examples/` and a server config will be installed to `${CMAKE_INSTALL_FULL_SYSCONFDIR}/trojan/config.json`.
+
+## Smoke Tests
+
+The current baseline provides the following Linux smoke/integration tests:
+
+- `LinuxSmokeTest-basic`
+- `LinuxSmokeTest-server-config-fails`
+- `LinuxSmokeTest-auth-fail-cooldown`
+- `LinuxSmokeTest-fallback-budget`
+
+Run them with:
+
+```bash
+ctest --output-on-failure -j2
+```
+
+For CI, see `.github/workflows/ci-smoke.yml`.
 
 [Homepage](.) | [Prev Page](authenticator) | [Next Page](usage)

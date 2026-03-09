@@ -23,6 +23,7 @@
 #include <list>
 #include <map>
 #include <atomic>
+#include <unordered_map>
 #include <boost/version.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl.hpp>
@@ -34,6 +35,7 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include <chrono>
 
 // 每个 worker 的独立上下文
 struct WorkerContext {
@@ -61,6 +63,29 @@ private:
     boost::asio::ip::tcp::acceptor socket_acceptor;
     std::vector<std::thread> thread_pool;
     
+    struct IpAbuseStats {
+        size_t active_connections{0};
+        size_t auth_fail_count{0};
+        std::chrono::steady_clock::time_point auth_fail_window_start{};
+        std::chrono::steady_clock::time_point cooldown_until{};
+    };
+
+    struct AbuseControlState {
+        std::unordered_map<std::string, IpAbuseStats> per_ip;
+        std::mutex mutex;
+    } abuse_control_state;
+
+    struct RuntimeMetrics {
+        std::atomic<uint64_t> accepted_connections_total{0};
+        std::atomic<uint64_t> rejected_connections_total{0};
+        std::atomic<uint64_t> rejected_fallback_total{0};
+        std::atomic<uint64_t> auth_success_total{0};
+        std::atomic<uint64_t> auth_failure_total{0};
+        std::atomic<uint64_t> fallback_connections_total{0};
+        std::atomic<uint64_t> active_sessions{0};
+        std::atomic<uint64_t> active_fallback_sessions{0};
+    } runtime_metrics;
+
     // 共享资源
     boost::asio::ssl::context ssl_context;
     Authenticator *auth;
@@ -77,6 +102,14 @@ private:
     // Round-robin 分配（用于 UDP session）
     std::atomic<size_t> next_worker{0};
     boost::asio::io_context& get_worker_io_context();
+    bool try_acquire_connection_slot(const boost::asio::ip::tcp::endpoint& endpoint);
+    void release_connection_slot(const boost::asio::ip::tcp::endpoint& endpoint);
+    bool is_ip_in_cooldown(const boost::asio::ip::tcp::endpoint& endpoint);
+    void record_auth_success();
+    void record_auth_failure(const boost::asio::ip::tcp::endpoint& endpoint);
+    bool try_acquire_fallback_slot();
+    void release_fallback_slot();
+    bool record_fallback_connection();
     
     void async_accept();  // 单 io_context 模式
     void async_accept_worker(size_t worker_index);  // 多 io_context 模式

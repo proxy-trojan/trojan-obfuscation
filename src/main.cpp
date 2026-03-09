@@ -136,7 +136,12 @@ int main(int argc, const char *argv[]) {
             Log::redirect(log_file);
         }
         if (vm.count("keylog")) {
+#ifdef ENABLE_SSL_KEYLOG
+            Log::log_with_date_time("WARNING: SSL key logging exposes TLS session secrets. Use --keylog for debugging only, never in production.", Log::WARN);
             Log::redirect_keylog(keylog_file);
+#else
+            throw runtime_error("--keylog is not available in this build; recompile with -DENABLE_SSL_KEYLOG=ON only for debugging");
+#endif // ENABLE_SSL_KEYLOG
         }
         bool restart;
         Config config;

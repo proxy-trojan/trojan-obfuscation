@@ -112,8 +112,12 @@ void Config::populate(const ptree &tree) {
     mysql.key = tree.get("mysql.key", string());
     mysql.cert = tree.get("mysql.cert", string());
     mysql.ca = tree.get("mysql.ca", string());
-    
-
+    abuse_control.enabled = tree.get("abuse_control.enabled", true);
+    abuse_control.per_ip_max_connections = tree.get("abuse_control.per_ip_max_connections", 64);
+    abuse_control.auth_fail_window_seconds = tree.get("abuse_control.auth_fail_window_seconds", 60);
+    abuse_control.auth_fail_max = tree.get("abuse_control.auth_fail_max", 20);
+    abuse_control.cooldown_seconds = tree.get("abuse_control.cooldown_seconds", 60);
+    abuse_control.fallback_max_active = tree.get("abuse_control.fallback_max_active", 32);
 }
 
 bool Config::sip003() {

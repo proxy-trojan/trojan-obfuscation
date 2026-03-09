@@ -40,7 +40,7 @@ find_package(OpenSSL 1.1.0 REQUIRED)
 target_include_directories(trojan PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(trojan ${OPENSSL_LIBRARIES})
 if(OPENSSL_VERSION VERSION_GREATER_EQUAL 1.1.1)
-    option(ENABLE_SSL_KEYLOG "Build with SSL KeyLog support" ON)
+    option(ENABLE_SSL_KEYLOG "Build with SSL KeyLog support" OFF)
     if(ENABLE_SSL_KEYLOG)
         add_definitions(-DENABLE_SSL_KEYLOG)
     endif()
@@ -117,7 +117,13 @@ else()
     enable_testing()
     add_test(NAME LinuxSmokeTest-basic
              COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/basic.sh ${CMAKE_BINARY_DIR}/trojan)
-    add_test(NAME LinuxSmokeTest-fake-client
-             COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/fake-client.sh ${CMAKE_BINARY_DIR}/trojan)
-    SET_TESTS_PROPERTIES(LinuxSmokeTest-fake-client PROPERTIES DEPENDS "LinuxSmokeTest-basic")
+    add_test(NAME LinuxSmokeTest-server-config-fails
+             COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/server-config-fails.sh ${CMAKE_BINARY_DIR}/trojan)
+    add_test(NAME LinuxSmokeTest-auth-fail-cooldown
+             COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/auth-fail-cooldown.sh ${CMAKE_BINARY_DIR}/trojan)
+    add_test(NAME LinuxSmokeTest-fallback-budget
+             COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/fallback-budget.sh ${CMAKE_BINARY_DIR}/trojan)
+    set_tests_properties(LinuxSmokeTest-server-config-fails PROPERTIES DEPENDS "LinuxSmokeTest-basic")
+    set_tests_properties(LinuxSmokeTest-auth-fail-cooldown PROPERTIES DEPENDS "LinuxSmokeTest-basic")
+    set_tests_properties(LinuxSmokeTest-fallback-budget PROPERTIES DEPENDS "LinuxSmokeTest-basic")
 endif()

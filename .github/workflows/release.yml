@@ -47,7 +47,9 @@ jobs:
             cmake \
             libboost-system-dev \
             libboost-program-options-dev \
-            libssl-dev
+            libssl-dev \
+            python3 \
+            openssl
 
       - name: Build
         run: |
@@ -55,8 +57,10 @@ jobs:
           cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DBOOST_USE_STATIC_LIBS=ON \
-            -DENABLE_MYSQL=OFF
+            -DENABLE_MYSQL=OFF \
+            -DENABLE_SSL_KEYLOG=OFF
           make -j$(nproc)
+          ctest --output-on-failure -j2
 
       - name: Verify static linking
         run: |
@@ -178,8 +182,10 @@ jobs:
             -DBOOST_USE_STATIC_LIBS=ON \
             -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
             -DENABLE_MYSQL=OFF \
+            -DENABLE_SSL_KEYLOG=OFF \
             -Wno-dev
           make -j$(sysctl -n hw.ncpu)
+          ctest --output-on-failure -j2
 
       - name: Strip binary
         run: strip build/trojan
@@ -238,6 +244,7 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-boost
             mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-python
             make
             zip
 
@@ -248,8 +255,10 @@ jobs:
             -G "MSYS Makefiles" \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DBOOST_USE_STATIC_LIBS=ON \
-            -DENABLE_MYSQL=OFF
+            -DENABLE_MYSQL=OFF \
+            -DENABLE_SSL_KEYLOG=OFF
           make -j$(nproc)
+          ctest --output-on-failure -j2
 
       - name: Strip binary
         run: strip build/trojan.exe

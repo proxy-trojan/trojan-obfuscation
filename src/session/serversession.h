@@ -22,6 +22,7 @@
 
 #include "session.h"
 #include <boost/asio/ssl.hpp>
+#include <functional>
 #include "core/authenticator.h"
 
 class ServerSession : public Session {
@@ -36,6 +37,13 @@ private:
     boost::asio::ip::tcp::socket out_socket;
     boost::asio::ip::udp::resolver udp_resolver;
     Authenticator *auth;
+    std::function<void(const boost::asio::ip::tcp::endpoint&)> release_connection_slot;
+    std::function<void()> release_fallback_slot;
+    std::function<void()> record_auth_success;
+    std::function<void(const boost::asio::ip::tcp::endpoint&)> record_auth_failure;
+    std::function<bool()> record_fallback_connection;
+    bool connection_slot_acquired;
+    bool fallback_slot_acquired;
     std::string auth_password;
     const std::string &plain_http_response;
     
@@ -60,7 +68,16 @@ private:
     void udp_recv(size_t length, const boost::asio::ip::udp::endpoint &endpoint);
     void udp_sent();
 public:
-    ServerSession(const Config &config, boost::asio::io_context &io_context, boost::asio::ssl::context &ssl_context, Authenticator *auth, const std::string &plain_http_response);
+    ServerSession(const Config &config,
+                  boost::asio::io_context &io_context,
+                  boost::asio::ssl::context &ssl_context,
+                  Authenticator *auth,
+                  const std::string &plain_http_response,
+                  std::function<void(const boost::asio::ip::tcp::endpoint&)> release_connection_slot = {},
+                  std::function<void()> release_fallback_slot = {},
+                  std::function<void()> record_auth_success = {},
+                  std::function<void(const boost::asio::ip::tcp::endpoint&)> record_auth_failure = {},
+                  std::function<bool()> record_fallback_connection = {});
     boost::asio::ip::tcp::socket& accept_socket() override;
     void start() override;
 };

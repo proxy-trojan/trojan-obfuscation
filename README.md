@@ -8,7 +8,7 @@ Trojan-Pro is built upon the core principles of the original [Trojan](https://gi
 
 - **High Performance**: Built with C++17 and Boost.Asio for efficient asynchronous I/O and low resource usage.
 - **Multithreading Support**: Configurable thread pool to utilize all available CPU cores.
-- **Memory Optimization**: Zero-copy buffer management to minimize CPU overhead and latency.
+- **Memory Optimization**: Reduced-copy buffer reuse to minimize allocation overhead and latency.
 - **Trojan Protocol**: Mimics HTTPS traffic to bypass deep packet inspection (DPI) and ISP QoS limitations.
 - **TLS 1.3**: Fully supports TLS 1.3 for state-of-the-art security and forward secrecy.
 - **SOCKS5 Support**: Acts as a standard SOCKS5 proxy server for clients.
@@ -140,6 +140,7 @@ Options:
 -   `ssl.cert`: Path to your server's certificate file.
 -   `ssl.key`: Path to your server's private key.
 -   `threads`: Number of worker threads. Defaults to the number of CPU cores if set to 0 or omitted.
+-   `abuse_control`: Lightweight guardrails for per-IP concurrency, authentication-failure cooldown, and fallback session budgeting.
 
 ### Client Configuration (`client.json`)
 
@@ -170,6 +171,23 @@ After building and configuring:
 
 # Run as client
 ./trojan -c client.json
+```
+
+## Validation
+
+The current baseline includes Linux smoke/integration tests for:
+
+- basic CLI/config validation
+- expected failure on placeholder server config
+- authentication-failure cooldown
+- fallback session budgeting
+
+Run them locally with:
+
+```bash
+cmake -S . -B build/scan -DCMAKE_BUILD_TYPE=Release -DENABLE_MYSQL=OFF -DENABLE_SSL_KEYLOG=OFF
+cmake --build build/scan -j$(nproc)
+ctest --test-dir build/scan --output-on-failure -j2
 ```
 
 ## Precautions

@@ -503,12 +503,27 @@ configure_trojan() {
         "key": "",
         "cert": "",
         "ca": ""
+    },
+    "abuse_control": {
+        "enabled": true,
+        "per_ip_max_connections": 64,
+        "auth_fail_window_seconds": 60,
+        "auth_fail_max": 20,
+        "cooldown_seconds": 60,
+        "fallback_max_active": 32
     }
 }
 EOF
     
     chmod 600 "$CONFIG_DIR/config.json"
     log_info "Trojan 配置已生成: $CONFIG_DIR/config.json"
+
+    log_info "验证 Trojan 配置..."
+    if ! /usr/local/bin/trojan -t -c "$CONFIG_DIR/config.json" >/tmp/trojan-config-check.log 2>&1; then
+        log_error "Trojan 配置验证失败，请检查: $CONFIG_DIR/config.json"
+        tail -20 /tmp/trojan-config-check.log 2>/dev/null || true
+        exit 1
+    fi
 }
 
 configure_caddy() {

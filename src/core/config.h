@@ -85,6 +85,15 @@ public:
         std::string cert;
         std::string ca;
     } mysql;
+    class AbuseControlConfig {
+    public:
+        bool enabled;
+        int per_ip_max_connections;
+        int auth_fail_window_seconds;
+        int auth_fail_max;
+        int cooldown_seconds;
+        int fallback_max_active;
+    } abuse_control;
 
     void load(const std::string &filename);
     void populate(const std::string &JSON);
