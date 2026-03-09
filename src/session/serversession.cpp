@@ -210,62 +210,17 @@ void ServerSession::in_recv(size_t length) {
 
         const string query_addr = gate_result.target.host;
         const string query_port = to_string(gate_result.target.port);
-        out_write_buf = gate_result.outbound_payload;
 
         if (gate_result.path == SessionGate::Path::AUTHENTICATED_UDP) {
-            Log::log_with_endpoint(in_endpoint, "requested UDP associate to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port), Log::INFO);
-            status = UDP_FORWARD;
-            udp_data_buf = out_write_buf;
-            udp_sent();
+            handle_authenticated_udp(gate_result);
             return;
         }
 
         if (gate_result.path == SessionGate::Path::AUTHENTICATED_TCP) {
-            Log::log_with_endpoint(in_endpoint, "requested connection to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port), Log::INFO);
+            handle_authenticated_tcp(gate_result);
         } else {
-            if (record_fallback_connection) {
-                fallback_slot_acquired = record_fallback_connection();
-                if (!fallback_slot_acquired) {
-                    Log::log_with_endpoint(in_endpoint, "fallback rejected: active fallback session budget exhausted", Log::WARN);
-                    destroy();
-                    return;
-                }
-            }
-            Log::log_with_endpoint(in_endpoint, "not trojan request, connecting to " + query_addr + ':' + query_port, Log::WARN);
+            handle_fallback(gate_result, query_addr, query_port);
         }
-
-        sent_len += out_write_buf.length();
-        auto self = shared_from_this();
-        outbound_dialer.resolve_tcp(
-            resolver,
-            in_endpoint,
-            query_addr,
-            query_port,
-            [this, self, query_addr, query_port](tcp::resolver::results_type::const_iterator iterator) {
-                outbound_dialer.connect_tcp(
-                    out_socket,
-                    iterator,
-                    in_endpoint,
-                    query_addr,
-                    query_port,
-                    [this, self]() {
-                        status = FORWARD;
-                        out_async_read();
-                        if (!out_write_buf.empty()) {
-                            out_async_write(out_write_buf);
-                        } else {
-                            in_async_read();
-                        }
-                    },
-                    [this, self](const string &message) {
-                        Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
-                        destroy();
-                    });
-            },
-            [this, self](const string &message) {
-                Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
-                destroy();
-            });
     } else if (status == FORWARD) {
         sent_len += length;
         // 零拷贝：直接从读缓冲区写入
