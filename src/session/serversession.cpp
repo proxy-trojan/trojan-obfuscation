@@ -346,17 +346,13 @@ void ServerSession::udp_sent() {
     }
 }
 
-void ServerSession::destroy() {
-    if (status == DESTROY) {
-        return;
-    }
-    status = DESTROY;
-    Log::log_with_endpoint(in_endpoint, "disconnected, " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
-    lifecycle_runtime.release_slots(in_endpoint, connection_slot_acquired, fallback_slot_acquired);
-    lifecycle_runtime.record_usage(auth, auth_password, recv_len, sent_len);
-    boost::system::error_code ec;
+void ServerSession::cancel_runtime_io() {
     resolver.cancel();
     udp_resolver.cancel();
+}
+
+void ServerSession::close_outbound_sockets() {
+    boost::system::error_code ec;
     if (out_socket.is_open()) {
         out_socket.cancel(ec);
         out_socket.shutdown(tcp::socket::shutdown_both, ec);
@@ -366,21 +362,41 @@ void ServerSession::destroy() {
         udp_socket.cancel(ec);
         udp_socket.close(ec);
     }
-    if (in_socket.next_layer().is_open()) {
-        auto self = shared_from_this();
-        auto ssl_shutdown_cb = [this, self](const boost::system::error_code error) {
-            if (error == boost::asio::error::operation_aborted) {
-                return;
-            }
-            boost::system::error_code ec;
-            ssl_shutdown_timer.cancel();
-            in_socket.next_layer().cancel(ec);
-            in_socket.next_layer().shutdown(tcp::socket::shutdown_both, ec);
-            in_socket.next_layer().close(ec);
-        };
-        in_socket.next_layer().cancel(ec);
-        in_socket.async_shutdown(ssl_shutdown_cb);
-        ssl_shutdown_timer.expires_after(chrono::seconds(SSL_SHUTDOWN_TIMEOUT));
-        ssl_shutdown_timer.async_wait(ssl_shutdown_cb);
+}
+
+void ServerSession::shutdown_inbound_tls() {
+    if (!in_socket.next_layer().is_open()) {
+        return;
     }
+
+    auto self = shared_from_this();
+    auto ssl_shutdown_cb = [this, self](const boost::system::error_code error) {
+        if (error == boost::asio::error::operation_aborted) {
+            return;
+        }
+        boost::system::error_code ec;
+        ssl_shutdown_timer.cancel();
+        in_socket.next_layer().cancel(ec);
+        in_socket.next_layer().shutdown(tcp::socket::shutdown_both, ec);
+        in_socket.next_layer().close(ec);
+    };
+
+    boost::system::error_code ec;
+    in_socket.next_layer().cancel(ec);
+    in_socket.async_shutdown(ssl_shutdown_cb);
+    ssl_shutdown_timer.expires_after(chrono::seconds(SSL_SHUTDOWN_TIMEOUT));
+    ssl_shutdown_timer.async_wait(ssl_shutdown_cb);
+}
+
+void ServerSession::destroy() {
+    if (status == DESTROY) {
+        return;
+    }
+    status = DESTROY;
+    Log::log_with_endpoint(in_endpoint, "disconnected, " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
+    lifecycle_runtime.release_slots(in_endpoint, connection_slot_acquired, fallback_slot_acquired);
+    lifecycle_runtime.record_usage(auth, auth_password, recv_len, sent_len);
+    cancel_runtime_io();
+    close_outbound_sockets();
+    shutdown_inbound_tls();
 }
