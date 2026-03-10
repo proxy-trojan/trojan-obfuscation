@@ -42,11 +42,9 @@ ServerSession::ServerSession(const Config &config,
     auth(auth),
     embedded_tls_inbound(config, auth),
     relay_executor(config),
+    admission_runtime(std::move(record_auth_success), std::move(record_auth_failure), std::move(record_fallback_connection)),
     release_connection_slot(std::move(release_connection_slot)),
     release_fallback_slot(std::move(release_fallback_slot)),
-    record_auth_success(std::move(record_auth_success)),
-    record_auth_failure(std::move(record_auth_failure)),
-    record_fallback_connection(std::move(record_fallback_connection)),
     connection_slot_acquired(false),
     fallback_slot_acquired(false),
     plain_http_response(plain_http_response) {
@@ -188,11 +186,7 @@ void ServerSession::connect_outbound(const ConnectTarget &target, bool requires_
         target,
         requires_fallback_slot,
         [this]() {
-            if (!record_fallback_connection) {
-                return true;
-            }
-            fallback_slot_acquired = record_fallback_connection();
-            return fallback_slot_acquired;
+            return admission_runtime.try_acquire_fallback_slot(fallback_slot_acquired);
         },
         [this, self]() {
             status = FORWARD;
@@ -248,25 +242,7 @@ void ServerSession::in_recv(size_t length) {
     if (status == HANDSHAKE) {
         string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
         auto gate_result = embedded_tls_inbound.evaluate_initial_data(in_endpoint, in_socket, data);
-        if (gate_result.valid_trojan_request && gate_result.authenticated) {
-            if (gate_result.used_external_authenticator) {
-                auth_password = gate_result.auth_record_password;
-                if (record_auth_success) {
-                    record_auth_success();
-                }
-                Log::log_with_endpoint(in_endpoint, "authenticated by external authenticator", Log::INFO);
-            } else {
-                if (record_auth_success) {
-                    record_auth_success();
-                }
-                Log::log_with_endpoint(in_endpoint, "authenticated by configured credential", Log::INFO);
-            }
-        } else if (gate_result.valid_trojan_request) {
-            if (record_auth_failure) {
-                record_auth_failure(in_endpoint);
-            }
-            Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
-        }
+        admission_runtime.apply_auth_result(in_endpoint, gate_result, auth_password);
 
         auto execution_plan = relay_executor.build_execution_plan(gate_result);
         execute_plan(execution_plan);
