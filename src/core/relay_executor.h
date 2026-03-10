@@ -6,6 +6,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include "config.h"
 #include "outbound_dialer.h"
+#include "session_gate.h"
 #include "session_types.h"
 
 class RelayExecutor {
@@ -15,6 +16,8 @@ public:
     using AcquireFallbackSlot = std::function<bool()>;
 
     explicit RelayExecutor(const Config &config);
+
+    RelayExecutionPlan build_execution_plan(const SessionGate::SessionDecision &decision) const;
 
     bool begin_tcp_relay(boost::asio::ip::tcp::resolver &resolver,
                          boost::asio::ip::tcp::socket &socket,

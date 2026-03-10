@@ -31,4 +31,19 @@ struct SessionGateInput {
     std::string_view initial_data;
 };
 
+enum class RelayMode {
+    StartTcpForward,
+    StartUdpForward,
+    RejectAndClose
+};
+
+struct RelayExecutionPlan {
+    RelayMode mode{RelayMode::RejectAndClose};
+    ConnectTarget target;
+    std::string initial_outbound_payload;
+    std::string log_message;
+    bool log_as_warning{false};
+    bool requires_fallback_slot{false};
+};
+
 #endif // _SESSION_TYPES_H_

@@ -49,9 +49,7 @@ private:
     std::function<bool()> record_fallback_connection;
     bool connection_slot_acquired;
     void connect_outbound(const ConnectTarget &target, bool requires_fallback_slot);
-    void handle_authenticated_tcp(const SessionGate::SessionDecision &gate_result);
-    void handle_authenticated_udp(const SessionGate::SessionDecision &gate_result);
-    void handle_fallback(const SessionGate::SessionDecision &gate_result);
+    void execute_plan(const RelayExecutionPlan &plan);
     
     bool fallback_slot_acquired;
     std::string auth_password;

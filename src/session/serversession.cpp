@@ -213,33 +213,26 @@ void ServerSession::connect_outbound(const ConnectTarget &target, bool requires_
     }
 }
 
-void ServerSession::handle_authenticated_tcp(const SessionGate::SessionDecision &gate_result) {
-    Log::log_with_endpoint(
-        in_endpoint,
-        "requested connection to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port),
-        Log::INFO);
-    out_write_buf = gate_result.outbound_payload;
-    connect_outbound(gate_result.target, false);
-}
+void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
+    if (!plan.log_message.empty()) {
+        Log::log_with_endpoint(in_endpoint, plan.log_message, plan.log_as_warning ? Log::WARN : Log::INFO);
+    }
 
-void ServerSession::handle_authenticated_udp(const SessionGate::SessionDecision &gate_result) {
-    Log::log_with_endpoint(
-        in_endpoint,
-        "requested UDP associate to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port),
-        Log::INFO);
-    out_write_buf = gate_result.outbound_payload;
-    status = UDP_FORWARD;
-    udp_data_buf = out_write_buf;
-    udp_sent();
-}
+    out_write_buf = plan.initial_outbound_payload;
 
-void ServerSession::handle_fallback(const SessionGate::SessionDecision &gate_result) {
-    Log::log_with_endpoint(
-        in_endpoint,
-        "not trojan request, connecting to " + gate_result.target.host + ':' + to_string(gate_result.target.port),
-        Log::WARN);
-    out_write_buf = gate_result.outbound_payload;
-    connect_outbound(gate_result.target, true);
+    if (plan.mode == RelayMode::StartUdpForward) {
+        status = UDP_FORWARD;
+        udp_data_buf = out_write_buf;
+        udp_sent();
+        return;
+    }
+
+    if (plan.mode == RelayMode::StartTcpForward) {
+        connect_outbound(plan.target, plan.requires_fallback_slot);
+        return;
+    }
+
+    destroy();
 }
 
 void ServerSession::in_recv(size_t length) {
@@ -270,16 +263,8 @@ void ServerSession::in_recv(size_t length) {
             Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
         }
 
-        if (gate_result.path == SessionGate::Path::AUTHENTICATED_UDP) {
-            handle_authenticated_udp(gate_result);
-            return;
-        }
-
-        if (gate_result.path == SessionGate::Path::AUTHENTICATED_TCP) {
-            handle_authenticated_tcp(gate_result);
-        } else {
-            handle_fallback(gate_result);
-        }
+        auto execution_plan = relay_executor.build_execution_plan(gate_result);
+        execute_plan(execution_plan);
     } else if (status == FORWARD) {
         sent_len += length;
         // 零拷贝：直接从读缓冲区写入
