@@ -6,7 +6,9 @@
 #include <vector>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include "core/config.h"
 #include "core/log.h"
+#include "core/relay_executor.h"
 #include "core/session_admission_runtime.h"
 #include "core/session_lifecycle_runtime.h"
 using namespace std;
@@ -26,6 +28,40 @@ void expect_true(bool condition, const string &message) {
 
 tcp::endpoint loopback_endpoint(uint16_t port = 443) {
     return tcp::endpoint(make_address("127.0.0.1"), port);
+}
+
+Config make_test_config() {
+    Config config{};
+    config.run_type = Config::SERVER;
+    config.local_addr = "127.0.0.1";
+    config.local_port = 443;
+    config.remote_addr = "127.0.0.1";
+    config.remote_port = 80;
+    config.target_addr = "";
+    config.target_port = 0;
+    config.udp_timeout = 60;
+    config.threads = 1;
+    config.log_level = Log::INFO;
+    config.ssl.verify = false;
+    config.ssl.verify_hostname = false;
+    config.ssl.prefer_server_cipher = true;
+    config.ssl.reuse_session = true;
+    config.ssl.session_ticket = false;
+    config.ssl.session_timeout = 600;
+    config.tcp.prefer_ipv4 = false;
+    config.tcp.no_delay = true;
+    config.tcp.keep_alive = true;
+    config.tcp.reuse_port = false;
+    config.tcp.fast_open = false;
+    config.tcp.fast_open_qlen = 20;
+    config.mysql.enabled = false;
+    config.abuse_control.enabled = true;
+    config.abuse_control.per_ip_max_connections = 64;
+    config.abuse_control.auth_fail_window_seconds = 60;
+    config.abuse_control.auth_fail_max = 20;
+    config.abuse_control.cooldown_seconds = 60;
+    config.abuse_control.fallback_max_active = 32;
+    return config;
 }
 
 void test_admission_runtime_external_auth_records_password() {
@@ -154,6 +190,73 @@ void test_lifecycle_runtime_release_slots_respects_flags() {
     expect_true(release_fallback_calls == 0, "fallback release callback should not run when slot not acquired");
 }
 
+void test_relay_executor_build_execution_plan_for_authenticated_tcp() {
+    Config config = make_test_config();
+    RelayExecutor executor(config);
+
+    SessionGate::SessionDecision decision;
+    decision.path = SessionGate::Path::AUTHENTICATED_TCP;
+    decision.target.host = "example.com";
+    decision.target.port = 443;
+    decision.outbound_payload = "tcp-payload";
+    decision.request.address.address = "example.com";
+    decision.request.address.port = 443;
+
+    RelayExecutionPlan plan = executor.build_execution_plan(decision);
+
+    expect_true(plan.mode == RelayMode::StartTcpForward, "authenticated tcp should produce StartTcpForward plan");
+    expect_true(plan.target.host == "example.com", "tcp plan should preserve target host");
+    expect_true(plan.target.port == 443, "tcp plan should preserve target port");
+    expect_true(plan.initial_outbound_payload == "tcp-payload", "tcp plan should preserve outbound payload");
+    expect_true(!plan.requires_fallback_slot, "authenticated tcp should not require fallback slot");
+    expect_true(!plan.log_as_warning, "authenticated tcp log should not be warning");
+    expect_true(plan.log_message.find("requested connection to example.com:443") != string::npos, "authenticated tcp should describe requested connection");
+}
+
+void test_relay_executor_build_execution_plan_for_authenticated_udp() {
+    Config config = make_test_config();
+    RelayExecutor executor(config);
+
+    SessionGate::SessionDecision decision;
+    decision.path = SessionGate::Path::AUTHENTICATED_UDP;
+    decision.target.host = "8.8.8.8";
+    decision.target.port = 53;
+    decision.outbound_payload = "udp-payload";
+    decision.request.address.address = "dns.google";
+    decision.request.address.port = 53;
+
+    RelayExecutionPlan plan = executor.build_execution_plan(decision);
+
+    expect_true(plan.mode == RelayMode::StartUdpForward, "authenticated udp should produce StartUdpForward plan");
+    expect_true(plan.target.host == "8.8.8.8", "udp plan should preserve target host");
+    expect_true(plan.target.port == 53, "udp plan should preserve target port");
+    expect_true(plan.initial_outbound_payload == "udp-payload", "udp plan should preserve outbound payload");
+    expect_true(!plan.requires_fallback_slot, "authenticated udp should not require fallback slot");
+    expect_true(!plan.log_as_warning, "authenticated udp log should not be warning");
+    expect_true(plan.log_message.find("requested UDP associate to dns.google:53") != string::npos, "authenticated udp should describe requested associate target");
+}
+
+void test_relay_executor_build_execution_plan_for_fallback() {
+    Config config = make_test_config();
+    RelayExecutor executor(config);
+
+    SessionGate::SessionDecision decision;
+    decision.path = SessionGate::Path::FALLBACK;
+    decision.target.host = "fallback.internal";
+    decision.target.port = 8080;
+    decision.outbound_payload = "fallback-payload";
+
+    RelayExecutionPlan plan = executor.build_execution_plan(decision);
+
+    expect_true(plan.mode == RelayMode::StartTcpForward, "fallback should reuse tcp-forward execution mode");
+    expect_true(plan.target.host == "fallback.internal", "fallback plan should preserve target host");
+    expect_true(plan.target.port == 8080, "fallback plan should preserve target port");
+    expect_true(plan.initial_outbound_payload == "fallback-payload", "fallback plan should preserve outbound payload");
+    expect_true(plan.requires_fallback_slot, "fallback plan should require fallback slot");
+    expect_true(plan.log_as_warning, "fallback log should be warning-level");
+    expect_true(plan.log_message.find("not trojan request, connecting to fallback.internal:8080") != string::npos, "fallback plan should describe fallback destination");
+}
+
 } // namespace
 
 int main() {
@@ -167,6 +270,9 @@ int main() {
         test_admission_runtime_fallback_slot_paths();
         test_lifecycle_runtime_release_slots();
         test_lifecycle_runtime_release_slots_respects_flags();
+        test_relay_executor_build_execution_plan_for_authenticated_tcp();
+        test_relay_executor_build_execution_plan_for_authenticated_udp();
+        test_relay_executor_build_execution_plan_for_fallback();
 
         Log::reset();
         Log::set_callback({});
