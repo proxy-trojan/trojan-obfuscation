@@ -208,12 +208,84 @@ Responsibility:
 Target:
 - reduce duplicated accept-complete logic between `async_accept()` and `async_accept_worker()`
 
+## Current Phase 3B Progress Snapshot
+
+Status: **first-round cleanup completed; ready for evaluation**.
+
+### Completed so far
+
+#### 3B.1 Session construction seam
+`Service` now creates sessions through internal helpers instead of duplicating construction logic in both accept paths:
+- `create_server_session(...)`
+- `create_session(...)`
+
+This centralizes:
+- `ServerSession` callback wiring
+- per-run-type session construction
+- single-worker and multi-worker accept-path setup behavior
+
+Representative commit:
+- `4f57031` — `refactor: extract service session construction helper`
+
+#### 3B.2 Accept policy seam
+`Service` now makes incoming-connection decisions through an explicit decision helper:
+- `AcceptDecision`
+- `evaluate_incoming_connection(...)`
+
+This makes cooldown-vs-connection-limit-vs-accept policy decisions explicit before execution.
+
+Representative commit:
+- `ca4794f` — `refactor: make service accept decisions explicit`
+
+#### 3B.3 Accept completion seam
+The duplicated accept callback bodies are now merged into:
+- `handle_accept_completion(...)`
+
+This leaves `async_accept()` and `async_accept_worker()` closer to thin accept-loop shells.
+
+Representative commit:
+- `cb302e7` — `refactor: deduplicate service accept completion flow`
+
+### Current assessment
+
+Phase 3B has already achieved the first useful level of `Service` cleanup:
+1. session construction is no longer duplicated inline across accept paths
+2. accept policy is no longer expressed only as callback-local branching
+3. accept completion flow is now centralized instead of duplicated
+
+### Evaluation: stop here or continue?
+
+At this point, the remaining question is whether to promote the new seams into standalone modules such as:
+- `SessionFactory`
+- `AcceptGate`
+
+Current recommendation: **not yet**.
+
+Why:
+- the current seams are already explicit and useful
+- `Service` has become materially thinner without introducing new files or speculative abstractions
+- the marginal benefit of immediate module extraction is now lower than in the first three cleanup steps
+
+Reasonable next options:
+- stop Phase 3B here and document it as the first completed cleanup round
+- continue only if `Service` still feels too dense after a fresh review
+- promote helpers into standalone modules only when a second real use case appears or the class remains meaningfully oversized
+
 ## Done criteria for Phase 3B
 
 Phase 3B is done when:
 - `Service` is materially thinner
 - session construction is not wired inline in multiple accept paths
 - accept policy logic is clearer and less duplicated
+
+### Done-criteria status check
+
+Current status against those criteria:
+- ✅ `Service` is materially thinner than the Phase 3A baseline
+- ✅ session construction is no longer wired inline in both accept paths
+- ✅ accept policy logic is now clearer and less duplicated
+
+This means **Phase 3B first-round cleanup is already at a reasonable stopping point** unless a fresh review reveals a clearly remaining hotspot.
 
 ---
 
@@ -297,3 +369,6 @@ Choose one of the following explicitly:
    - do not expand the test suite mechanically without clear signal
 
 Current recommendation: **treat Phase 3A as near-complete, and make the next step an explicit decision rather than an automatic continuation.**
+
+### Documentation note for current Phase 3B status
+As of the current cleanup round, `Service` helper-level seams are considered sufficient. Do **not** automatically promote them into standalone `SessionFactory` / `AcceptGate` modules unless a new round of review shows clear remaining density or a second real reuse case.
