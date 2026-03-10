@@ -257,6 +257,43 @@ void test_relay_executor_build_execution_plan_for_fallback() {
     expect_true(plan.log_message.find("not trojan request, connecting to fallback.internal:8080") != string::npos, "fallback plan should describe fallback destination");
 }
 
+void test_relay_executor_begin_tcp_relay_fast_fails_when_fallback_slot_denied() {
+    Config config = make_test_config();
+    RelayExecutor executor(config);
+    boost::asio::io_context io_context;
+    tcp::resolver resolver(io_context);
+    tcp::socket socket(io_context);
+
+    int acquire_calls = 0;
+    int success_calls = 0;
+    int failure_calls = 0;
+    string failure_message;
+
+    bool started = executor.begin_tcp_relay(
+        resolver,
+        socket,
+        loopback_endpoint(),
+        ConnectTarget{"blocked.example", 443, true},
+        true,
+        [&]() {
+            ++acquire_calls;
+            return false;
+        },
+        [&]() {
+            ++success_calls;
+        },
+        [&](const string &message) {
+            ++failure_calls;
+            failure_message = message;
+        });
+
+    expect_true(!started, "relay should not start when fallback slot acquisition is denied");
+    expect_true(acquire_calls == 1, "fallback slot acquisition should be attempted once");
+    expect_true(success_calls == 0, "success handler should not run on fast-fail path");
+    expect_true(failure_calls == 1, "failure handler should run once on fast-fail path");
+    expect_true(failure_message == "fallback rejected: active fallback session budget exhausted", "fast-fail path should report fallback budget exhaustion");
+}
+
 } // namespace
 
 int main() {
@@ -273,6 +310,7 @@ int main() {
         test_relay_executor_build_execution_plan_for_authenticated_tcp();
         test_relay_executor_build_execution_plan_for_authenticated_udp();
         test_relay_executor_build_execution_plan_for_fallback();
+        test_relay_executor_begin_tcp_relay_fast_fails_when_fallback_slot_denied();
 
         Log::reset();
         Log::set_callback({});
