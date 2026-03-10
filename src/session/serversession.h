@@ -28,6 +28,7 @@
 #include "core/relay_executor.h"
 #include "core/session_admission_runtime.h"
 #include "core/session_gate.h"
+#include "core/session_lifecycle_runtime.h"
 
 class ServerSession : public Session {
 private:
@@ -44,8 +45,7 @@ private:
     EmbeddedTlsInbound embedded_tls_inbound;
     RelayExecutor relay_executor;
     SessionAdmissionRuntime admission_runtime;
-    std::function<void(const boost::asio::ip::tcp::endpoint&)> release_connection_slot;
-    std::function<void()> release_fallback_slot;
+    SessionLifecycleRuntime lifecycle_runtime;
     bool connection_slot_acquired;
     void connect_outbound(const ConnectTarget &target, bool requires_fallback_slot);
     void start_udp_forward(const RelayExecutionPlan &plan);

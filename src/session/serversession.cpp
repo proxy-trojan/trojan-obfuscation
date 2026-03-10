@@ -43,8 +43,7 @@ ServerSession::ServerSession(const Config &config,
     embedded_tls_inbound(config, auth),
     relay_executor(config),
     admission_runtime(std::move(record_auth_success), std::move(record_auth_failure), std::move(record_fallback_connection)),
-    release_connection_slot(std::move(release_connection_slot)),
-    release_fallback_slot(std::move(release_fallback_slot)),
+    lifecycle_runtime(std::move(release_connection_slot), std::move(release_fallback_slot)),
     connection_slot_acquired(false),
     fallback_slot_acquired(false),
     plain_http_response(plain_http_response) {
@@ -353,17 +352,8 @@ void ServerSession::destroy() {
     }
     status = DESTROY;
     Log::log_with_endpoint(in_endpoint, "disconnected, " + to_string(recv_len) + " bytes received, " + to_string(sent_len) + " bytes sent, lasted for " + to_string(time(nullptr) - start_time) + " seconds", Log::INFO);
-    if (connection_slot_acquired && release_connection_slot) {
-        release_connection_slot(in_endpoint);
-        connection_slot_acquired = false;
-    }
-    if (fallback_slot_acquired && release_fallback_slot) {
-        release_fallback_slot();
-        fallback_slot_acquired = false;
-    }
-    if (auth && !auth_password.empty()) {
-        auth->record(auth_password, recv_len, sent_len);
-    }
+    lifecycle_runtime.release_slots(in_endpoint, connection_slot_acquired, fallback_slot_acquired);
+    lifecycle_runtime.record_usage(auth, auth_password, recv_len, sent_len);
     boost::system::error_code ec;
     resolver.cancel();
     udp_resolver.cancel();
