@@ -54,6 +54,12 @@ private:
     enum {
         MAX_LENGTH = 8192
     };
+
+    enum class AcceptDecision {
+        RejectCooldown,
+        RejectConnectionLimit,
+        StartSession
+    };
     const Config &config;
     
     // 多 io_context 架构
@@ -91,6 +97,7 @@ private:
     void record_auth_failure(const boost::asio::ip::tcp::endpoint& endpoint);
     void release_fallback_slot();
     bool record_fallback_connection();
+    AcceptDecision evaluate_incoming_connection(const boost::asio::ip::tcp::endpoint &endpoint);
     std::shared_ptr<Session> create_server_session(boost::asio::io_context &target_io_context);
     std::shared_ptr<Session> create_session(boost::asio::io_context &target_io_context);
     

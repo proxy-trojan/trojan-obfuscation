@@ -343,6 +343,16 @@ bool Service::record_fallback_connection() {
     return fallback_controller.try_acquire_slot();
 }
 
+Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoint &endpoint) {
+    if (abuse_controller.is_ip_in_cooldown(endpoint)) {
+        return AcceptDecision::RejectCooldown;
+    }
+    if (!abuse_controller.try_acquire_connection_slot(endpoint)) {
+        return AcceptDecision::RejectConnectionLimit;
+    }
+    return AcceptDecision::StartSession;
+}
+
 shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context) {
     return make_shared<ServerSession>(config, target_io_context, ssl_context, auth, plain_http_response,
         [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
@@ -473,13 +483,14 @@ void Service::async_accept() {
             boost::system::error_code ec;
             auto endpoint = session->accept_socket().remote_endpoint(ec);
             if (!ec) {
-                if (abuse_controller.is_ip_in_cooldown(endpoint)) {
+                auto decision = evaluate_incoming_connection(endpoint);
+                if (decision == AcceptDecision::RejectCooldown) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: IP is in authentication cooldown", Log::WARN);
                     boost::system::error_code close_ec;
                     session->accept_socket().shutdown(tcp::socket::shutdown_both, close_ec);
                     session->accept_socket().close(close_ec);
-                } else if (!abuse_controller.try_acquire_connection_slot(endpoint)) {
+                } else if (decision == AcceptDecision::RejectConnectionLimit) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: per-IP concurrent connection limit reached", Log::WARN);
                     boost::system::error_code close_ec;
@@ -512,13 +523,14 @@ void Service::async_accept_worker(size_t worker_index) {
             boost::system::error_code ec;
             auto endpoint = session->accept_socket().remote_endpoint(ec);
             if (!ec) {
-                if (abuse_controller.is_ip_in_cooldown(endpoint)) {
+                auto decision = evaluate_incoming_connection(endpoint);
+                if (decision == AcceptDecision::RejectCooldown) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: IP is in authentication cooldown", Log::WARN);
                     boost::system::error_code close_ec;
                     session->accept_socket().shutdown(tcp::socket::shutdown_both, close_ec);
                     session->accept_socket().close(close_ec);
-                } else if (!abuse_controller.try_acquire_connection_slot(endpoint)) {
+                } else if (decision == AcceptDecision::RejectConnectionLimit) {
                     ++runtime_metrics.rejected_connections_total;
                     Log::log_with_endpoint(endpoint, "connection rejected: per-IP concurrent connection limit reached", Log::WARN);
                     boost::system::error_code close_ec;
