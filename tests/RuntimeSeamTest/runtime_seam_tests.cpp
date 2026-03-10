@@ -330,6 +330,37 @@ void test_external_front_inbound_validates_trusted_metadata() {
 
     expect_true(inbound.is_trusted_metadata(trusted), "verified external front metadata should be trusted");
     expect_true(!inbound.is_trusted_metadata(untrusted), "unverified external front metadata should not be trusted");
+
+    SessionContext untrusted_context = inbound.build_context(untrusted);
+    expect_true(untrusted_context.source_ip.empty(), "untrusted external front metadata should not populate source ip");
+    expect_true(untrusted_context.source_port == 0, "untrusted external front metadata should not populate source port");
+    expect_true(untrusted_context.selected_alpn.empty(), "untrusted external front metadata should not populate ALPN");
+    expect_true(!untrusted_context.tls_handshake_completed, "untrusted external front metadata should not mark tls handshake complete");
+    expect_true(untrusted_context.inbound_mode == InboundMode::ExternalFront, "external front mode should still be identified even when metadata is untrusted");
+}
+
+void test_external_front_inbound_evaluates_fallback_with_alpn_override() {
+    Config config = make_test_config();
+    config.remote_addr = "fallback.internal";
+    config.remote_port = 443;
+    config.ssl.alpn_port_override["h2"] = 8443;
+
+    ExternalFrontInbound inbound(config, nullptr);
+    ExternalFrontContext front_context;
+    front_context.trusted_front_id = "front-1";
+    front_context.original_client_ip = "203.0.113.10";
+    front_context.original_client_port = 45678;
+    front_context.negotiated_alpn = "h2";
+    front_context.tls_terminated_by_front = true;
+    front_context.metadata_verified = true;
+
+    auto decision = inbound.evaluate_initial_data(front_context, "not-a-trojan-request");
+
+    expect_true(decision.path == SessionGate::Path::FALLBACK, "external front fallback path should remain available");
+    expect_true(decision.target.host == "fallback.internal", "fallback decision should preserve configured remote host");
+    expect_true(decision.target.port == 8443, "fallback decision should apply ALPN port override from trusted front metadata");
+    expect_true(decision.target.is_fallback, "fallback decision should mark target as fallback");
+    expect_true(decision.outbound_payload == "not-a-trojan-request", "fallback decision should preserve initial payload");
 }
 
 } // namespace
@@ -351,6 +382,7 @@ int main() {
         test_relay_executor_begin_tcp_relay_fast_fails_when_fallback_slot_denied();
         test_external_front_inbound_builds_context_from_verified_metadata();
         test_external_front_inbound_validates_trusted_metadata();
+        test_external_front_inbound_evaluates_fallback_with_alpn_override();
 
         Log::reset();
         Log::set_callback({});

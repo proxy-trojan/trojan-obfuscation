@@ -1,15 +1,27 @@
 #ifndef _EXTERNAL_FRONT_INBOUND_H_
 #define _EXTERNAL_FRONT_INBOUND_H_
 
+#include <memory>
 #include <string_view>
+#include "authenticator.h"
+#include "config.h"
+#include "session_gate.h"
 #include "session_types.h"
 
 class ExternalFrontInbound {
 public:
+    ExternalFrontInbound() = default;
+    ExternalFrontInbound(const Config &config, Authenticator *auth);
+
     SessionContext build_context(const ExternalFrontContext &front_context) const;
     SessionGateInput build_gate_input(const ExternalFrontContext &front_context,
                                       std::string_view initial_data) const;
     bool is_trusted_metadata(const ExternalFrontContext &front_context) const;
+    SessionGate::SessionDecision evaluate_initial_data(const ExternalFrontContext &front_context,
+                                                       std::string_view initial_data) const;
+
+private:
+    std::unique_ptr<SessionGate> session_gate;
 };
 
 #endif // _EXTERNAL_FRONT_INBOUND_H_

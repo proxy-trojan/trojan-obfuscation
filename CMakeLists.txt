@@ -128,6 +128,9 @@ else()
                    tests/RuntimeSeamTest/runtime_seam_tests.cpp
                    src/core/session_admission_runtime.cpp
                    src/core/session_lifecycle_runtime.cpp
+                   src/core/session_gate.cpp
+                   src/proto/trojanrequest.cpp
+                   src/proto/socks5address.cpp
                    src/core/relay_executor.cpp
                    src/core/outbound_dialer.cpp
                    src/core/external_front_inbound.cpp
