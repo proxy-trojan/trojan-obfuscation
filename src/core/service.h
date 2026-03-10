@@ -32,6 +32,7 @@
 #include "authenticator.h"
 #include "fallback_controller.h"
 #include "runtime_metrics.h"
+#include "external_front_handoff_builder.h"
 #include "external_front_handoff_contract.h"
 #include "external_front_metadata_provider.h"
 #include "session/udpforwardsession.h"
@@ -79,6 +80,7 @@ private:
     AbuseController abuse_controller;
     RuntimeMetrics runtime_metrics;
     FallbackController fallback_controller;
+    ExternalFrontHandoffBuilder external_front_handoff_builder;
     ExternalFrontHandoffContract external_front_handoff_contract;
     ConfigExternalFrontMetadataProvider external_front_metadata_provider;
 

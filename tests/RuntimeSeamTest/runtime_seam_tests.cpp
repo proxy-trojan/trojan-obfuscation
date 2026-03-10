@@ -7,6 +7,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include "core/config.h"
+#include "core/external_front_handoff_builder.h"
 #include "core/external_front_handoff_contract.h"
 #include "core/external_front_inbound.h"
 #include "core/external_front_metadata_provider.h"
@@ -476,6 +477,39 @@ void test_config_external_front_metadata_provider_respects_enablement() {
                 "injection result should preserve trusted front id");
 }
 
+void test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs() {
+    ExternalFrontHandoffBuilder builder;
+
+    ExternalFrontMetadataProvider::InjectionResult inactive_injection;
+    inactive_injection.decision = ExternalFrontMetadataProvider::Decision::Inactive;
+    inactive_injection.mode = "test_injected_external_front";
+    auto inactive_handoff = builder.maybe_build_test_injected_handoff(inactive_injection);
+    expect_true(!inactive_handoff.has_value(), "builder should not shape test-injected handoff without metadata context");
+
+    ExternalFrontMetadataProvider::InjectionResult active_injection;
+    active_injection.decision = ExternalFrontMetadataProvider::Decision::ActiveWithMetadata;
+    active_injection.mode = "test_injected_external_front";
+    ExternalFrontContext injected_context;
+    injected_context.trusted_front_id = "front-1";
+    injected_context.original_client_ip = "203.0.113.10";
+    active_injection.context = injected_context;
+
+    auto test_handoff = builder.maybe_build_test_injected_handoff(active_injection);
+    expect_true(test_handoff.has_value(), "builder should shape test-injected handoff when metadata exists");
+    expect_true(test_handoff->source_kind == ExternalFrontHandoffSourceKind::TestInjected, "test-injected handoff should expose test source kind");
+    expect_true(test_handoff->source_name == "test_injected_external_front", "test-injected handoff should preserve source name");
+    expect_true(test_handoff->context.has_value(), "test-injected handoff should carry metadata context");
+    expect_true(test_handoff->context->trusted_front_id == "front-1", "test-injected handoff should preserve metadata context");
+
+    ExternalFrontContext trusted_context;
+    trusted_context.trusted_front_id = "internal-front";
+    auto trusted_handoff = builder.build_trusted_internal_handoff("internal_handoff_source", trusted_context);
+    expect_true(trusted_handoff.source_kind == ExternalFrontHandoffSourceKind::TrustedInternalHandoff, "trusted-internal builder should expose trusted-internal source kind");
+    expect_true(trusted_handoff.source_name == "internal_handoff_source", "trusted-internal builder should preserve source name");
+    expect_true(trusted_handoff.context.has_value(), "trusted-internal builder should always carry metadata context");
+    expect_true(trusted_handoff.context->trusted_front_id == "internal-front", "trusted-internal builder should preserve metadata context");
+}
+
 void test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context() {
     ExternalFrontHandoffContract contract;
 
@@ -593,6 +627,7 @@ int main() {
         test_external_front_inbound_evaluates_fallback_with_alpn_override();
         test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls();
         test_config_external_front_metadata_provider_respects_enablement();
+        test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs();
         test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context();
         test_server_ingress_selector_routes_external_front_selection();
 

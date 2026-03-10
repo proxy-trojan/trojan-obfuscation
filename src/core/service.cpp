@@ -371,11 +371,7 @@ std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff(
         return std::nullopt;
     }
 
-    ExternalFrontHandoff handoff;
-    handoff.source_kind = ExternalFrontHandoffSourceKind::TestInjected;
-    handoff.source_name = injection.mode;
-    handoff.context = std::move(injection.context);
-    return handoff;
+    return external_front_handoff_builder.maybe_build_test_injected_handoff(injection);
 }
 
 void Service::maybe_apply_external_front_handoff(ServerSession &session, std::optional<ExternalFrontHandoff> handoff) {
