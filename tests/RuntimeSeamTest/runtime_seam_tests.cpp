@@ -7,6 +7,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include "core/config.h"
+#include "core/external_front_handoff_contract.h"
 #include "core/external_front_inbound.h"
 #include "core/external_front_metadata_provider.h"
 #include "core/external_front_trust_policy.h"
@@ -475,6 +476,41 @@ void test_config_external_front_metadata_provider_respects_enablement() {
                 "injection result should preserve trusted front id");
 }
 
+void test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context() {
+    ExternalFrontHandoffContract contract;
+
+    ExternalFrontHandoff missing_context;
+    missing_context.source_kind = ExternalFrontHandoffSourceKind::TestInjected;
+    missing_context.source_name = "test_injected_external_front";
+    auto missing_context_decision = contract.evaluate(missing_context);
+    expect_true(!missing_context_decision.accepted(), "handoff without context should be rejected");
+    expect_true(missing_context_decision.reason == "rejected_missing_handoff_context", "missing-context handoff should expose stable rejection reason");
+
+    ExternalFrontHandoff unknown_source;
+    unknown_source.source_kind = ExternalFrontHandoffSourceKind::Unknown;
+    unknown_source.source_name = "mystery_front";
+    unknown_source.context = ExternalFrontContext{};
+    auto unknown_source_decision = contract.evaluate(unknown_source);
+    expect_true(!unknown_source_decision.accepted(), "unknown handoff source should be rejected");
+    expect_true(unknown_source_decision.reason == "rejected_unknown_handoff_source", "unknown handoff source should expose stable rejection reason");
+
+    ExternalFrontHandoff test_injected;
+    test_injected.source_kind = ExternalFrontHandoffSourceKind::TestInjected;
+    test_injected.source_name = "test_injected_external_front";
+    test_injected.context = ExternalFrontContext{};
+    auto test_injected_decision = contract.evaluate(test_injected);
+    expect_true(test_injected_decision.accepted(), "test-injected handoff should be accepted by the contract");
+    expect_true(test_injected_decision.reason == "accepted_test_injected_handoff", "test-injected handoff should expose stable acceptance reason");
+
+    ExternalFrontHandoff trusted_internal;
+    trusted_internal.source_kind = ExternalFrontHandoffSourceKind::TrustedInternalHandoff;
+    trusted_internal.source_name = "trusted_internal_front";
+    trusted_internal.context = ExternalFrontContext{};
+    auto trusted_internal_decision = contract.evaluate(trusted_internal);
+    expect_true(trusted_internal_decision.accepted(), "trusted-internal handoff should be accepted by the contract");
+    expect_true(trusted_internal_decision.reason == "accepted_trusted_internal_handoff", "trusted-internal handoff should expose stable acceptance reason");
+}
+
 void test_server_ingress_selector_routes_external_front_selection() {
     Config disabled_config = make_test_config();
     disabled_config.remote_addr = "fallback.internal";
@@ -557,6 +593,7 @@ int main() {
         test_external_front_inbound_evaluates_fallback_with_alpn_override();
         test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls();
         test_config_external_front_metadata_provider_respects_enablement();
+        test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context();
         test_server_ingress_selector_routes_external_front_selection();
 
         Log::reset();

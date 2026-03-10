@@ -379,12 +379,20 @@ std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff(
 }
 
 void Service::maybe_apply_external_front_handoff(ServerSession &session, std::optional<ExternalFrontHandoff> handoff) {
-    if (!handoff.has_value() || !handoff->has_context()) {
+    if (!handoff.has_value()) {
+        return;
+    }
+
+    auto decision = external_front_handoff_contract.evaluate(*handoff);
+    if (!decision.accepted()) {
+        Log::log_with_date_time(
+            "external-front handoff rejected: " + decision.reason,
+            Log::WARN);
         return;
     }
 
     Log::log_with_date_time(
-        "external-front handoff applied: " + handoff->source_name,
+        "external-front handoff applied: " + handoff->source_name + " (" + decision.reason + ")",
         Log::INFO);
     session.set_external_front_handoff(std::move(*handoff));
 }
