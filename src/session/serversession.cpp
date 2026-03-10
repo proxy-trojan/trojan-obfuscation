@@ -319,14 +319,25 @@ ServerSession::UdpDispatchDecision ServerSession::try_parse_udp_packet(UdpDispat
     return UdpDispatchDecision::Proceed;
 }
 
+ServerSession::UdpResolveDecision ServerSession::evaluate_udp_resolve_result(
+    const string &query_addr,
+    const boost::system::error_code &error,
+    const udp::resolver::results_type &results) const {
+    if (error || results.empty()) {
+        Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + query_addr + ": " + error.message(), Log::ERROR);
+        return UdpResolveDecision::DestroySession;
+    }
+    return UdpResolveDecision::DispatchPayload;
+}
+
 void ServerSession::resolve_udp_target(const string &payload,
                                        size_t packet_length,
                                        const string &query_addr,
                                        uint16_t query_port) {
     auto self = shared_from_this();
     udp_resolver.async_resolve(query_addr, to_string(query_port), [this, self, payload, packet_length, query_addr](const boost::system::error_code error, const udp::resolver::results_type& results) {
-        if (error || results.empty()) {
-            Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + query_addr + ": " + error.message(), Log::ERROR);
+        auto decision = evaluate_udp_resolve_result(query_addr, error, results);
+        if (decision == UdpResolveDecision::DestroySession) {
             destroy();
             return;
         }

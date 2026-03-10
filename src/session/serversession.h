@@ -88,6 +88,11 @@ private:
         uint16_t query_port{0};
     };
 
+    enum class UdpResolveDecision {
+        DispatchPayload,
+        DestroySession
+    };
+
     void udp_async_read();
     void udp_async_write(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint);
     void udp_recv(size_t length, const boost::asio::ip::udp::endpoint &endpoint);
@@ -96,6 +101,9 @@ private:
                             size_t packet_length,
                             const std::string &query_addr,
                             uint16_t query_port);
+    UdpResolveDecision evaluate_udp_resolve_result(const std::string &query_addr,
+                                                   const boost::system::error_code &error,
+                                                   const boost::asio::ip::udp::resolver::results_type &results) const;
     boost::asio::ip::udp::resolver::results_type::const_iterator choose_udp_target_endpoint(
         const boost::asio::ip::udp::resolver::results_type &results) const;
     void ensure_udp_socket_open(const boost::asio::ip::udp::endpoint::protocol_type &protocol);
