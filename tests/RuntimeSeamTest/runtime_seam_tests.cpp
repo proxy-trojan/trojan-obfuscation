@@ -423,6 +423,8 @@ void test_external_front_trust_policy_requires_front_id_client_identity_and_veri
 void test_config_external_front_metadata_provider_respects_enablement() {
     Config disabled = make_test_config();
     ConfigExternalFrontMetadataProvider disabled_provider(disabled);
+    expect_true(!disabled_provider.active(), "provider should report inactive when external-front mode is disabled");
+    expect_true(disabled_provider.injection_mode_name() == "test_injected_external_front", "provider should expose stable injection mode name");
     auto disabled_context = disabled_provider.maybe_build_context();
     expect_true(!disabled_context.has_value(), "provider should not inject metadata when external-front mode is disabled");
 
@@ -437,6 +439,8 @@ void test_config_external_front_metadata_provider_respects_enablement() {
     enabled.external_front.test_metadata_verified = true;
 
     ConfigExternalFrontMetadataProvider enabled_provider(enabled);
+    expect_true(enabled_provider.active(), "provider should report active when explicitly enabled");
+    expect_true(enabled_provider.injection_mode_name() == "test_injected_external_front", "provider should expose test injection mode name");
     auto enabled_context = enabled_provider.maybe_build_context();
     expect_true(enabled_context.has_value(), "provider should inject metadata when explicitly enabled");
     expect_true(enabled_context->trusted_front_id == "front-1", "provider should propagate configured trusted front id");

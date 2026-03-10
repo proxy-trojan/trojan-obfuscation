@@ -356,6 +356,16 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
     return AcceptDecision::StartSession;
 }
 
+void Service::maybe_inject_external_front_context(ServerSession &session) {
+    if (!external_front_metadata_provider.active()) {
+        return;
+    }
+    auto external_front_context = external_front_metadata_provider.maybe_build_context();
+    if (external_front_context.has_value()) {
+        session.set_external_front_context(std::move(*external_front_context));
+    }
+}
+
 shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context) {
     auto session = make_shared<ServerSession>(config, target_io_context, ssl_context, auth, plain_http_response,
         [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
@@ -363,10 +373,7 @@ shared_ptr<Session> Service::create_server_session(boost::asio::io_context &targ
         [this]() { record_auth_success(); },
         [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
         [this]() { return record_fallback_connection(); });
-    auto external_front_context = external_front_metadata_provider.maybe_build_context();
-    if (external_front_context.has_value()) {
-        session->set_external_front_context(std::move(*external_front_context));
-    }
+    maybe_inject_external_front_context(*session);
     return session;
 }
 
