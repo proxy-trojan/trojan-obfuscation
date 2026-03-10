@@ -25,10 +25,7 @@ SessionGateInput ExternalFrontInbound::build_gate_input(const ExternalFrontConte
 }
 
 bool ExternalFrontInbound::is_trusted_metadata(const ExternalFrontContext &front_context) const {
-    return front_context.metadata_verified &&
-           front_context.tls_terminated_by_front &&
-           !front_context.trusted_front_id.empty() &&
-           !front_context.original_client_ip.empty();
+    return trust_policy.is_trusted(front_context);
 }
 
 SessionGate::SessionDecision ExternalFrontInbound::evaluate_initial_data(const ExternalFrontContext &front_context,

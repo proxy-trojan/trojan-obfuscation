@@ -133,6 +133,7 @@ else()
                    src/proto/socks5address.cpp
                    src/core/relay_executor.cpp
                    src/core/outbound_dialer.cpp
+                   src/core/external_front_trust_policy.cpp
                    src/core/external_front_inbound.cpp
                    src/core/authenticator.cpp
                    src/core/config.cpp

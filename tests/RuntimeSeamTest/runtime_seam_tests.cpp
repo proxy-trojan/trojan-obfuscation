@@ -8,6 +8,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include "core/config.h"
 #include "core/external_front_inbound.h"
+#include "core/external_front_trust_policy.h"
 #include "core/log.h"
 #include "core/relay_executor.h"
 #include "core/session_admission_runtime.h"
@@ -363,6 +364,34 @@ void test_external_front_inbound_evaluates_fallback_with_alpn_override() {
     expect_true(decision.outbound_payload == "not-a-trojan-request", "fallback decision should preserve initial payload");
 }
 
+void test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls() {
+    ExternalFrontTrustPolicy policy;
+    ExternalFrontContext context;
+    context.trusted_front_id = "front-1";
+    context.original_client_ip = "203.0.113.10";
+    context.original_client_port = 45678;
+    context.tls_terminated_by_front = true;
+    context.metadata_verified = true;
+
+    expect_true(policy.is_trusted(context), "fully populated trusted front metadata should be accepted");
+
+    ExternalFrontContext missing_front_id = context;
+    missing_front_id.trusted_front_id.clear();
+    expect_true(!policy.is_trusted(missing_front_id), "missing trusted front id should be rejected");
+
+    ExternalFrontContext missing_client_ip = context;
+    missing_client_ip.original_client_ip.clear();
+    expect_true(!policy.is_trusted(missing_client_ip), "missing original client identity should be rejected");
+
+    ExternalFrontContext unverified = context;
+    unverified.metadata_verified = false;
+    expect_true(!policy.is_trusted(unverified), "unverified metadata should be rejected");
+
+    ExternalFrontContext not_terminated = context;
+    not_terminated.tls_terminated_by_front = false;
+    expect_true(!policy.is_trusted(not_terminated), "metadata without verified front-side tls termination should be rejected");
+}
+
 } // namespace
 
 int main() {
@@ -383,6 +412,7 @@ int main() {
         test_external_front_inbound_builds_context_from_verified_metadata();
         test_external_front_inbound_validates_trusted_metadata();
         test_external_front_inbound_evaluates_fallback_with_alpn_override();
+        test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls();
 
         Log::reset();
         Log::set_callback({});

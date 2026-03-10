@@ -5,6 +5,7 @@
 #include <string_view>
 #include "authenticator.h"
 #include "config.h"
+#include "external_front_trust_policy.h"
 #include "session_gate.h"
 #include "session_types.h"
 
@@ -21,6 +22,7 @@ public:
                                                        std::string_view initial_data) const;
 
 private:
+    ExternalFrontTrustPolicy trust_policy;
     std::unique_ptr<SessionGate> session_gate;
 };
 
