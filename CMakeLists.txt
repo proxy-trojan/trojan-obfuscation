@@ -137,6 +137,7 @@ else()
                    src/core/outbound_dialer.cpp
                    src/core/external_front_handoff_builder.cpp
                    src/core/external_front_handoff_contract.cpp
+                   src/core/trusted_internal_handoff_input.cpp
                    src/core/external_front_metadata_provider.cpp
                    src/core/external_front_trust_policy.cpp
                    src/core/external_front_inbound.cpp

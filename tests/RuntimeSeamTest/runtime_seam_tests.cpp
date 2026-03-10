@@ -10,6 +10,7 @@
 #include "core/external_front_handoff_builder.h"
 #include "core/external_front_handoff_contract.h"
 #include "core/external_front_inbound.h"
+#include "core/trusted_internal_handoff_input.h"
 #include "core/external_front_metadata_provider.h"
 #include "core/external_front_trust_policy.h"
 #include "core/log.h"
@@ -477,6 +478,49 @@ void test_config_external_front_metadata_provider_respects_enablement() {
                 "injection result should preserve trusted front id");
 }
 
+void test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input() {
+    TrustedInternalHandoffInputContract contract;
+
+    TrustedInternalHandoffInput missing_source_name;
+    auto missing_source_name_decision = contract.evaluate(missing_source_name);
+    expect_true(!missing_source_name_decision.accepted(), "trusted-internal input without source name should be rejected");
+    expect_true(missing_source_name_decision.reason == "rejected_missing_trusted_internal_source_name", "missing source name should expose stable rejection reason");
+
+    TrustedInternalHandoffInput missing_front_id;
+    missing_front_id.source_name = "internal_handoff_source";
+    auto missing_front_id_decision = contract.evaluate(missing_front_id);
+    expect_true(!missing_front_id_decision.accepted(), "trusted-internal input without trusted front id should be rejected");
+    expect_true(missing_front_id_decision.reason == "rejected_missing_trusted_internal_front_id", "missing trusted front id should expose stable rejection reason");
+
+    TrustedInternalHandoffInput missing_client_identity;
+    missing_client_identity.source_name = "internal_handoff_source";
+    missing_client_identity.trusted_front_id = "internal-front";
+    auto missing_client_identity_decision = contract.evaluate(missing_client_identity);
+    expect_true(!missing_client_identity_decision.accepted(), "trusted-internal input without client identity should be rejected");
+    expect_true(missing_client_identity_decision.reason == "rejected_missing_trusted_internal_client_identity", "missing client identity should expose stable rejection reason");
+
+    TrustedInternalHandoffInput missing_verified_tls;
+    missing_verified_tls.source_name = "internal_handoff_source";
+    missing_verified_tls.trusted_front_id = "internal-front";
+    missing_verified_tls.original_client_ip = "203.0.113.10";
+    auto missing_verified_tls_decision = contract.evaluate(missing_verified_tls);
+    expect_true(!missing_verified_tls_decision.accepted(), "trusted-internal input without verified tls termination should be rejected");
+    expect_true(missing_verified_tls_decision.reason == "rejected_missing_trusted_internal_verified_tls_termination", "missing verified tls termination should expose stable rejection reason");
+
+    TrustedInternalHandoffInput accepted_input;
+    accepted_input.source_name = "internal_handoff_source";
+    accepted_input.trusted_front_id = "internal-front";
+    accepted_input.original_client_ip = "203.0.113.10";
+    accepted_input.original_client_port = 45678;
+    accepted_input.server_name = "front.example.com";
+    accepted_input.negotiated_alpn = "h2";
+    accepted_input.tls_terminated_by_front = true;
+    accepted_input.metadata_verified = true;
+    auto accepted_decision = contract.evaluate(accepted_input);
+    expect_true(accepted_decision.accepted(), "fully populated trusted-internal input should be accepted");
+    expect_true(accepted_decision.reason == "accepted_trusted_internal_handoff_input", "accepted trusted-internal input should expose stable acceptance reason");
+}
+
 void test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs() {
     ExternalFrontHandoffBuilder builder;
 
@@ -501,13 +545,23 @@ void test_external_front_handoff_builder_shapes_test_injected_and_trusted_intern
     expect_true(test_handoff->context.has_value(), "test-injected handoff should carry metadata context");
     expect_true(test_handoff->context->trusted_front_id == "front-1", "test-injected handoff should preserve metadata context");
 
-    ExternalFrontContext trusted_context;
-    trusted_context.trusted_front_id = "internal-front";
-    auto trusted_handoff = builder.build_trusted_internal_handoff("internal_handoff_source", trusted_context);
-    expect_true(trusted_handoff.source_kind == ExternalFrontHandoffSourceKind::TrustedInternalHandoff, "trusted-internal builder should expose trusted-internal source kind");
-    expect_true(trusted_handoff.source_name == "internal_handoff_source", "trusted-internal builder should preserve source name");
-    expect_true(trusted_handoff.context.has_value(), "trusted-internal builder should always carry metadata context");
-    expect_true(trusted_handoff.context->trusted_front_id == "internal-front", "trusted-internal builder should preserve metadata context");
+    TrustedInternalHandoffInput trusted_input;
+    trusted_input.source_name = "internal_handoff_source";
+    trusted_input.trusted_front_id = "internal-front";
+    trusted_input.original_client_ip = "203.0.113.11";
+    trusted_input.original_client_port = 45679;
+    trusted_input.server_name = "front.example.com";
+    trusted_input.negotiated_alpn = "h2";
+    trusted_input.tls_terminated_by_front = true;
+    trusted_input.metadata_verified = true;
+    auto trusted_handoff = builder.maybe_build_trusted_internal_handoff(trusted_input);
+    expect_true(trusted_handoff.has_value(), "trusted-internal builder should shape handoff for accepted input");
+    expect_true(trusted_handoff->source_kind == ExternalFrontHandoffSourceKind::TrustedInternalHandoff, "trusted-internal builder should expose trusted-internal source kind");
+    expect_true(trusted_handoff->source_name == "internal_handoff_source", "trusted-internal builder should preserve source name");
+    expect_true(trusted_handoff->context.has_value(), "trusted-internal builder should always carry metadata context");
+    expect_true(trusted_handoff->context->trusted_front_id == "internal-front", "trusted-internal builder should preserve trusted front id");
+    expect_true(trusted_handoff->context->original_client_ip == "203.0.113.11", "trusted-internal builder should preserve original client ip");
+    expect_true(trusted_handoff->context->ingress_mode == "trusted_internal_handoff", "trusted-internal builder should mark trusted internal ingress mode");
 }
 
 void test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context() {
@@ -627,6 +681,7 @@ int main() {
         test_external_front_inbound_evaluates_fallback_with_alpn_override();
         test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls();
         test_config_external_front_metadata_provider_respects_enablement();
+        test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input();
         test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs();
         test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context();
         test_server_ingress_selector_routes_external_front_selection();
