@@ -233,6 +233,13 @@ void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
     destroy();
 }
 
+void ServerSession::handle_handshake_payload(string_view data) {
+    auto gate_result = embedded_tls_inbound.evaluate_initial_data(in_endpoint, in_socket, data);
+    admission_runtime.apply_auth_result(in_endpoint, gate_result, auth_password);
+    auto execution_plan = relay_executor.build_execution_plan(gate_result);
+    execute_plan(execution_plan);
+}
+
 void ServerSession::in_recv(size_t length) {
     if (length > in_read_buf.size() * 0.75) {
         resize_buffer(in_read_buf, length * 2);
@@ -240,11 +247,7 @@ void ServerSession::in_recv(size_t length) {
     
     if (status == HANDSHAKE) {
         string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
-        auto gate_result = embedded_tls_inbound.evaluate_initial_data(in_endpoint, in_socket, data);
-        admission_runtime.apply_auth_result(in_endpoint, gate_result, auth_password);
-
-        auto execution_plan = relay_executor.build_execution_plan(gate_result);
-        execute_plan(execution_plan);
+        handle_handshake_payload(data);
     } else if (status == FORWARD) {
         sent_len += length;
         // 零拷贝：直接从读缓冲区写入

@@ -40,6 +40,8 @@ The codebase already has the following useful separation:
 - `EmbeddedTlsInbound`
 - `RelayExecutor`
 - `RelayExecutionPlan`
+- `SessionAdmissionRuntime`
+- `SessionLifecycleRuntime`
 
 ### Still-heavy modules
 - `Service`
@@ -312,34 +314,43 @@ Should the existing embedded TLS listener remain the default long-term edge, or 
 
 ## Current Phase 2B Progress Snapshot
 
-The codebase has already completed the first half of the recommended work order:
+The codebase has now completed the core Phase 2B structural work:
 
 - `SessionContext` is in place and used as the transport-neutral inbound handoff.
 - `ConnectTarget` is now threaded through relay execution instead of ad-hoc host/port strings.
 - `EmbeddedTlsInbound` isolates embedded TLS edge semantics from `ServerSession`.
 - `RelayExecutor` now owns TCP relay startup orchestration.
 - `RelayExecutionPlan` separates relay planning from session runtime mode transition.
+- `SessionAdmissionRuntime` owns admission-side callbacks and auth result side effects.
+- `SessionLifecycleRuntime` owns lifecycle bookkeeping side effects.
+- `ServerSession` shutdown is split into explicit cleanup steps rather than one monolithic `destroy()` body.
 
 This means `ServerSession` is no longer directly responsible for:
 - building embedded TLS gate input
 - deciding authenticated TCP vs UDP vs fallback execution shape
 - directly driving outbound dialing from raw gate result details
+- owning admission callback details inline in the handshake path
+- mixing lifecycle bookkeeping with socket cleanup in one opaque block
 
 However, `ServerSession` still remains the host for:
 - runtime socket lifecycle
 - TCP/UDP forwarding loops
-- auth/fallback side-effect callbacks
-- shutdown and cleanup behavior
+- UDP-specific runtime behavior
+- final socket/TLS shutdown orchestration
 
 ## Recommended Immediate Next Step
 
 The next implementation step after this document should remain modest:
 
 ### Recommended next code step
-Continue shrinking `ServerSession` by targeting the remaining orchestration seams:
-- UDP startup and runtime boundary cleanup
-- admission/auth/fallback side-effect hooks
-- a thinner runtime-only session host shape
+Phase 2B can reasonably stop here and hand off to a later phase.
+
+If further refactoring is desired, the most natural next seams are:
+- UDP runtime boundary cleanup
+- cross-session shutdown helper evaluation
+- eventual `Service` slimming
+
+These are useful, but they are no longer required to claim Phase 2B success.
 
 This keeps Phase 2B incremental and reversible.
 

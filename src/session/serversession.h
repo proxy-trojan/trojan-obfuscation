@@ -50,6 +50,7 @@ private:
     void connect_outbound(const ConnectTarget &target, bool requires_fallback_slot);
     void start_udp_forward(const RelayExecutionPlan &plan);
     void execute_plan(const RelayExecutionPlan &plan);
+    void handle_handshake_payload(std::string_view data);
     void cancel_runtime_io();
     void close_outbound_sockets();
     void shutdown_inbound_tls();
