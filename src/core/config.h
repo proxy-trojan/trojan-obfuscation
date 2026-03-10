@@ -94,6 +94,10 @@ public:
         int cooldown_seconds;
         int fallback_max_active;
     } abuse_control;
+    class ExternalFrontConfig {
+    public:
+        bool enabled;
+    } external_front;
 
     void load(const std::string &filename);
     void populate(const std::string &JSON);

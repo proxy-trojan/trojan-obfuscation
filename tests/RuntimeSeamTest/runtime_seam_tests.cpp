@@ -64,6 +64,7 @@ Config make_test_config() {
     config.abuse_control.auth_fail_max = 20;
     config.abuse_control.cooldown_seconds = 60;
     config.abuse_control.fallback_max_active = 32;
+    config.external_front.enabled = false;
     return config;
 }
 
@@ -412,13 +413,14 @@ void test_external_front_trust_policy_requires_front_id_client_identity_and_veri
 }
 
 void test_server_ingress_selector_routes_external_front_selection() {
-    Config config = make_test_config();
-    config.remote_addr = "fallback.internal";
-    config.remote_port = 443;
-    config.ssl.alpn_port_override["h2"] = 8443;
+    Config disabled_config = make_test_config();
+    disabled_config.remote_addr = "fallback.internal";
+    disabled_config.remote_port = 443;
+    disabled_config.ssl.alpn_port_override["h2"] = 8443;
 
-    ServerIngressSelector selector(config, nullptr);
-    auto default_selection = selector.select_default();
+    ServerIngressSelector disabled_selector(disabled_config, nullptr);
+    expect_true(!disabled_selector.external_front_enabled(), "external front ingress mode should be disabled by default");
+    auto default_selection = disabled_selector.select_default();
     expect_true(default_selection.mode == InboundMode::EmbeddedTls, "default ingress selection should remain embedded tls");
     expect_true(!default_selection.external_front_context.has_value(), "default ingress selection should not carry external front metadata");
 
@@ -430,16 +432,25 @@ void test_server_ingress_selector_routes_external_front_selection() {
     front_context.tls_terminated_by_front = true;
     front_context.metadata_verified = true;
 
-    auto selection = selector.select_external_front(front_context);
-    expect_true(selection.mode == InboundMode::ExternalFront, "external front selection should use external front mode");
-    expect_true(selection.external_front_context.has_value(), "external front selection should carry front metadata");
+    auto disabled_selection = disabled_selector.select_external_front(front_context);
+    expect_true(disabled_selection.mode == InboundMode::EmbeddedTls, "disabled external front mode should fall back to embedded tls selection");
+    expect_true(!disabled_selection.external_front_context.has_value(), "disabled external front mode should not carry external front metadata");
+
+    Config enabled_config = disabled_config;
+    enabled_config.external_front.enabled = true;
+    ServerIngressSelector enabled_selector(enabled_config, nullptr);
+    expect_true(enabled_selector.external_front_enabled(), "external front ingress mode should be enabled when configured");
+
+    auto enabled_selection = enabled_selector.select_external_front(front_context);
+    expect_true(enabled_selection.mode == InboundMode::ExternalFront, "enabled external front mode should use external front selection");
+    expect_true(enabled_selection.external_front_context.has_value(), "enabled external front mode should carry front metadata");
 
     boost::asio::io_context io_context;
     boost::asio::ssl::context ssl_context(boost::asio::ssl::context::tls_server);
     boost::asio::ssl::stream<tcp::socket> socket(io_context, ssl_context);
 
-    auto decision = selector.evaluate(selection, loopback_endpoint(), socket, "not-a-trojan-request");
-    expect_true(decision.path == SessionGate::Path::FALLBACK, "selector should route external-front path into external-front inbound evaluation");
+    auto decision = enabled_selector.evaluate(enabled_selection, loopback_endpoint(), socket, "not-a-trojan-request");
+    expect_true(decision.path == SessionGate::Path::FALLBACK, "selector should route enabled external-front path into external-front inbound evaluation");
     expect_true(decision.target.host == "fallback.internal", "external-front selection should preserve fallback host");
     expect_true(decision.target.port == 8443, "external-front selection should still apply ALPN port override");
 }

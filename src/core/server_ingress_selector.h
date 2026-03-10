@@ -21,6 +21,7 @@ public:
 
     ServerIngressSelector(const Config &config, Authenticator *auth);
 
+    bool external_front_enabled() const;
     Selection select_default() const;
     Selection select_external_front(const ExternalFrontContext &front_context) const;
 
@@ -31,6 +32,7 @@ public:
         std::string_view initial_data) const;
 
 private:
+    bool external_front_mode_enabled;
     EmbeddedTlsInbound embedded_tls_inbound;
     ExternalFrontInbound external_front_inbound;
 };

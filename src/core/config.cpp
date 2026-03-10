@@ -118,6 +118,7 @@ void Config::populate(const ptree &tree) {
     abuse_control.auth_fail_max = tree.get("abuse_control.auth_fail_max", 20);
     abuse_control.cooldown_seconds = tree.get("abuse_control.cooldown_seconds", 60);
     abuse_control.fallback_max_active = tree.get("abuse_control.fallback_max_active", 32);
+    external_front.enabled = tree.get("external_front.enabled", false);
 }
 
 bool Config::sip003() {
