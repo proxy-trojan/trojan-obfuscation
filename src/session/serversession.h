@@ -71,8 +71,8 @@ private:
     void in_recv(size_t length);
     void in_sent();
     void out_async_read();
-    void out_async_write_buffer(const uint8_t* data, size_t length);
-    void out_async_write(const std::string &data);
+    void out_async_write_buffer(const uint8_t* data, size_t length, bool account_sent_bytes = false);
+    void out_async_write(const std::string &data, bool account_sent_bytes = false);
     void out_recv(size_t length);
     void out_sent();
     enum class UdpDispatchDecision {
@@ -94,7 +94,7 @@ private:
     };
 
     void udp_async_read();
-    void udp_async_write(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint);
+    void udp_async_write(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint, size_t accounted_length = 0);
     void udp_recv(size_t length, const boost::asio::ip::udp::endpoint &endpoint);
     UdpDispatchDecision try_parse_udp_packet(UdpDispatchRequest &request);
     void resolve_udp_target(const std::string &payload,

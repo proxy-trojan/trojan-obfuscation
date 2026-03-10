@@ -128,24 +128,27 @@ void ServerSession::out_async_read() {
 }
 
 // 零拷贝写入 - 直接从缓冲区写入
-void ServerSession::out_async_write_buffer(const uint8_t* data, size_t length) {
+void ServerSession::out_async_write_buffer(const uint8_t* data, size_t length, bool account_sent_bytes) {
     auto self = shared_from_this();
     // 复制到成员缓冲区，避免每次分配
     if (out_write_data.capacity() < length) {
         out_write_data.reserve(std::max(length, out_write_data.capacity() * 2));
     }
     out_write_data.assign(data, data + length);
-    boost::asio::async_write(out_socket, boost::asio::buffer(out_write_data.data(), out_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
+    boost::asio::async_write(out_socket, boost::asio::buffer(out_write_data.data(), out_write_data.size()), [this, self, length, account_sent_bytes](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
+        }
+        if (account_sent_bytes) {
+            sent_len += length;
         }
         out_sent();
     });
 }
 
-void ServerSession::out_async_write(const string &data) {
-    out_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+void ServerSession::out_async_write(const string &data, bool account_sent_bytes) {
+    out_async_write_buffer(reinterpret_cast<const uint8_t*>(data.data()), data.size(), account_sent_bytes);
 }
 
 void ServerSession::udp_async_read() {
@@ -159,24 +162,26 @@ void ServerSession::udp_async_read() {
     });
 }
 
-void ServerSession::udp_async_write(const string &data, const udp::endpoint &endpoint) {
+void ServerSession::udp_async_write(const string &data, const udp::endpoint &endpoint, size_t accounted_length) {
     auto self = shared_from_this();
     // 复制到成员缓冲区
     if (udp_write_data.capacity() < data.size()) {
         udp_write_data.reserve(std::max(data.size(), udp_write_data.capacity() * 2));
     }
     udp_write_data.assign(data.begin(), data.end());
-    udp_socket.async_send_to(boost::asio::buffer(udp_write_data.data(), udp_write_data.size()), endpoint, [this, self](const boost::system::error_code error, size_t) {
+    udp_socket.async_send_to(boost::asio::buffer(udp_write_data.data(), udp_write_data.size()), endpoint, [this, self, accounted_length](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
+        }
+        if (accounted_length > 0) {
+            sent_len += accounted_length;
         }
         udp_sent();
     });
 }
 
 void ServerSession::connect_outbound(const ConnectTarget &target, bool requires_fallback_slot) {
-    sent_len += out_write_buf.length();
     auto self = shared_from_this();
     auto started = relay_executor.begin_tcp_relay(
         resolver,
@@ -191,7 +196,7 @@ void ServerSession::connect_outbound(const ConnectTarget &target, bool requires_
             status = FORWARD;
             out_async_read();
             if (!out_write_buf.empty()) {
-                out_async_write(out_write_buf);
+                out_async_write(out_write_buf, true);
             } else {
                 in_async_read();
             }
@@ -249,9 +254,8 @@ void ServerSession::in_recv(size_t length) {
         string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
         handle_handshake_payload(data);
     } else if (status == FORWARD) {
-        sent_len += length;
         // 零拷贝：直接从读缓冲区写入
-        out_async_write_buffer(in_read_buf.data(), length);
+        out_async_write_buffer(in_read_buf.data(), length, true);
     } else if (status == UDP_FORWARD) {
         udp_data_buf += string(reinterpret_cast<const char*>(in_read_buf.data()), length);
         udp_sent();
@@ -382,8 +386,7 @@ void ServerSession::dispatch_udp_payload(const string &payload,
     if (!udp_socket.is_open()) {
         return;
     }
-    sent_len += packet_length;
-    udp_async_write(payload, endpoint);
+    udp_async_write(payload, endpoint, packet_length);
 }
 
 void ServerSession::handle_udp_resolved_packet(const string &payload,
