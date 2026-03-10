@@ -4,8 +4,24 @@
 #include <string>
 #include "session_types.h"
 
+enum class ExternalFrontValidationStatus {
+    Trusted,
+    MissingTrustedFrontId,
+    MissingOriginalClientIdentity,
+    MissingVerifiedTlsTermination
+};
+
+struct ExternalFrontValidationResult {
+    ExternalFrontValidationStatus status{ExternalFrontValidationStatus::MissingVerifiedTlsTermination};
+
+    bool trusted() const {
+        return status == ExternalFrontValidationStatus::Trusted;
+    }
+};
+
 class ExternalFrontTrustPolicy {
 public:
+    ExternalFrontValidationResult validate(const ExternalFrontContext &front_context) const;
     bool is_trusted(const ExternalFrontContext &front_context) const;
     bool requires_verified_tls_termination() const;
     bool requires_original_client_identity() const;

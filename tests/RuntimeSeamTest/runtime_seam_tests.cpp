@@ -373,23 +373,33 @@ void test_external_front_trust_policy_requires_front_id_client_identity_and_veri
     context.tls_terminated_by_front = true;
     context.metadata_verified = true;
 
-    expect_true(policy.is_trusted(context), "fully populated trusted front metadata should be accepted");
+    auto trusted = policy.validate(context);
+    expect_true(trusted.trusted(), "fully populated trusted front metadata should be accepted");
+    expect_true(trusted.status == ExternalFrontValidationStatus::Trusted, "trusted metadata should return Trusted status");
 
     ExternalFrontContext missing_front_id = context;
     missing_front_id.trusted_front_id.clear();
-    expect_true(!policy.is_trusted(missing_front_id), "missing trusted front id should be rejected");
+    auto missing_front_id_result = policy.validate(missing_front_id);
+    expect_true(!missing_front_id_result.trusted(), "missing trusted front id should be rejected");
+    expect_true(missing_front_id_result.status == ExternalFrontValidationStatus::MissingTrustedFrontId, "missing trusted front id should return the right validation status");
 
     ExternalFrontContext missing_client_ip = context;
     missing_client_ip.original_client_ip.clear();
-    expect_true(!policy.is_trusted(missing_client_ip), "missing original client identity should be rejected");
+    auto missing_client_ip_result = policy.validate(missing_client_ip);
+    expect_true(!missing_client_ip_result.trusted(), "missing original client identity should be rejected");
+    expect_true(missing_client_ip_result.status == ExternalFrontValidationStatus::MissingOriginalClientIdentity, "missing original client identity should return the right validation status");
 
     ExternalFrontContext unverified = context;
     unverified.metadata_verified = false;
-    expect_true(!policy.is_trusted(unverified), "unverified metadata should be rejected");
+    auto unverified_result = policy.validate(unverified);
+    expect_true(!unverified_result.trusted(), "unverified metadata should be rejected");
+    expect_true(unverified_result.status == ExternalFrontValidationStatus::MissingVerifiedTlsTermination, "unverified metadata should report verified-tls requirement failure");
 
     ExternalFrontContext not_terminated = context;
     not_terminated.tls_terminated_by_front = false;
-    expect_true(!policy.is_trusted(not_terminated), "metadata without verified front-side tls termination should be rejected");
+    auto not_terminated_result = policy.validate(not_terminated);
+    expect_true(!not_terminated_result.trusted(), "metadata without verified front-side tls termination should be rejected");
+    expect_true(not_terminated_result.status == ExternalFrontValidationStatus::MissingVerifiedTlsTermination, "missing front-side tls termination should report verified-tls requirement failure");
 }
 
 } // namespace
