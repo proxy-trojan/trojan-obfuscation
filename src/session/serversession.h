@@ -49,6 +49,7 @@ private:
     std::function<bool()> record_fallback_connection;
     bool connection_slot_acquired;
     void connect_outbound(const ConnectTarget &target, bool requires_fallback_slot);
+    void start_udp_forward(const RelayExecutionPlan &plan);
     void execute_plan(const RelayExecutionPlan &plan);
     
     bool fallback_slot_acquired;

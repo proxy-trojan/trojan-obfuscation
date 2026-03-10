@@ -37,6 +37,9 @@ The codebase already has the following useful separation:
 ### Session decision / connection modules
 - `SessionGate`
 - `OutboundDialer` (TCP path first)
+- `EmbeddedTlsInbound`
+- `RelayExecutor`
+- `RelayExecutionPlan`
 
 ### Still-heavy modules
 - `Service`
@@ -307,15 +310,36 @@ Should the existing embedded TLS listener remain the default long-term edge, or 
 
 ---
 
+## Current Phase 2B Progress Snapshot
+
+The codebase has already completed the first half of the recommended work order:
+
+- `SessionContext` is in place and used as the transport-neutral inbound handoff.
+- `ConnectTarget` is now threaded through relay execution instead of ad-hoc host/port strings.
+- `EmbeddedTlsInbound` isolates embedded TLS edge semantics from `ServerSession`.
+- `RelayExecutor` now owns TCP relay startup orchestration.
+- `RelayExecutionPlan` separates relay planning from session runtime mode transition.
+
+This means `ServerSession` is no longer directly responsible for:
+- building embedded TLS gate input
+- deciding authenticated TCP vs UDP vs fallback execution shape
+- directly driving outbound dialing from raw gate result details
+
+However, `ServerSession` still remains the host for:
+- runtime socket lifecycle
+- TCP/UDP forwarding loops
+- auth/fallback side-effect callbacks
+- shutdown and cleanup behavior
+
 ## Recommended Immediate Next Step
 
-The next implementation step after this document should be modest:
+The next implementation step after this document should remain modest:
 
 ### Recommended next code step
-Introduce and start using:
-- `SessionContext`
-- `ConnectTarget`
-- a cleaner `SessionDecision` output from `SessionGate`
+Continue shrinking `ServerSession` by targeting the remaining orchestration seams:
+- UDP startup and runtime boundary cleanup
+- admission/auth/fallback side-effect hooks
+- a thinner runtime-only session host shape
 
 This keeps Phase 2B incremental and reversible.
 

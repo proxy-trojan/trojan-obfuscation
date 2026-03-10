@@ -213,19 +213,24 @@ void ServerSession::connect_outbound(const ConnectTarget &target, bool requires_
     }
 }
 
+void ServerSession::start_udp_forward(const RelayExecutionPlan &plan) {
+    out_write_buf = plan.initial_outbound_payload;
+    status = UDP_FORWARD;
+    udp_data_buf = out_write_buf;
+    udp_sent();
+}
+
 void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
     if (!plan.log_message.empty()) {
         Log::log_with_endpoint(in_endpoint, plan.log_message, plan.log_as_warning ? Log::WARN : Log::INFO);
     }
 
-    out_write_buf = plan.initial_outbound_payload;
-
     if (plan.mode == RelayMode::StartUdpForward) {
-        status = UDP_FORWARD;
-        udp_data_buf = out_write_buf;
-        udp_sent();
+        start_udp_forward(plan);
         return;
     }
+
+    out_write_buf = plan.initial_outbound_payload;
 
     if (plan.mode == RelayMode::StartTcpForward) {
         connect_outbound(plan.target, plan.requires_fallback_slot);
