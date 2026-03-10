@@ -43,6 +43,7 @@ private:
     boost::asio::ip::udp::resolver udp_resolver;
     Authenticator *auth;
     ServerIngressSelector ingress_selector;
+    std::optional<ExternalFrontContext> external_front_context;
     RelayExecutor relay_executor;
     SessionAdmissionRuntime admission_runtime;
     SessionLifecycleRuntime lifecycle_runtime;
@@ -51,8 +52,6 @@ private:
     void start_udp_forward(const RelayExecutionPlan &plan);
     void execute_plan(const RelayExecutionPlan &plan);
     ServerIngressSelector::Selection select_ingress() const;
-    void set_external_front_context(ExternalFrontContext front_context);
-    void clear_external_front_context();
     void handle_handshake_payload(std::string_view data);
     void cancel_runtime_io();
     void close_outbound_sockets();
@@ -131,6 +130,8 @@ public:
                   std::function<bool()> record_fallback_connection = {});
     boost::asio::ip::tcp::socket& accept_socket() override;
     void start() override;
+    void set_external_front_context(ExternalFrontContext front_context);
+    void clear_external_front_context();
 };
 
 #endif // _SERVERSESSION_H_

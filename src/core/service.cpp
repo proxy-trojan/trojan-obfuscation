@@ -53,6 +53,7 @@ Service::Service(Config &config, bool test) :
     abuse_controller(config.abuse_control),
     runtime_metrics(),
     fallback_controller(config.abuse_control, runtime_metrics),
+    external_front_metadata_provider(config),
     ssl_context(context::sslv23),
     auth(nullptr),
     udp_socket(io_context) {
@@ -357,12 +358,24 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
 }
 
 void Service::maybe_inject_external_front_context(ServerSession &session) {
-    if (!external_front_metadata_provider.active()) {
+    auto injection = external_front_metadata_provider.evaluate_injection();
+
+    if (injection.decision == ExternalFrontMetadataProvider::Decision::Inactive) {
         return;
     }
-    auto external_front_context = external_front_metadata_provider.maybe_build_context();
-    if (external_front_context.has_value()) {
-        session.set_external_front_context(std::move(*external_front_context));
+
+    if (injection.decision == ExternalFrontMetadataProvider::Decision::ActiveNoMetadata) {
+        Log::log_with_date_time(
+            "external-front metadata provider active without context: " + injection.mode,
+            Log::WARN);
+        return;
+    }
+
+    if (injection.context.has_value()) {
+        session.set_external_front_context(std::move(*injection.context));
+        Log::log_with_date_time(
+            "external-front context injected by provider mode: " + injection.mode,
+            Log::INFO);
     }
 }
 

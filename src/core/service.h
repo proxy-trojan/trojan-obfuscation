@@ -32,6 +32,7 @@
 #include "authenticator.h"
 #include "fallback_controller.h"
 #include "runtime_metrics.h"
+#include "external_front_metadata_provider.h"
 #include "session/udpforwardsession.h"
 
 #include <thread>
@@ -39,6 +40,8 @@
 #include <mutex>
 #include <memory>
 #include <chrono>
+
+class ServerSession;
 
 // 每个 worker 的独立上下文
 struct WorkerContext {
@@ -75,6 +78,7 @@ private:
     AbuseController abuse_controller;
     RuntimeMetrics runtime_metrics;
     FallbackController fallback_controller;
+    ConfigExternalFrontMetadataProvider external_front_metadata_provider;
 
     // 共享资源
     boost::asio::ssl::context ssl_context;

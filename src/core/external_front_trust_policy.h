@@ -19,6 +19,8 @@ struct ExternalFrontValidationResult {
     }
 };
 
+std::string external_front_validation_status_name(ExternalFrontValidationStatus status);
+
 class ExternalFrontTrustPolicy {
 public:
     ExternalFrontValidationResult validate(const ExternalFrontContext &front_context) const;

@@ -394,30 +394,35 @@ void test_external_front_trust_policy_requires_front_id_client_identity_and_veri
     auto trusted = policy.validate(context);
     expect_true(trusted.trusted(), "fully populated trusted front metadata should be accepted");
     expect_true(trusted.status == ExternalFrontValidationStatus::Trusted, "trusted metadata should return Trusted status");
+    expect_true(external_front_validation_status_name(trusted.status) == "trusted", "trusted status should expose stable reason string");
 
     ExternalFrontContext missing_front_id = context;
     missing_front_id.trusted_front_id.clear();
     auto missing_front_id_result = policy.validate(missing_front_id);
     expect_true(!missing_front_id_result.trusted(), "missing trusted front id should be rejected");
     expect_true(missing_front_id_result.status == ExternalFrontValidationStatus::MissingTrustedFrontId, "missing trusted front id should return the right validation status");
+    expect_true(external_front_validation_status_name(missing_front_id_result.status) == "missing_trusted_front_id", "missing front-id status should expose stable reason string");
 
     ExternalFrontContext missing_client_ip = context;
     missing_client_ip.original_client_ip.clear();
     auto missing_client_ip_result = policy.validate(missing_client_ip);
     expect_true(!missing_client_ip_result.trusted(), "missing original client identity should be rejected");
     expect_true(missing_client_ip_result.status == ExternalFrontValidationStatus::MissingOriginalClientIdentity, "missing original client identity should return the right validation status");
+    expect_true(external_front_validation_status_name(missing_client_ip_result.status) == "missing_original_client_identity", "missing client-identity status should expose stable reason string");
 
     ExternalFrontContext unverified = context;
     unverified.metadata_verified = false;
     auto unverified_result = policy.validate(unverified);
     expect_true(!unverified_result.trusted(), "unverified metadata should be rejected");
     expect_true(unverified_result.status == ExternalFrontValidationStatus::MissingVerifiedTlsTermination, "unverified metadata should report verified-tls requirement failure");
+    expect_true(external_front_validation_status_name(unverified_result.status) == "missing_verified_tls_termination", "unverified status should expose stable reason string");
 
     ExternalFrontContext not_terminated = context;
     not_terminated.tls_terminated_by_front = false;
     auto not_terminated_result = policy.validate(not_terminated);
     expect_true(!not_terminated_result.trusted(), "metadata without verified front-side tls termination should be rejected");
     expect_true(not_terminated_result.status == ExternalFrontValidationStatus::MissingVerifiedTlsTermination, "missing front-side tls termination should report verified-tls requirement failure");
+    expect_true(external_front_validation_status_name(not_terminated_result.status) == "missing_verified_tls_termination", "non-terminated status should expose stable reason string");
 }
 
 void test_config_external_front_metadata_provider_respects_enablement() {
@@ -427,6 +432,14 @@ void test_config_external_front_metadata_provider_respects_enablement() {
     expect_true(disabled_provider.injection_mode_name() == "test_injected_external_front", "provider should expose stable injection mode name");
     auto disabled_context = disabled_provider.maybe_build_context();
     expect_true(!disabled_context.has_value(), "provider should not inject metadata when external-front mode is disabled");
+
+    auto disabled_injection = disabled_provider.evaluate_injection();
+    expect_true(disabled_injection.decision == ExternalFrontMetadataProvider::Decision::Inactive,
+                "disabled provider should evaluate to inactive decision");
+    expect_true(disabled_injection.mode == "test_injected_external_front",
+                "disabled provider should still expose stable mode name");
+    expect_true(!disabled_injection.context.has_value(),
+                "disabled provider should not carry metadata context");
 
     Config enabled = make_test_config();
     enabled.external_front.enabled = true;
@@ -450,6 +463,16 @@ void test_config_external_front_metadata_provider_respects_enablement() {
     expect_true(enabled_context->tls_terminated_by_front, "provider should propagate configured tls-terminated flag");
     expect_true(enabled_context->metadata_verified, "provider should propagate configured metadata-verified flag");
     expect_true(enabled_context->ingress_mode == "test_injected_external_front", "provider should mark test-injected ingress mode");
+
+    auto enabled_injection = enabled_provider.evaluate_injection();
+    expect_true(enabled_injection.decision == ExternalFrontMetadataProvider::Decision::ActiveWithMetadata,
+                "enabled provider should evaluate to active-with-metadata decision");
+    expect_true(enabled_injection.mode == "test_injected_external_front",
+                "enabled provider should expose the same mode in injection result");
+    expect_true(enabled_injection.context.has_value(),
+                "enabled provider injection result should include metadata context");
+    expect_true(enabled_injection.context->trusted_front_id == "front-1",
+                "injection result should preserve trusted front id");
 }
 
 void test_server_ingress_selector_routes_external_front_selection() {

@@ -7,10 +7,24 @@
 
 class ExternalFrontMetadataProvider {
 public:
+    enum class Decision {
+        Inactive,
+        ActiveNoMetadata,
+        ActiveWithMetadata
+    };
+
+    struct InjectionResult {
+        Decision decision{Decision::Inactive};
+        std::string mode;
+        std::optional<ExternalFrontContext> context;
+    };
+
     virtual ~ExternalFrontMetadataProvider() = default;
     virtual bool active() const = 0;
     virtual std::string injection_mode_name() const = 0;
     virtual std::optional<ExternalFrontContext> maybe_build_context() const = 0;
+
+    InjectionResult evaluate_injection() const;
 };
 
 class ConfigExternalFrontMetadataProvider : public ExternalFrontMetadataProvider {

@@ -1,5 +1,19 @@
 #include "external_front_trust_policy.h"
 
+std::string external_front_validation_status_name(ExternalFrontValidationStatus status) {
+    switch (status) {
+    case ExternalFrontValidationStatus::Trusted:
+        return "trusted";
+    case ExternalFrontValidationStatus::MissingTrustedFrontId:
+        return "missing_trusted_front_id";
+    case ExternalFrontValidationStatus::MissingOriginalClientIdentity:
+        return "missing_original_client_identity";
+    case ExternalFrontValidationStatus::MissingVerifiedTlsTermination:
+        return "missing_verified_tls_termination";
+    }
+    return "unknown_validation_status";
+}
+
 ExternalFrontValidationResult ExternalFrontTrustPolicy::validate(const ExternalFrontContext &front_context) const {
     if (requires_trusted_front_id() && front_context.trusted_front_id.empty()) {
         return {ExternalFrontValidationStatus::MissingTrustedFrontId};

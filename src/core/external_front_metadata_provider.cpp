@@ -1,5 +1,18 @@
 #include "external_front_metadata_provider.h"
 
+ExternalFrontMetadataProvider::InjectionResult ExternalFrontMetadataProvider::evaluate_injection() const {
+    if (!active()) {
+        return {Decision::Inactive, injection_mode_name(), std::nullopt};
+    }
+
+    auto context = maybe_build_context();
+    if (!context.has_value()) {
+        return {Decision::ActiveNoMetadata, injection_mode_name(), std::nullopt};
+    }
+
+    return {Decision::ActiveWithMetadata, injection_mode_name(), std::move(context)};
+}
+
 ConfigExternalFrontMetadataProvider::ConfigExternalFrontMetadataProvider(const Config &config)
     : config(config) {}
 
