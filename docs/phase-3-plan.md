@@ -98,6 +98,64 @@ Decision question:
 - stop Phase 3A once the UDP path is acceptably clean,
 - or perform one more narrow cleanup pass if a single remaining hotspot stands out.
 
+## Current Phase 3A Progress Snapshot
+
+Status: **in progress, but materially advanced**.
+
+### Completed so far
+
+#### UDP/runtime cleanup
+The server-side UDP path is now split into smaller staged helpers instead of one inline block:
+- `try_parse_udp_packet(...)`
+- `resolve_udp_target(...)`
+- `evaluate_udp_resolve_result(...)`
+- `choose_udp_target_endpoint(...)`
+- `dispatch_udp_payload(...)`
+- `ensure_udp_socket_open(...)`
+
+This means the UDP flow is now much closer to:
+- parse
+- decide
+- resolve
+- decide
+- select endpoint
+- dispatch payload
+
+rather than a single inline orchestration block in `udp_sent()`.
+
+#### Seam-level testing
+A dedicated seam-test executable now exists:
+- `runtime_seam_tests`
+- registered as `RuntimeSeamTests` in CTest
+
+The following seams now have direct coverage:
+- `SessionAdmissionRuntime`
+  - auth success / failure behavior
+  - fallback slot allow / deny / no-callback behavior
+- `SessionLifecycleRuntime`
+  - slot release behavior
+  - acquired-flag guarding behavior
+- `RelayExecutor`
+  - authenticated TCP execution plan
+  - authenticated UDP execution plan
+  - fallback execution plan
+  - fallback fast-fail path in `begin_tcp_relay(...)`
+
+### Current assessment
+
+Phase 3A has already achieved two meaningful outcomes:
+1. UDP runtime orchestration is materially clearer than the Phase 2 baseline.
+2. Core runtime seams are no longer protected only by smoke tests.
+
+### Likely remaining work
+
+The remaining decisions are now more about *where to stop cleanly* than about missing a critical structural seam.
+
+Reasonable next options:
+- perform one more narrow UDP cleanup pass if a single remaining hotspot still stands out
+- stop Phase 3A after a brief review and move to Phase 3B
+- optionally add one more focused seam test only if it provides clear regression value
+
 ## Done criteria for Phase 3A
 
 Phase 3A is done when:
@@ -105,6 +163,16 @@ Phase 3A is done when:
 - build/test flow remains green
 - `ServerSession` no longer contains a dense UDP orchestration block comparable to the old TCP path
 - at least some seam-level tests exist beyond the current smoke suite
+
+### Done-criteria status check
+
+Current status against those criteria:
+- ✅ UDP runtime flow is materially clearer than the Phase 2 baseline
+- ✅ build/test flow remains green
+- ✅ `ServerSession` no longer contains the old dense UDP orchestration shape
+- ✅ seam-level tests now exist beyond the smoke suite
+
+This means **Phase 3A is already close to a reasonable stopping point**, even if one additional narrow refinement may still be desirable.
 
 ---
 
@@ -212,9 +280,20 @@ Recommended order:
 
 ## Immediate next step
 
-Begin with **Phase 3A.1**:
-- extract clearer UDP dispatch helpers from `ServerSession`
-- keep behavior stable
-- keep smoke tests green
+Phase 3A has already started successfully and no longer needs a blind “keep refactoring” default.
 
-That is the lowest-risk, highest-signal way to start Phase 3.
+### Recommended next decision
+Choose one of the following explicitly:
+
+1. **Stop Phase 3A soon and move to Phase 3B**
+   - if the current UDP/runtime shape is considered sufficiently clear
+   - if preserving momentum and avoiding refactor drift is the priority
+
+2. **Do one final narrow Phase 3A pass**
+   - only if a single remaining UDP/runtime hotspot still stands out
+   - keep the scope small and behavior-preserving
+
+3. **Add one more seam-level test only when it closes a real gap**
+   - do not expand the test suite mechanically without clear signal
+
+Current recommendation: **treat Phase 3A as near-complete, and make the next step an explicit decision rather than an automatic continuation.**
