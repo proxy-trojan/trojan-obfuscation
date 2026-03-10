@@ -541,8 +541,9 @@ void Service::udp_async_read() {
             return;
         }
         if (error) {
+            Log::log_with_date_time("udp receive failed: " + error.message(), Log::ERROR);
             stop();
-            throw runtime_error(error.message());
+            return;
         }
         string data((const char *)udp_read_buf, length);
         {
@@ -572,7 +573,7 @@ void Service::udp_async_read() {
             if (ec == boost::asio::error::no_permission) {
                 Log::log_with_endpoint(tcp::endpoint(endpoint.address(), endpoint.port()), "dropped a UDP packet due to firewall policy or rate limit");
             } else if (ec) {
-                throw runtime_error(ec.message());
+                Log::log_with_endpoint(tcp::endpoint(endpoint.address(), endpoint.port()), "udp send failed: " + ec.message(), Log::ERROR);
             }
         });
         {
