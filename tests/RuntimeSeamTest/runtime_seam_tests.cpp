@@ -65,6 +65,13 @@ Config make_test_config() {
     config.abuse_control.cooldown_seconds = 60;
     config.abuse_control.fallback_max_active = 32;
     config.external_front.enabled = false;
+    config.external_front.inject_test_metadata = false;
+    config.external_front.test_trusted_front_id = "";
+    config.external_front.test_original_client_ip = "";
+    config.external_front.test_original_client_port = 0;
+    config.external_front.test_negotiated_alpn = "";
+    config.external_front.test_tls_terminated_by_front = false;
+    config.external_front.test_metadata_verified = false;
     return config;
 }
 

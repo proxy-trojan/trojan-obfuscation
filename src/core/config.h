@@ -97,6 +97,13 @@ public:
     class ExternalFrontConfig {
     public:
         bool enabled;
+        bool inject_test_metadata;
+        std::string test_trusted_front_id;
+        std::string test_original_client_ip;
+        uint16_t test_original_client_port;
+        std::string test_negotiated_alpn;
+        bool test_tls_terminated_by_front;
+        bool test_metadata_verified;
     } external_front;
 
     void load(const std::string &filename);

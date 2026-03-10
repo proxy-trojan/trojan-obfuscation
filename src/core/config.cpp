@@ -119,6 +119,13 @@ void Config::populate(const ptree &tree) {
     abuse_control.cooldown_seconds = tree.get("abuse_control.cooldown_seconds", 60);
     abuse_control.fallback_max_active = tree.get("abuse_control.fallback_max_active", 32);
     external_front.enabled = tree.get("external_front.enabled", false);
+    external_front.inject_test_metadata = tree.get("external_front.inject_test_metadata", false);
+    external_front.test_trusted_front_id = tree.get("external_front.test_trusted_front_id", std::string());
+    external_front.test_original_client_ip = tree.get("external_front.test_original_client_ip", std::string());
+    external_front.test_original_client_port = tree.get("external_front.test_original_client_port", 0);
+    external_front.test_negotiated_alpn = tree.get("external_front.test_negotiated_alpn", std::string());
+    external_front.test_tls_terminated_by_front = tree.get("external_front.test_tls_terminated_by_front", false);
+    external_front.test_metadata_verified = tree.get("external_front.test_metadata_verified", false);
 }
 
 bool Config::sip003() {
