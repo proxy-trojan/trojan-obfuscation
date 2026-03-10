@@ -40,7 +40,7 @@ ServerSession::ServerSession(const Config &config,
     out_socket(io_context),
     udp_resolver(io_context),
     auth(auth),
-    embedded_tls_inbound(config, auth),
+    ingress_selector(config, auth),
     relay_executor(config),
     admission_runtime(std::move(record_auth_success), std::move(record_auth_failure), std::move(record_fallback_connection)),
     lifecycle_runtime(std::move(release_connection_slot), std::move(release_fallback_slot)),
@@ -239,7 +239,8 @@ void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
 }
 
 void ServerSession::handle_handshake_payload(string_view data) {
-    auto gate_result = embedded_tls_inbound.evaluate_initial_data(in_endpoint, in_socket, data);
+    auto ingress_selection = ingress_selector.select_default();
+    auto gate_result = ingress_selector.evaluate(ingress_selection, in_endpoint, in_socket, data);
     admission_runtime.apply_auth_result(in_endpoint, gate_result, auth_password);
     auto execution_plan = relay_executor.build_execution_plan(gate_result);
     execute_plan(execution_plan);

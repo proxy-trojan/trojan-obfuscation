@@ -11,6 +11,7 @@
 #include "core/external_front_trust_policy.h"
 #include "core/log.h"
 #include "core/relay_executor.h"
+#include "core/server_ingress_selector.h"
 #include "core/session_admission_runtime.h"
 #include "core/session_lifecycle_runtime.h"
 using namespace std;
@@ -410,6 +411,39 @@ void test_external_front_trust_policy_requires_front_id_client_identity_and_veri
     expect_true(not_terminated_result.status == ExternalFrontValidationStatus::MissingVerifiedTlsTermination, "missing front-side tls termination should report verified-tls requirement failure");
 }
 
+void test_server_ingress_selector_routes_external_front_selection() {
+    Config config = make_test_config();
+    config.remote_addr = "fallback.internal";
+    config.remote_port = 443;
+    config.ssl.alpn_port_override["h2"] = 8443;
+
+    ServerIngressSelector selector(config, nullptr);
+    auto default_selection = selector.select_default();
+    expect_true(default_selection.mode == InboundMode::EmbeddedTls, "default ingress selection should remain embedded tls");
+    expect_true(!default_selection.external_front_context.has_value(), "default ingress selection should not carry external front metadata");
+
+    ExternalFrontContext front_context;
+    front_context.trusted_front_id = "front-1";
+    front_context.original_client_ip = "203.0.113.10";
+    front_context.original_client_port = 45678;
+    front_context.negotiated_alpn = "h2";
+    front_context.tls_terminated_by_front = true;
+    front_context.metadata_verified = true;
+
+    auto selection = selector.select_external_front(front_context);
+    expect_true(selection.mode == InboundMode::ExternalFront, "external front selection should use external front mode");
+    expect_true(selection.external_front_context.has_value(), "external front selection should carry front metadata");
+
+    boost::asio::io_context io_context;
+    boost::asio::ssl::context ssl_context(boost::asio::ssl::context::tls_server);
+    boost::asio::ssl::stream<tcp::socket> socket(io_context, ssl_context);
+
+    auto decision = selector.evaluate(selection, loopback_endpoint(), socket, "not-a-trojan-request");
+    expect_true(decision.path == SessionGate::Path::FALLBACK, "selector should route external-front path into external-front inbound evaluation");
+    expect_true(decision.target.host == "fallback.internal", "external-front selection should preserve fallback host");
+    expect_true(decision.target.port == 8443, "external-front selection should still apply ALPN port override");
+}
+
 } // namespace
 
 int main() {
@@ -431,6 +465,7 @@ int main() {
         test_external_front_inbound_validates_trusted_metadata();
         test_external_front_inbound_evaluates_fallback_with_alpn_override();
         test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls();
+        test_server_ingress_selector_routes_external_front_selection();
 
         Log::reset();
         Log::set_callback({});

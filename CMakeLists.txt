@@ -129,12 +129,15 @@ else()
                    src/core/session_admission_runtime.cpp
                    src/core/session_lifecycle_runtime.cpp
                    src/core/session_gate.cpp
+                   src/core/embedded_tls_edge.cpp
+                   src/core/embedded_tls_inbound.cpp
                    src/proto/trojanrequest.cpp
                    src/proto/socks5address.cpp
                    src/core/relay_executor.cpp
                    src/core/outbound_dialer.cpp
                    src/core/external_front_trust_policy.cpp
                    src/core/external_front_inbound.cpp
+                   src/core/server_ingress_selector.cpp
                    src/core/authenticator.cpp
                    src/core/config.cpp
                    src/core/log.cpp)

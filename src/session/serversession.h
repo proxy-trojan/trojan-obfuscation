@@ -24,8 +24,8 @@
 #include <boost/asio/ssl.hpp>
 #include <functional>
 #include "core/authenticator.h"
-#include "core/embedded_tls_inbound.h"
 #include "core/relay_executor.h"
+#include "core/server_ingress_selector.h"
 #include "core/session_admission_runtime.h"
 #include "core/session_gate.h"
 #include "core/session_lifecycle_runtime.h"
@@ -42,7 +42,7 @@ private:
     boost::asio::ip::tcp::socket out_socket;
     boost::asio::ip::udp::resolver udp_resolver;
     Authenticator *auth;
-    EmbeddedTlsInbound embedded_tls_inbound;
+    ServerIngressSelector ingress_selector;
     RelayExecutor relay_executor;
     SessionAdmissionRuntime admission_runtime;
     SessionLifecycleRuntime lifecycle_runtime;
