@@ -123,6 +123,16 @@ else()
              COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/auth-fail-cooldown.sh ${CMAKE_BINARY_DIR}/trojan)
     add_test(NAME LinuxSmokeTest-fallback-budget
              COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/fallback-budget.sh ${CMAKE_BINARY_DIR}/trojan)
+
+    add_executable(runtime_seam_tests
+                   tests/RuntimeSeamTest/runtime_seam_tests.cpp
+                   src/core/session_admission_runtime.cpp
+                   src/core/log.cpp)
+    target_include_directories(runtime_seam_tests PRIVATE src)
+    target_link_libraries(runtime_seam_tests ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
+
+    add_test(NAME RuntimeSeamTests COMMAND runtime_seam_tests)
+
     set_tests_properties(LinuxSmokeTest-server-config-fails PROPERTIES DEPENDS "LinuxSmokeTest-basic")
     set_tests_properties(LinuxSmokeTest-auth-fail-cooldown PROPERTIES DEPENDS "LinuxSmokeTest-basic")
     set_tests_properties(LinuxSmokeTest-fallback-budget PROPERTIES DEPENDS "LinuxSmokeTest-basic")
