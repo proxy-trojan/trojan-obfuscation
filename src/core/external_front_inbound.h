@@ -17,6 +17,8 @@ public:
     SessionContext build_context(const ExternalFrontContext &front_context) const;
     SessionGateInput build_gate_input(const ExternalFrontContext &front_context,
                                       std::string_view initial_data) const;
+    bool should_apply_client_identity(const ExternalFrontValidationResult &validation_result) const;
+    bool should_apply_transport_context(const ExternalFrontValidationResult &validation_result) const;
     bool is_trusted_metadata(const ExternalFrontContext &front_context) const;
     SessionGate::SessionDecision evaluate_initial_data(const ExternalFrontContext &front_context,
                                                        std::string_view initial_data) const;

@@ -332,6 +332,14 @@ void test_external_front_inbound_validates_trusted_metadata() {
     expect_true(inbound.is_trusted_metadata(trusted), "verified external front metadata should be trusted");
     expect_true(!inbound.is_trusted_metadata(untrusted), "unverified external front metadata should not be trusted");
 
+    ExternalFrontValidationResult trusted_result{ExternalFrontValidationStatus::Trusted};
+    expect_true(inbound.should_apply_client_identity(trusted_result), "trusted validation should allow client identity shaping");
+    expect_true(inbound.should_apply_transport_context(trusted_result), "trusted validation should allow transport context shaping");
+
+    ExternalFrontValidationResult rejected_result{ExternalFrontValidationStatus::MissingVerifiedTlsTermination};
+    expect_true(!inbound.should_apply_client_identity(rejected_result), "rejected validation should not allow client identity shaping");
+    expect_true(!inbound.should_apply_transport_context(rejected_result), "rejected validation should not allow transport context shaping");
+
     SessionContext untrusted_context = inbound.build_context(untrusted);
     expect_true(untrusted_context.source_ip.empty(), "untrusted external front metadata should not populate source ip");
     expect_true(untrusted_context.source_port == 0, "untrusted external front metadata should not populate source port");

@@ -8,20 +8,29 @@ SessionContext ExternalFrontInbound::build_context(const ExternalFrontContext &f
     SessionContext context;
     context.inbound_mode = InboundMode::ExternalFront;
 
-    if (!is_trusted_metadata(front_context)) {
-        return context;
+    auto validation_result = trust_policy.validate(front_context);
+    if (should_apply_client_identity(validation_result)) {
+        context.source_ip = front_context.original_client_ip;
+        context.source_port = front_context.original_client_port;
     }
-
-    context.source_ip = front_context.original_client_ip;
-    context.source_port = front_context.original_client_port;
-    context.selected_alpn = front_context.negotiated_alpn;
-    context.tls_handshake_completed = true;
+    if (should_apply_transport_context(validation_result)) {
+        context.selected_alpn = front_context.negotiated_alpn;
+        context.tls_handshake_completed = true;
+    }
     return context;
 }
 
 SessionGateInput ExternalFrontInbound::build_gate_input(const ExternalFrontContext &front_context,
                                                         std::string_view initial_data) const {
     return SessionGateInput{build_context(front_context), initial_data};
+}
+
+bool ExternalFrontInbound::should_apply_client_identity(const ExternalFrontValidationResult &validation_result) const {
+    return validation_result.trusted();
+}
+
+bool ExternalFrontInbound::should_apply_transport_context(const ExternalFrontValidationResult &validation_result) const {
+    return validation_result.trusted();
 }
 
 bool ExternalFrontInbound::is_trusted_metadata(const ExternalFrontContext &front_context) const {
