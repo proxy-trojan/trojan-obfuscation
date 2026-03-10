@@ -8,6 +8,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include "core/log.h"
 #include "core/session_admission_runtime.h"
+#include "core/session_lifecycle_runtime.h"
 using namespace std;
 using namespace boost::asio::ip;
 
@@ -114,6 +115,45 @@ void test_admission_runtime_fallback_slot_paths() {
     expect_true(callback_calls == 2, "fallback callback should be invoked for allow and deny paths");
 }
 
+void test_lifecycle_runtime_release_slots() {
+    bool connection_slot_acquired = true;
+    bool fallback_slot_acquired = true;
+    int release_connection_calls = 0;
+    int release_fallback_calls = 0;
+    tcp::endpoint released_endpoint;
+
+    SessionLifecycleRuntime runtime(
+        [&](const tcp::endpoint &endpoint) {
+            ++release_connection_calls;
+            released_endpoint = endpoint;
+        },
+        [&]() { ++release_fallback_calls; });
+
+    runtime.release_slots(loopback_endpoint(8443), connection_slot_acquired, fallback_slot_acquired);
+
+    expect_true(release_connection_calls == 1, "connection slot should be released once");
+    expect_true(release_fallback_calls == 1, "fallback slot should be released once");
+    expect_true(!connection_slot_acquired, "connection slot flag should be cleared");
+    expect_true(!fallback_slot_acquired, "fallback slot flag should be cleared");
+    expect_true(released_endpoint == loopback_endpoint(8443), "released endpoint should match input endpoint");
+}
+
+void test_lifecycle_runtime_release_slots_respects_flags() {
+    bool connection_slot_acquired = false;
+    bool fallback_slot_acquired = false;
+    int release_connection_calls = 0;
+    int release_fallback_calls = 0;
+
+    SessionLifecycleRuntime runtime(
+        [&](const tcp::endpoint &) { ++release_connection_calls; },
+        [&]() { ++release_fallback_calls; });
+
+    runtime.release_slots(loopback_endpoint(), connection_slot_acquired, fallback_slot_acquired);
+
+    expect_true(release_connection_calls == 0, "connection release callback should not run when slot not acquired");
+    expect_true(release_fallback_calls == 0, "fallback release callback should not run when slot not acquired");
+}
+
 } // namespace
 
 int main() {
@@ -125,6 +165,8 @@ int main() {
         test_admission_runtime_configured_credential_does_not_store_password();
         test_admission_runtime_auth_failure_records_failure_only();
         test_admission_runtime_fallback_slot_paths();
+        test_lifecycle_runtime_release_slots();
+        test_lifecycle_runtime_release_slots_respects_flags();
 
         Log::reset();
         Log::set_callback({});

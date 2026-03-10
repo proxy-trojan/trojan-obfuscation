@@ -127,6 +127,8 @@ else()
     add_executable(runtime_seam_tests
                    tests/RuntimeSeamTest/runtime_seam_tests.cpp
                    src/core/session_admission_runtime.cpp
+                   src/core/session_lifecycle_runtime.cpp
+                   src/core/authenticator.cpp
                    src/core/log.cpp)
     target_include_directories(runtime_seam_tests PRIVATE src)
     target_link_libraries(runtime_seam_tests ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
