@@ -24,7 +24,7 @@
 #include <boost/asio/ssl.hpp>
 #include <functional>
 #include "core/authenticator.h"
-#include "core/embedded_tls_edge.h"
+#include "core/embedded_tls_inbound.h"
 #include "core/outbound_dialer.h"
 #include "core/session_gate.h"
 
@@ -40,8 +40,7 @@ private:
     boost::asio::ip::tcp::socket out_socket;
     boost::asio::ip::udp::resolver udp_resolver;
     Authenticator *auth;
-    EmbeddedTlsEdgeContextBuilder edge_context_builder;
-    SessionGate session_gate;
+    EmbeddedTlsInbound embedded_tls_inbound;
     OutboundDialer outbound_dialer;
     std::function<void(const boost::asio::ip::tcp::endpoint&)> release_connection_slot;
     std::function<void()> release_fallback_slot;
@@ -49,6 +48,14 @@ private:
     std::function<void(const boost::asio::ip::tcp::endpoint&)> record_auth_failure;
     std::function<bool()> record_fallback_connection;
     bool connection_slot_acquired;
+    bool handle_fallback_budget();
+    void connect_outbound(const std::string &query_addr, const std::string &query_port);
+    void handle_authenticated_tcp(const SessionGate::SessionDecision &gate_result);
+    void handle_authenticated_udp(const SessionGate::SessionDecision &gate_result);
+    void handle_fallback(const SessionGate::SessionDecision &gate_result,
+                         const std::string &query_addr,
+                         const std::string &query_port);
+    
     bool fallback_slot_acquired;
     std::string auth_password;
     const std::string &plain_http_response;

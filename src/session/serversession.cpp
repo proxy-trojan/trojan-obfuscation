@@ -40,7 +40,7 @@ ServerSession::ServerSession(const Config &config,
     out_socket(io_context),
     udp_resolver(io_context),
     auth(auth),
-    session_gate(config, auth),
+    embedded_tls_inbound(config, auth),
     outbound_dialer(config),
     release_connection_slot(std::move(release_connection_slot)),
     release_fallback_slot(std::move(release_fallback_slot)),
@@ -178,6 +178,87 @@ void ServerSession::udp_async_write(const string &data, const udp::endpoint &end
     });
 }
 
+bool ServerSession::handle_fallback_budget() {
+    if (!record_fallback_connection) {
+        return true;
+    }
+
+    fallback_slot_acquired = record_fallback_connection();
+    if (!fallback_slot_acquired) {
+        Log::log_with_endpoint(in_endpoint, "fallback rejected: active fallback session budget exhausted", Log::WARN);
+        destroy();
+        return false;
+    }
+    return true;
+}
+
+void ServerSession::connect_outbound(const string &query_addr, const string &query_port) {
+    sent_len += out_write_buf.length();
+    auto self = shared_from_this();
+    outbound_dialer.resolve_tcp(
+        resolver,
+        in_endpoint,
+        query_addr,
+        query_port,
+        [this, self, query_addr, query_port](tcp::resolver::results_type::const_iterator iterator) {
+            outbound_dialer.connect_tcp(
+                out_socket,
+                iterator,
+                in_endpoint,
+                query_addr,
+                query_port,
+                [this, self]() {
+                    status = FORWARD;
+                    out_async_read();
+                    if (!out_write_buf.empty()) {
+                        out_async_write(out_write_buf);
+                    } else {
+                        in_async_read();
+                    }
+                },
+                [this, self](const string &message) {
+                    Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
+                    destroy();
+                });
+        },
+        [this, self](const string &message) {
+            Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
+            destroy();
+        });
+}
+
+void ServerSession::handle_authenticated_tcp(const SessionGate::SessionDecision &gate_result) {
+    Log::log_with_endpoint(
+        in_endpoint,
+        "requested connection to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port),
+        Log::INFO);
+    out_write_buf = gate_result.outbound_payload;
+    connect_outbound(gate_result.target.host, to_string(gate_result.target.port));
+}
+
+void ServerSession::handle_authenticated_udp(const SessionGate::SessionDecision &gate_result) {
+    Log::log_with_endpoint(
+        in_endpoint,
+        "requested UDP associate to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port),
+        Log::INFO);
+    out_write_buf = gate_result.outbound_payload;
+    status = UDP_FORWARD;
+    udp_data_buf = out_write_buf;
+    udp_sent();
+}
+
+void ServerSession::handle_fallback(const SessionGate::SessionDecision &gate_result,
+                                    const string &query_addr,
+                                    const string &query_port) {
+    if (!handle_fallback_budget()) {
+        return;
+    }
+
+    Log::log_with_endpoint(in_endpoint, "not trojan request, connecting to " + query_addr + ':' + query_port, Log::WARN);
+    out_write_buf = gate_result.outbound_payload;
+    connect_outbound(query_addr, query_port);
+}
+
 void ServerSession::in_recv(size_t length) {
     if (length > in_read_buf.size() * 0.75) {
         resize_buffer(in_read_buf, length * 2);
@@ -185,9 +266,7 @@ void ServerSession::in_recv(size_t length) {
     
     if (status == HANDSHAKE) {
         string_view data(reinterpret_cast<const char*>(in_read_buf.data()), length);
-        auto gate_input = edge_context_builder.build_gate_input(in_endpoint, in_socket, data);
-
-        auto gate_result = session_gate.evaluate(gate_input);
+        auto gate_result = embedded_tls_inbound.evaluate_initial_data(in_endpoint, in_socket, data);
         if (gate_result.valid_trojan_request && gate_result.authenticated) {
             if (gate_result.used_external_authenticator) {
                 auth_password = gate_result.auth_record_password;
