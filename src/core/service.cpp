@@ -344,6 +344,9 @@ bool Service::record_fallback_connection() {
 }
 
 Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoint &endpoint) {
+    if (config.run_type != Config::SERVER) {
+        return AcceptDecision::StartSession;
+    }
     if (abuse_controller.is_ip_in_cooldown(endpoint)) {
         return AcceptDecision::RejectCooldown;
     }
@@ -400,7 +403,9 @@ bool Service::handle_accept_completion(const shared_ptr<Session> &session,
                 session->accept_socket().close(close_ec);
             } else {
                 ++runtime_metrics.accepted_connections_total;
-                ++runtime_metrics.active_sessions;
+                if (config.run_type == Config::SERVER) {
+                    ++runtime_metrics.active_sessions;
+                }
                 Log::log_with_endpoint(endpoint, success_log_message);
                 session->start();
             }
