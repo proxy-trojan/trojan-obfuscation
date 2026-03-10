@@ -49,12 +49,10 @@ private:
     std::function<bool()> record_fallback_connection;
     bool connection_slot_acquired;
     bool handle_fallback_budget();
-    void connect_outbound(const std::string &query_addr, const std::string &query_port);
+    void connect_outbound(const ConnectTarget &target);
     void handle_authenticated_tcp(const SessionGate::SessionDecision &gate_result);
     void handle_authenticated_udp(const SessionGate::SessionDecision &gate_result);
-    void handle_fallback(const SessionGate::SessionDecision &gate_result,
-                         const std::string &query_addr,
-                         const std::string &query_port);
+    void handle_fallback(const SessionGate::SessionDecision &gate_result);
     
     bool fallback_slot_acquired;
     std::string auth_password;

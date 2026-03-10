@@ -8,15 +8,15 @@ OutboundDialer::OutboundDialer(const Config &config) : config(config) {}
 
 void OutboundDialer::resolve_tcp(tcp::resolver &resolver,
                                  const tcp::endpoint &in_endpoint,
-                                 const string &query_addr,
-                                 const string &query_port,
+                                 const ConnectTarget &target,
                                  ResolveSuccess on_success,
                                  FailureHandler on_failure) const {
-    resolver.async_resolve(query_addr, query_port,
-        [this, in_endpoint, query_addr, on_success = std::move(on_success), on_failure = std::move(on_failure)]
+    const string query_port = to_string(target.port);
+    resolver.async_resolve(target.host, query_port,
+        [this, in_endpoint, target, on_success = std::move(on_success), on_failure = std::move(on_failure)]
         (const boost::system::error_code error, const tcp::resolver::results_type& results) mutable {
             if (error || results.empty()) {
-                on_failure("cannot resolve remote server hostname " + query_addr + ": " + error.message());
+                on_failure("cannot resolve remote server hostname " + target.host + ": " + error.message());
                 return;
             }
             auto iterator = results.begin();
@@ -29,7 +29,7 @@ void OutboundDialer::resolve_tcp(tcp::resolver &resolver,
                     }
                 }
             }
-            Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
+            Log::log_with_endpoint(in_endpoint, target.host + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
             on_success(iterator);
         });
 }
@@ -37,8 +37,7 @@ void OutboundDialer::resolve_tcp(tcp::resolver &resolver,
 void OutboundDialer::connect_tcp(tcp::socket &socket,
                                  tcp::resolver::results_type::const_iterator endpoint,
                                  const tcp::endpoint &in_endpoint,
-                                 const string &query_addr,
-                                 const string &query_port,
+                                 const ConnectTarget &target,
                                  ConnectSuccess on_success,
                                  FailureHandler on_failure) const {
     boost::system::error_code ec;
@@ -61,10 +60,10 @@ void OutboundDialer::connect_tcp(tcp::socket &socket,
     }
 #endif // TCP_FASTOPEN_CONNECT
     socket.async_connect(*endpoint,
-        [in_endpoint, query_addr, query_port, on_success = std::move(on_success), on_failure = std::move(on_failure)]
+        [in_endpoint, target, on_success = std::move(on_success), on_failure = std::move(on_failure)]
         (const boost::system::error_code error) mutable {
             if (error) {
-                on_failure("cannot establish connection to remote server " + query_addr + ':' + query_port + ": " + error.message());
+                on_failure("cannot establish connection to remote server " + target.host + ':' + to_string(target.port) + ": " + error.message());
                 return;
             }
             Log::log_with_endpoint(in_endpoint, "tunnel established");

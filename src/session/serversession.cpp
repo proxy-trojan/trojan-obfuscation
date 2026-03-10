@@ -192,21 +192,19 @@ bool ServerSession::handle_fallback_budget() {
     return true;
 }
 
-void ServerSession::connect_outbound(const string &query_addr, const string &query_port) {
+void ServerSession::connect_outbound(const ConnectTarget &target) {
     sent_len += out_write_buf.length();
     auto self = shared_from_this();
     outbound_dialer.resolve_tcp(
         resolver,
         in_endpoint,
-        query_addr,
-        query_port,
-        [this, self, query_addr, query_port](tcp::resolver::results_type::const_iterator iterator) {
+        target,
+        [this, self, target](tcp::resolver::results_type::const_iterator iterator) {
             outbound_dialer.connect_tcp(
                 out_socket,
                 iterator,
                 in_endpoint,
-                query_addr,
-                query_port,
+                target,
                 [this, self]() {
                     status = FORWARD;
                     out_async_read();
@@ -233,7 +231,7 @@ void ServerSession::handle_authenticated_tcp(const SessionGate::SessionDecision 
         "requested connection to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port),
         Log::INFO);
     out_write_buf = gate_result.outbound_payload;
-    connect_outbound(gate_result.target.host, to_string(gate_result.target.port));
+    connect_outbound(gate_result.target);
 }
 
 void ServerSession::handle_authenticated_udp(const SessionGate::SessionDecision &gate_result) {
@@ -247,16 +245,17 @@ void ServerSession::handle_authenticated_udp(const SessionGate::SessionDecision 
     udp_sent();
 }
 
-void ServerSession::handle_fallback(const SessionGate::SessionDecision &gate_result,
-                                    const string &query_addr,
-                                    const string &query_port) {
+void ServerSession::handle_fallback(const SessionGate::SessionDecision &gate_result) {
     if (!handle_fallback_budget()) {
         return;
     }
 
-    Log::log_with_endpoint(in_endpoint, "not trojan request, connecting to " + query_addr + ':' + query_port, Log::WARN);
+    Log::log_with_endpoint(
+        in_endpoint,
+        "not trojan request, connecting to " + gate_result.target.host + ':' + to_string(gate_result.target.port),
+        Log::WARN);
     out_write_buf = gate_result.outbound_payload;
-    connect_outbound(query_addr, query_port);
+    connect_outbound(gate_result.target);
 }
 
 void ServerSession::in_recv(size_t length) {
@@ -287,9 +286,6 @@ void ServerSession::in_recv(size_t length) {
             Log::log_with_endpoint(in_endpoint, "valid trojan request structure but authentication failed", Log::WARN);
         }
 
-        const string query_addr = gate_result.target.host;
-        const string query_port = to_string(gate_result.target.port);
-
         if (gate_result.path == SessionGate::Path::AUTHENTICATED_UDP) {
             handle_authenticated_udp(gate_result);
             return;
@@ -298,7 +294,7 @@ void ServerSession::in_recv(size_t length) {
         if (gate_result.path == SessionGate::Path::AUTHENTICATED_TCP) {
             handle_authenticated_tcp(gate_result);
         } else {
-            handle_fallback(gate_result, query_addr, query_port);
+            handle_fallback(gate_result);
         }
     } else if (status == FORWARD) {
         sent_len += length;
