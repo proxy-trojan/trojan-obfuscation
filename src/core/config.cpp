@@ -126,6 +126,15 @@ void Config::populate(const ptree &tree) {
     external_front.test_negotiated_alpn = tree.get("external_front.test_negotiated_alpn", std::string());
     external_front.test_tls_terminated_by_front = tree.get("external_front.test_tls_terminated_by_front", false);
     external_front.test_metadata_verified = tree.get("external_front.test_metadata_verified", false);
+    external_front.enable_trusted_internal_handoff_stub = tree.get("external_front.enable_trusted_internal_handoff_stub", false);
+    external_front.trusted_internal_source_name = tree.get("external_front.trusted_internal_source_name", std::string());
+    external_front.trusted_internal_front_id = tree.get("external_front.trusted_internal_front_id", std::string());
+    external_front.trusted_internal_original_client_ip = tree.get("external_front.trusted_internal_original_client_ip", std::string());
+    external_front.trusted_internal_original_client_port = tree.get("external_front.trusted_internal_original_client_port", 0);
+    external_front.trusted_internal_server_name = tree.get("external_front.trusted_internal_server_name", std::string());
+    external_front.trusted_internal_negotiated_alpn = tree.get("external_front.trusted_internal_negotiated_alpn", std::string());
+    external_front.trusted_internal_tls_terminated_by_front = tree.get("external_front.trusted_internal_tls_terminated_by_front", false);
+    external_front.trusted_internal_metadata_verified = tree.get("external_front.trusted_internal_metadata_verified", false);
 }
 
 bool Config::sip003() {

@@ -7,6 +7,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include "core/config.h"
+#include "core/config_trusted_internal_handoff_source_stub.h"
 #include "core/external_front_handoff_builder.h"
 #include "core/external_front_handoff_contract.h"
 #include "core/external_front_inbound.h"
@@ -76,6 +77,15 @@ Config make_test_config() {
     config.external_front.test_negotiated_alpn = "";
     config.external_front.test_tls_terminated_by_front = false;
     config.external_front.test_metadata_verified = false;
+    config.external_front.enable_trusted_internal_handoff_stub = false;
+    config.external_front.trusted_internal_source_name = "";
+    config.external_front.trusted_internal_front_id = "";
+    config.external_front.trusted_internal_original_client_ip = "";
+    config.external_front.trusted_internal_original_client_port = 0;
+    config.external_front.trusted_internal_server_name = "";
+    config.external_front.trusted_internal_negotiated_alpn = "";
+    config.external_front.trusted_internal_tls_terminated_by_front = false;
+    config.external_front.trusted_internal_metadata_verified = false;
     return config;
 }
 
@@ -478,6 +488,39 @@ void test_config_external_front_metadata_provider_respects_enablement() {
                 "injection result should preserve trusted front id");
 }
 
+void test_config_trusted_internal_handoff_source_stub_respects_enablement() {
+    Config disabled = make_test_config();
+    ConfigTrustedInternalHandoffSourceStub disabled_stub(disabled);
+    expect_true(!disabled_stub.active(), "trusted-internal source stub should report inactive when disabled");
+    auto disabled_input = disabled_stub.maybe_build_input();
+    expect_true(!disabled_input.has_value(), "trusted-internal source stub should not build input when disabled");
+
+    Config enabled = make_test_config();
+    enabled.external_front.enabled = true;
+    enabled.external_front.enable_trusted_internal_handoff_stub = true;
+    enabled.external_front.trusted_internal_source_name = "internal_handoff_source";
+    enabled.external_front.trusted_internal_front_id = "internal-front";
+    enabled.external_front.trusted_internal_original_client_ip = "203.0.113.11";
+    enabled.external_front.trusted_internal_original_client_port = 45679;
+    enabled.external_front.trusted_internal_server_name = "front.example.com";
+    enabled.external_front.trusted_internal_negotiated_alpn = "h2";
+    enabled.external_front.trusted_internal_tls_terminated_by_front = true;
+    enabled.external_front.trusted_internal_metadata_verified = true;
+
+    ConfigTrustedInternalHandoffSourceStub enabled_stub(enabled);
+    expect_true(enabled_stub.active(), "trusted-internal source stub should report active when enabled");
+    auto enabled_input = enabled_stub.maybe_build_input();
+    expect_true(enabled_input.has_value(), "trusted-internal source stub should build input when enabled");
+    expect_true(enabled_input->source_name == "internal_handoff_source", "trusted-internal source stub should preserve source name");
+    expect_true(enabled_input->trusted_front_id == "internal-front", "trusted-internal source stub should preserve trusted front id");
+    expect_true(enabled_input->original_client_ip == "203.0.113.11", "trusted-internal source stub should preserve original client ip");
+    expect_true(enabled_input->original_client_port == 45679, "trusted-internal source stub should preserve original client port");
+    expect_true(enabled_input->server_name == "front.example.com", "trusted-internal source stub should preserve server name");
+    expect_true(enabled_input->negotiated_alpn == "h2", "trusted-internal source stub should preserve negotiated ALPN");
+    expect_true(enabled_input->tls_terminated_by_front, "trusted-internal source stub should preserve tls termination flag");
+    expect_true(enabled_input->metadata_verified, "trusted-internal source stub should preserve metadata verified flag");
+}
+
 void test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input() {
     TrustedInternalHandoffInputContract contract;
 
@@ -681,6 +724,7 @@ int main() {
         test_external_front_inbound_evaluates_fallback_with_alpn_override();
         test_external_front_trust_policy_requires_front_id_client_identity_and_verified_tls();
         test_config_external_front_metadata_provider_respects_enablement();
+        test_config_trusted_internal_handoff_source_stub_respects_enablement();
         test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input();
         test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs();
         test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context();

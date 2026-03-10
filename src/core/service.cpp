@@ -53,6 +53,7 @@ Service::Service(Config &config, bool test) :
     abuse_controller(config.abuse_control),
     runtime_metrics(),
     fallback_controller(config.abuse_control, runtime_metrics),
+    trusted_internal_handoff_source_stub(config),
     external_front_metadata_provider(config),
     ssl_context(context::sslv23),
     auth(nullptr),
@@ -358,6 +359,20 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
 }
 
 std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff() {
+    auto trusted_internal_input = trusted_internal_handoff_source_stub.maybe_build_input();
+    if (trusted_internal_handoff_source_stub.active()) {
+        auto trusted_internal_handoff = trusted_internal_input.has_value()
+            ? external_front_handoff_builder.maybe_build_trusted_internal_handoff(*trusted_internal_input)
+            : std::nullopt;
+        if (!trusted_internal_handoff.has_value()) {
+            Log::log_with_date_time(
+                "trusted-internal handoff source active but input was rejected",
+                Log::WARN);
+            return std::nullopt;
+        }
+        return trusted_internal_handoff;
+    }
+
     auto injection = external_front_metadata_provider.evaluate_injection();
 
     if (injection.decision == ExternalFrontMetadataProvider::Decision::Inactive) {

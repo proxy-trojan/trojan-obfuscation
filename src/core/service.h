@@ -32,6 +32,7 @@
 #include "authenticator.h"
 #include "fallback_controller.h"
 #include "runtime_metrics.h"
+#include "config_trusted_internal_handoff_source_stub.h"
 #include "external_front_handoff_builder.h"
 #include "external_front_handoff_contract.h"
 #include "external_front_metadata_provider.h"
@@ -82,6 +83,7 @@ private:
     FallbackController fallback_controller;
     ExternalFrontHandoffBuilder external_front_handoff_builder;
     ExternalFrontHandoffContract external_front_handoff_contract;
+    ConfigTrustedInternalHandoffSourceStub trusted_internal_handoff_source_stub;
     ConfigExternalFrontMetadataProvider external_front_metadata_provider;
 
     // 共享资源

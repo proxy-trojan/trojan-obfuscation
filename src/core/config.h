@@ -104,6 +104,15 @@ public:
         std::string test_negotiated_alpn;
         bool test_tls_terminated_by_front;
         bool test_metadata_verified;
+        bool enable_trusted_internal_handoff_stub;
+        std::string trusted_internal_source_name;
+        std::string trusted_internal_front_id;
+        std::string trusted_internal_original_client_ip;
+        uint16_t trusted_internal_original_client_port;
+        std::string trusted_internal_server_name;
+        std::string trusted_internal_negotiated_alpn;
+        bool trusted_internal_tls_terminated_by_front;
+        bool trusted_internal_metadata_verified;
     } external_front;
 
     void load(const std::string &filename);

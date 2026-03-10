@@ -135,6 +135,7 @@ else()
                    src/proto/socks5address.cpp
                    src/core/relay_executor.cpp
                    src/core/outbound_dialer.cpp
+                   src/core/config_trusted_internal_handoff_source_stub.cpp
                    src/core/external_front_handoff_builder.cpp
                    src/core/external_front_handoff_contract.cpp
                    src/core/trusted_internal_handoff_input.cpp
