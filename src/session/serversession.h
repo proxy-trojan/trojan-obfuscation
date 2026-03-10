@@ -96,7 +96,12 @@ private:
                             size_t packet_length,
                             const std::string &query_addr,
                             uint16_t query_port);
+    boost::asio::ip::udp::resolver::results_type::const_iterator choose_udp_target_endpoint(
+        const boost::asio::ip::udp::resolver::results_type &results) const;
     void ensure_udp_socket_open(const boost::asio::ip::udp::endpoint::protocol_type &protocol);
+    void dispatch_udp_payload(const std::string &payload,
+                              size_t packet_length,
+                              const boost::asio::ip::udp::endpoint &endpoint);
     void handle_udp_resolved_packet(const std::string &payload,
                                     size_t packet_length,
                                     const std::string &query_addr,

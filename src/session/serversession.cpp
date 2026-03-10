@@ -334,6 +334,21 @@ void ServerSession::resolve_udp_target(const string &payload,
     });
 }
 
+udp::resolver::results_type::const_iterator ServerSession::choose_udp_target_endpoint(
+    const udp::resolver::results_type &results) const {
+    auto iterator = results.begin();
+    if (config.tcp.prefer_ipv4) {
+        for (auto it = results.begin(); it != results.end(); ++it) {
+            const auto &addr = it->endpoint().address();
+            if (addr.is_v4()) {
+                iterator = it;
+                break;
+            }
+        }
+    }
+    return iterator;
+}
+
 void ServerSession::ensure_udp_socket_open(const udp::endpoint::protocol_type &protocol) {
     if (udp_socket.is_open()) {
         return;
@@ -349,27 +364,24 @@ void ServerSession::ensure_udp_socket_open(const udp::endpoint::protocol_type &p
     udp_async_read();
 }
 
-void ServerSession::handle_udp_resolved_packet(const string &payload,
-                                               size_t packet_length,
-                                               const string &query_addr,
-                                               const udp::resolver::results_type &results) {
-    auto iterator = results.begin();
-    if (config.tcp.prefer_ipv4) {
-        for (auto it = results.begin(); it != results.end(); ++it) {
-            const auto &addr = it->endpoint().address();
-            if (addr.is_v4()) {
-                iterator = it;
-                break;
-            }
-        }
-    }
-    Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
-    ensure_udp_socket_open(iterator->endpoint().protocol());
+void ServerSession::dispatch_udp_payload(const string &payload,
+                                         size_t packet_length,
+                                         const udp::endpoint &endpoint) {
+    ensure_udp_socket_open(endpoint.protocol());
     if (!udp_socket.is_open()) {
         return;
     }
     sent_len += packet_length;
-    udp_async_write(payload, *iterator);
+    udp_async_write(payload, endpoint);
+}
+
+void ServerSession::handle_udp_resolved_packet(const string &payload,
+                                               size_t packet_length,
+                                               const string &query_addr,
+                                               const udp::resolver::results_type &results) {
+    auto iterator = choose_udp_target_endpoint(results);
+    Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
+    dispatch_udp_payload(payload, packet_length, *iterator);
 }
 
 void ServerSession::udp_sent() {
