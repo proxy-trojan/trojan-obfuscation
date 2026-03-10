@@ -240,6 +240,12 @@ void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
 
 ServerIngressSelector::Selection ServerSession::select_ingress() const {
     if (external_front_context.has_value()) {
+        auto observation = ingress_selector.observe_external_front(*external_front_context);
+        if (observation.status == ServerIngressSelector::ObservationStatus::ExternalFrontTrusted) {
+            Log::log_with_endpoint(in_endpoint, "external-front metadata accepted: " + observation.reason, Log::INFO);
+        } else {
+            Log::log_with_endpoint(in_endpoint, "external-front metadata rejected: " + observation.reason, Log::WARN);
+        }
         return ingress_selector.select_external_front(*external_front_context);
     }
     return ingress_selector.select_default();
