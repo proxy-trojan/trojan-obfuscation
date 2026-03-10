@@ -357,26 +357,36 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
     return AcceptDecision::StartSession;
 }
 
-void Service::maybe_inject_external_front_context(ServerSession &session) {
+std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff() {
     auto injection = external_front_metadata_provider.evaluate_injection();
 
     if (injection.decision == ExternalFrontMetadataProvider::Decision::Inactive) {
-        return;
+        return std::nullopt;
     }
 
     if (injection.decision == ExternalFrontMetadataProvider::Decision::ActiveNoMetadata) {
         Log::log_with_date_time(
             "external-front metadata provider active without context: " + injection.mode,
             Log::WARN);
+        return std::nullopt;
+    }
+
+    ExternalFrontHandoff handoff;
+    handoff.source_kind = ExternalFrontHandoffSourceKind::TestInjected;
+    handoff.source_name = injection.mode;
+    handoff.context = std::move(injection.context);
+    return handoff;
+}
+
+void Service::maybe_apply_external_front_handoff(ServerSession &session, std::optional<ExternalFrontHandoff> handoff) {
+    if (!handoff.has_value() || !handoff->has_context()) {
         return;
     }
 
-    if (injection.context.has_value()) {
-        session.set_external_front_context(std::move(*injection.context));
-        Log::log_with_date_time(
-            "external-front context injected by provider mode: " + injection.mode,
-            Log::INFO);
-    }
+    Log::log_with_date_time(
+        "external-front handoff applied: " + handoff->source_name,
+        Log::INFO);
+    session.set_external_front_handoff(std::move(*handoff));
 }
 
 shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context) {
@@ -386,7 +396,8 @@ shared_ptr<Session> Service::create_server_session(boost::asio::io_context &targ
         [this]() { record_auth_success(); },
         [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
         [this]() { return record_fallback_connection(); });
-    maybe_inject_external_front_context(*session);
+    auto external_front_handoff = maybe_build_external_front_handoff();
+    maybe_apply_external_front_handoff(*session, std::move(external_front_handoff));
     return session;
 }
 

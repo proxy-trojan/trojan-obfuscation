@@ -102,7 +102,8 @@ private:
     void release_fallback_slot();
     bool record_fallback_connection();
     AcceptDecision evaluate_incoming_connection(const boost::asio::ip::tcp::endpoint &endpoint);
-    void maybe_inject_external_front_context(ServerSession &session);
+    std::optional<ExternalFrontHandoff> maybe_build_external_front_handoff();
+    void maybe_apply_external_front_handoff(ServerSession &session, std::optional<ExternalFrontHandoff> handoff);
     std::shared_ptr<Session> create_server_session(boost::asio::io_context &target_io_context);
     std::shared_ptr<Session> create_session(boost::asio::io_context &target_io_context);
     bool handle_accept_completion(const std::shared_ptr<Session> &session,

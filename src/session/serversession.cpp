@@ -239,24 +239,24 @@ void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
 }
 
 ServerIngressSelector::Selection ServerSession::select_ingress() const {
-    if (external_front_context.has_value()) {
-        auto observation = ingress_selector.observe_external_front(*external_front_context);
+    if (external_front_handoff.has_value() && external_front_handoff->context.has_value()) {
+        auto observation = ingress_selector.observe_external_front(*external_front_handoff->context);
         if (observation.status == ServerIngressSelector::ObservationStatus::ExternalFrontTrusted) {
             Log::log_with_endpoint(in_endpoint, "external-front metadata accepted: " + observation.reason, Log::INFO);
         } else {
             Log::log_with_endpoint(in_endpoint, "external-front metadata rejected: " + observation.reason, Log::WARN);
         }
-        return ingress_selector.select_external_front(*external_front_context);
+        return ingress_selector.select_external_front(*external_front_handoff->context);
     }
     return ingress_selector.select_default();
 }
 
-void ServerSession::set_external_front_context(ExternalFrontContext front_context) {
-    external_front_context = std::move(front_context);
+void ServerSession::set_external_front_handoff(ExternalFrontHandoff handoff) {
+    external_front_handoff = std::move(handoff);
 }
 
-void ServerSession::clear_external_front_context() {
-    external_front_context.reset();
+void ServerSession::clear_external_front_handoff() {
+    external_front_handoff.reset();
 }
 
 void ServerSession::handle_handshake_payload(string_view data) {

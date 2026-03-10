@@ -2,6 +2,7 @@
 #define _SESSION_TYPES_H_
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -40,6 +41,22 @@ struct ExternalFrontContext {
     std::string ingress_mode;
     bool tls_terminated_by_front{false};
     bool metadata_verified{false};
+};
+
+enum class ExternalFrontHandoffSourceKind {
+    Unknown,
+    TestInjected,
+    TrustedInternalHandoff
+};
+
+struct ExternalFrontHandoff {
+    ExternalFrontHandoffSourceKind source_kind{ExternalFrontHandoffSourceKind::Unknown};
+    std::string source_name;
+    std::optional<ExternalFrontContext> context;
+
+    bool has_context() const {
+        return context.has_value();
+    }
 };
 
 enum class RelayMode {
