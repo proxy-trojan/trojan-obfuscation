@@ -322,6 +322,9 @@ Candidate experiment themes:
 - one explicitly chosen direction
 - a short list of deferred alternatives
 
+Current decision draft:
+- `docs/phase-3c-direction.md`
+
 ---
 
 # Risks
