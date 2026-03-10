@@ -41,7 +41,7 @@ ServerSession::ServerSession(const Config &config,
     udp_resolver(io_context),
     auth(auth),
     embedded_tls_inbound(config, auth),
-    outbound_dialer(config),
+    relay_executor(config),
     release_connection_slot(std::move(release_connection_slot)),
     release_fallback_slot(std::move(release_fallback_slot)),
     record_auth_success(std::move(record_auth_success)),
@@ -178,51 +178,39 @@ void ServerSession::udp_async_write(const string &data, const udp::endpoint &end
     });
 }
 
-bool ServerSession::handle_fallback_budget() {
-    if (!record_fallback_connection) {
-        return true;
-    }
-
-    fallback_slot_acquired = record_fallback_connection();
-    if (!fallback_slot_acquired) {
-        Log::log_with_endpoint(in_endpoint, "fallback rejected: active fallback session budget exhausted", Log::WARN);
-        destroy();
-        return false;
-    }
-    return true;
-}
-
-void ServerSession::connect_outbound(const ConnectTarget &target) {
+void ServerSession::connect_outbound(const ConnectTarget &target, bool requires_fallback_slot) {
     sent_len += out_write_buf.length();
     auto self = shared_from_this();
-    outbound_dialer.resolve_tcp(
+    auto started = relay_executor.begin_tcp_relay(
         resolver,
+        out_socket,
         in_endpoint,
         target,
-        [this, self, target](tcp::resolver::results_type::const_iterator iterator) {
-            outbound_dialer.connect_tcp(
-                out_socket,
-                iterator,
-                in_endpoint,
-                target,
-                [this, self]() {
-                    status = FORWARD;
-                    out_async_read();
-                    if (!out_write_buf.empty()) {
-                        out_async_write(out_write_buf);
-                    } else {
-                        in_async_read();
-                    }
-                },
-                [this, self](const string &message) {
-                    Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
-                    destroy();
-                });
+        requires_fallback_slot,
+        [this]() {
+            if (!record_fallback_connection) {
+                return true;
+            }
+            fallback_slot_acquired = record_fallback_connection();
+            return fallback_slot_acquired;
+        },
+        [this, self]() {
+            status = FORWARD;
+            out_async_read();
+            if (!out_write_buf.empty()) {
+                out_async_write(out_write_buf);
+            } else {
+                in_async_read();
+            }
         },
         [this, self](const string &message) {
-            Log::log_with_endpoint(in_endpoint, message, Log::ERROR);
+            Log::log_with_endpoint(in_endpoint, message, message.rfind("fallback rejected:", 0) == 0 ? Log::WARN : Log::ERROR);
             destroy();
         });
+
+    if (!started) {
+        return;
+    }
 }
 
 void ServerSession::handle_authenticated_tcp(const SessionGate::SessionDecision &gate_result) {
@@ -231,7 +219,7 @@ void ServerSession::handle_authenticated_tcp(const SessionGate::SessionDecision 
         "requested connection to " + gate_result.request.address.address + ':' + to_string(gate_result.request.address.port),
         Log::INFO);
     out_write_buf = gate_result.outbound_payload;
-    connect_outbound(gate_result.target);
+    connect_outbound(gate_result.target, false);
 }
 
 void ServerSession::handle_authenticated_udp(const SessionGate::SessionDecision &gate_result) {
@@ -246,16 +234,12 @@ void ServerSession::handle_authenticated_udp(const SessionGate::SessionDecision 
 }
 
 void ServerSession::handle_fallback(const SessionGate::SessionDecision &gate_result) {
-    if (!handle_fallback_budget()) {
-        return;
-    }
-
     Log::log_with_endpoint(
         in_endpoint,
         "not trojan request, connecting to " + gate_result.target.host + ':' + to_string(gate_result.target.port),
         Log::WARN);
     out_write_buf = gate_result.outbound_payload;
-    connect_outbound(gate_result.target);
+    connect_outbound(gate_result.target, true);
 }
 
 void ServerSession::in_recv(size_t length) {
