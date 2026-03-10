@@ -75,6 +75,12 @@ private:
     void out_async_write(const std::string &data);
     void out_recv(size_t length);
     void out_sent();
+    enum class UdpDispatchDecision {
+        Proceed,
+        WaitForMoreData,
+        DestroySession
+    };
+
     struct UdpDispatchRequest {
         std::string payload;
         size_t packet_length{0};
@@ -85,7 +91,7 @@ private:
     void udp_async_read();
     void udp_async_write(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint);
     void udp_recv(size_t length, const boost::asio::ip::udp::endpoint &endpoint);
-    bool try_parse_udp_packet(UdpDispatchRequest &request);
+    UdpDispatchDecision try_parse_udp_packet(UdpDispatchRequest &request);
     void resolve_udp_target(const std::string &payload,
                             size_t packet_length,
                             const std::string &query_addr,

@@ -297,18 +297,16 @@ void ServerSession::udp_recv(size_t length, const udp::endpoint &endpoint) {
     }
 }
 
-bool ServerSession::try_parse_udp_packet(UdpDispatchRequest &request) {
+ServerSession::UdpDispatchDecision ServerSession::try_parse_udp_packet(UdpDispatchRequest &request) {
     UDPPacket packet;
     size_t packet_len;
     bool is_packet_valid = packet.parse(udp_data_buf, packet_len);
     if (!is_packet_valid) {
         if (udp_data_buf.length() > MAX_LENGTH) {
             Log::log_with_endpoint(in_endpoint, "UDP packet too long", Log::ERROR);
-            destroy();
-            return false;
+            return UdpDispatchDecision::DestroySession;
         }
-        in_async_read();
-        return false;
+        return UdpDispatchDecision::WaitForMoreData;
     }
 
     request.payload = packet.payload;
@@ -318,7 +316,7 @@ bool ServerSession::try_parse_udp_packet(UdpDispatchRequest &request) {
 
     Log::log_with_endpoint(in_endpoint, "sent a UDP packet of length " + to_string(request.packet_length) + " bytes to " + request.query_addr + ':' + to_string(request.query_port));
     udp_data_buf = udp_data_buf.substr(packet_len);
-    return true;
+    return UdpDispatchDecision::Proceed;
 }
 
 void ServerSession::resolve_udp_target(const string &payload,
@@ -377,7 +375,13 @@ void ServerSession::handle_udp_resolved_packet(const string &payload,
 void ServerSession::udp_sent() {
     if (status == UDP_FORWARD) {
         UdpDispatchRequest request;
-        if (!try_parse_udp_packet(request)) {
+        auto decision = try_parse_udp_packet(request);
+        if (decision == UdpDispatchDecision::WaitForMoreData) {
+            in_async_read();
+            return;
+        }
+        if (decision == UdpDispatchDecision::DestroySession) {
+            destroy();
             return;
         }
         resolve_udp_target(request.payload, request.packet_length, request.query_addr, request.query_port);
