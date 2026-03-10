@@ -238,8 +238,23 @@ void ServerSession::execute_plan(const RelayExecutionPlan &plan) {
     destroy();
 }
 
+ServerIngressSelector::Selection ServerSession::select_ingress() const {
+    if (external_front_context.has_value()) {
+        return ingress_selector.select_external_front(*external_front_context);
+    }
+    return ingress_selector.select_default();
+}
+
+void ServerSession::set_external_front_context(ExternalFrontContext front_context) {
+    external_front_context = std::move(front_context);
+}
+
+void ServerSession::clear_external_front_context() {
+    external_front_context.reset();
+}
+
 void ServerSession::handle_handshake_payload(string_view data) {
-    auto ingress_selection = ingress_selector.select_default();
+    auto ingress_selection = select_ingress();
     auto gate_result = ingress_selector.evaluate(ingress_selection, in_endpoint, in_socket, data);
     admission_runtime.apply_auth_result(in_endpoint, gate_result, auth_password);
     auto execution_plan = relay_executor.build_execution_plan(gate_result);
