@@ -100,6 +100,9 @@ private:
     AcceptDecision evaluate_incoming_connection(const boost::asio::ip::tcp::endpoint &endpoint);
     std::shared_ptr<Session> create_server_session(boost::asio::io_context &target_io_context);
     std::shared_ptr<Session> create_session(boost::asio::io_context &target_io_context);
+    void handle_accept_completion(const std::shared_ptr<Session> &session,
+                                  const boost::system::error_code &error,
+                                  const std::string &success_log_message);
     
     void async_accept();  // 单 io_context 模式
     void async_accept_worker(size_t worker_index);  // 多 io_context 模式
