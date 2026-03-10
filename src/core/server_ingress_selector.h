@@ -14,6 +14,22 @@
 
 class ServerIngressSelector {
 public:
+    enum class ObservationStatus {
+        EmbeddedTlsDefault,
+        ExternalFrontDisabled,
+        ExternalFrontTrusted,
+        ExternalFrontRejected
+    };
+
+    struct Observation {
+        ObservationStatus status{ObservationStatus::EmbeddedTlsDefault};
+        std::string reason;
+
+        bool external_front_active() const {
+            return status == ObservationStatus::ExternalFrontTrusted;
+        }
+    };
+
     struct Selection {
         InboundMode mode{InboundMode::EmbeddedTls};
         std::optional<ExternalFrontContext> external_front_context;
@@ -22,6 +38,8 @@ public:
     ServerIngressSelector(const Config &config, Authenticator *auth);
 
     bool external_front_enabled() const;
+    Observation observe_default() const;
+    Observation observe_external_front(const ExternalFrontContext &front_context) const;
     Selection select_default() const;
     Selection select_external_front(const ExternalFrontContext &front_context) const;
 

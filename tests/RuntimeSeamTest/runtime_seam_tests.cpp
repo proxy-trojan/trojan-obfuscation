@@ -420,6 +420,9 @@ void test_server_ingress_selector_routes_external_front_selection() {
 
     ServerIngressSelector disabled_selector(disabled_config, nullptr);
     expect_true(!disabled_selector.external_front_enabled(), "external front ingress mode should be disabled by default");
+    auto default_observation = disabled_selector.observe_default();
+    expect_true(default_observation.status == ServerIngressSelector::ObservationStatus::EmbeddedTlsDefault, "default observation should report embedded tls default");
+    expect_true(default_observation.reason == "embedded_tls_default", "default observation should carry embedded tls reason");
     auto default_selection = disabled_selector.select_default();
     expect_true(default_selection.mode == InboundMode::EmbeddedTls, "default ingress selection should remain embedded tls");
     expect_true(!default_selection.external_front_context.has_value(), "default ingress selection should not carry external front metadata");
@@ -432,6 +435,10 @@ void test_server_ingress_selector_routes_external_front_selection() {
     front_context.tls_terminated_by_front = true;
     front_context.metadata_verified = true;
 
+    auto disabled_observation = disabled_selector.observe_external_front(front_context);
+    expect_true(disabled_observation.status == ServerIngressSelector::ObservationStatus::ExternalFrontDisabled, "disabled external front mode should report disabled observation status");
+    expect_true(disabled_observation.reason == "external_front_disabled", "disabled external front mode should report disabled reason");
+
     auto disabled_selection = disabled_selector.select_external_front(front_context);
     expect_true(disabled_selection.mode == InboundMode::EmbeddedTls, "disabled external front mode should fall back to embedded tls selection");
     expect_true(!disabled_selection.external_front_context.has_value(), "disabled external front mode should not carry external front metadata");
@@ -440,6 +447,16 @@ void test_server_ingress_selector_routes_external_front_selection() {
     enabled_config.external_front.enabled = true;
     ServerIngressSelector enabled_selector(enabled_config, nullptr);
     expect_true(enabled_selector.external_front_enabled(), "external front ingress mode should be enabled when configured");
+
+    ExternalFrontContext rejected_front_context = front_context;
+    rejected_front_context.metadata_verified = false;
+    auto rejected_observation = enabled_selector.observe_external_front(rejected_front_context);
+    expect_true(rejected_observation.status == ServerIngressSelector::ObservationStatus::ExternalFrontRejected, "untrusted metadata should report rejected observation status");
+    expect_true(rejected_observation.reason == "missing_verified_tls_termination", "untrusted metadata should expose validation reason");
+
+    auto enabled_observation = enabled_selector.observe_external_front(front_context);
+    expect_true(enabled_observation.status == ServerIngressSelector::ObservationStatus::ExternalFrontTrusted, "trusted metadata should report trusted observation status");
+    expect_true(enabled_observation.reason == "trusted", "trusted metadata should expose trusted reason");
 
     auto enabled_selection = enabled_selector.select_external_front(front_context);
     expect_true(enabled_selection.mode == InboundMode::ExternalFront, "enabled external front mode should use external front selection");

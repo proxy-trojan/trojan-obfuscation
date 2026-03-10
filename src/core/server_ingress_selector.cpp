@@ -10,12 +10,28 @@ bool ServerIngressSelector::external_front_enabled() const {
     return external_front_mode_enabled;
 }
 
+ServerIngressSelector::Observation ServerIngressSelector::observe_default() const {
+    return {ObservationStatus::EmbeddedTlsDefault, "embedded_tls_default"};
+}
+
+ServerIngressSelector::Observation ServerIngressSelector::observe_external_front(const ExternalFrontContext &front_context) const {
+    if (!external_front_enabled()) {
+        return {ObservationStatus::ExternalFrontDisabled, "external_front_disabled"};
+    }
+    auto validation_result = external_front_inbound.validation_result(front_context);
+    if (!validation_result.trusted()) {
+        return {ObservationStatus::ExternalFrontRejected, external_front_validation_status_name(validation_result.status)};
+    }
+    return {ObservationStatus::ExternalFrontTrusted, external_front_validation_status_name(validation_result.status)};
+}
+
 ServerIngressSelector::Selection ServerIngressSelector::select_default() const {
     return Selection{};
 }
 
 ServerIngressSelector::Selection ServerIngressSelector::select_external_front(const ExternalFrontContext &front_context) const {
-    if (!external_front_enabled()) {
+    auto observation = observe_external_front(front_context);
+    if (observation.status != ObservationStatus::ExternalFrontTrusted) {
         return select_default();
     }
     Selection selection;
