@@ -130,6 +130,7 @@ else()
                    src/core/session_lifecycle_runtime.cpp
                    src/core/relay_executor.cpp
                    src/core/outbound_dialer.cpp
+                   src/core/external_front_inbound.cpp
                    src/core/authenticator.cpp
                    src/core/config.cpp
                    src/core/log.cpp)

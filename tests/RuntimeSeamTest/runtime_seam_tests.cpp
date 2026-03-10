@@ -7,6 +7,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include "core/config.h"
+#include "core/external_front_inbound.h"
 #include "core/log.h"
 #include "core/relay_executor.h"
 #include "core/session_admission_runtime.h"
@@ -294,6 +295,43 @@ void test_relay_executor_begin_tcp_relay_fast_fails_when_fallback_slot_denied() 
     expect_true(failure_message == "fallback rejected: active fallback session budget exhausted", "fast-fail path should report fallback budget exhaustion");
 }
 
+void test_external_front_inbound_builds_context_from_verified_metadata() {
+    ExternalFrontInbound inbound;
+    ExternalFrontContext front_context;
+    front_context.trusted_front_id = "front-1";
+    front_context.original_client_ip = "203.0.113.10";
+    front_context.original_client_port = 45678;
+    front_context.server_name = "example.com";
+    front_context.negotiated_alpn = "h2";
+    front_context.ingress_mode = "external_front";
+    front_context.tls_terminated_by_front = true;
+    front_context.metadata_verified = true;
+
+    SessionContext context = inbound.build_context(front_context);
+
+    expect_true(context.source_ip == "203.0.113.10", "external front context should preserve original client ip");
+    expect_true(context.source_port == 45678, "external front context should preserve original client port");
+    expect_true(context.selected_alpn == "h2", "external front context should preserve negotiated ALPN");
+    expect_true(context.tls_handshake_completed, "verified front-terminated tls should be treated as handshake completed");
+    expect_true(context.inbound_mode == InboundMode::ExternalFront, "external front context should set inbound mode");
+}
+
+void test_external_front_inbound_validates_trusted_metadata() {
+    ExternalFrontInbound inbound;
+    ExternalFrontContext trusted;
+    trusted.trusted_front_id = "front-1";
+    trusted.original_client_ip = "203.0.113.10";
+    trusted.original_client_port = 45678;
+    trusted.tls_terminated_by_front = true;
+    trusted.metadata_verified = true;
+
+    ExternalFrontContext untrusted = trusted;
+    untrusted.metadata_verified = false;
+
+    expect_true(inbound.is_trusted_metadata(trusted), "verified external front metadata should be trusted");
+    expect_true(!inbound.is_trusted_metadata(untrusted), "unverified external front metadata should not be trusted");
+}
+
 } // namespace
 
 int main() {
@@ -311,6 +349,8 @@ int main() {
         test_relay_executor_build_execution_plan_for_authenticated_udp();
         test_relay_executor_build_execution_plan_for_fallback();
         test_relay_executor_begin_tcp_relay_fast_fails_when_fallback_slot_denied();
+        test_external_front_inbound_builds_context_from_verified_metadata();
+        test_external_front_inbound_validates_trusted_metadata();
 
         Log::reset();
         Log::set_callback({});

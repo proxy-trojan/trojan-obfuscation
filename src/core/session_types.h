@@ -31,6 +31,17 @@ struct SessionGateInput {
     std::string_view initial_data;
 };
 
+struct ExternalFrontContext {
+    std::string trusted_front_id;
+    std::string original_client_ip;
+    uint16_t original_client_port{0};
+    std::string server_name;
+    std::string negotiated_alpn;
+    std::string ingress_mode;
+    bool tls_terminated_by_front{false};
+    bool metadata_verified{false};
+};
+
 enum class RelayMode {
     StartTcpForward,
     StartUdpForward,
