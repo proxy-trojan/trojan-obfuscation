@@ -325,6 +325,7 @@ Candidate experiment themes:
 Current decision draft:
 - `docs/phase-3c-direction.md`
 - `docs/phase-3c-handoff-contract.md`
+- `docs/phase-3c-integration-note.md`
 - `docs/final-capability-comparison.md`
 
 ---
