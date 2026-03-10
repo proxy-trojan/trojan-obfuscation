@@ -297,6 +297,45 @@ void ServerSession::udp_recv(size_t length, const udp::endpoint &endpoint) {
     }
 }
 
+bool ServerSession::try_parse_udp_packet(UdpDispatchRequest &request) {
+    UDPPacket packet;
+    size_t packet_len;
+    bool is_packet_valid = packet.parse(udp_data_buf, packet_len);
+    if (!is_packet_valid) {
+        if (udp_data_buf.length() > MAX_LENGTH) {
+            Log::log_with_endpoint(in_endpoint, "UDP packet too long", Log::ERROR);
+            destroy();
+            return false;
+        }
+        in_async_read();
+        return false;
+    }
+
+    request.payload = packet.payload;
+    request.packet_length = packet.length;
+    request.query_addr = packet.address.address;
+    request.query_port = packet.address.port;
+
+    Log::log_with_endpoint(in_endpoint, "sent a UDP packet of length " + to_string(request.packet_length) + " bytes to " + request.query_addr + ':' + to_string(request.query_port));
+    udp_data_buf = udp_data_buf.substr(packet_len);
+    return true;
+}
+
+void ServerSession::resolve_udp_target(const string &payload,
+                                       size_t packet_length,
+                                       const string &query_addr,
+                                       uint16_t query_port) {
+    auto self = shared_from_this();
+    udp_resolver.async_resolve(query_addr, to_string(query_port), [this, self, payload, packet_length, query_addr](const boost::system::error_code error, const udp::resolver::results_type& results) {
+        if (error || results.empty()) {
+            Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + query_addr + ": " + error.message(), Log::ERROR);
+            destroy();
+            return;
+        }
+        handle_udp_resolved_packet(payload, packet_length, query_addr, results);
+    });
+}
+
 void ServerSession::ensure_udp_socket_open(const udp::endpoint::protocol_type &protocol) {
     if (udp_socket.is_open()) {
         return;
@@ -337,30 +376,11 @@ void ServerSession::handle_udp_resolved_packet(const string &payload,
 
 void ServerSession::udp_sent() {
     if (status == UDP_FORWARD) {
-        UDPPacket packet;
-        size_t packet_len;
-        bool is_packet_valid = packet.parse(udp_data_buf, packet_len);
-        if (!is_packet_valid) {
-            if (udp_data_buf.length() > MAX_LENGTH) {
-                Log::log_with_endpoint(in_endpoint, "UDP packet too long", Log::ERROR);
-                destroy();
-                return;
-            }
-            in_async_read();
+        UdpDispatchRequest request;
+        if (!try_parse_udp_packet(request)) {
             return;
         }
-        Log::log_with_endpoint(in_endpoint, "sent a UDP packet of length " + to_string(packet.length) + " bytes to " + packet.address.address + ':' + to_string(packet.address.port));
-        udp_data_buf = udp_data_buf.substr(packet_len);
-        string query_addr = packet.address.address;
-        auto self = shared_from_this();
-        udp_resolver.async_resolve(query_addr, to_string(packet.address.port), [this, self, packet, query_addr](const boost::system::error_code error, const udp::resolver::results_type& results) {
-            if (error || results.empty()) {
-                Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + query_addr + ": " + error.message(), Log::ERROR);
-                destroy();
-                return;
-            }
-            handle_udp_resolved_packet(packet.payload, packet.length, query_addr, results);
-        });
+        resolve_udp_target(request.payload, request.packet_length, request.query_addr, request.query_port);
     }
 }
 
