@@ -343,6 +343,28 @@ bool Service::record_fallback_connection() {
     return fallback_controller.try_acquire_slot();
 }
 
+shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context) {
+    return make_shared<ServerSession>(config, target_io_context, ssl_context, auth, plain_http_response,
+        [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
+        [this]() { release_fallback_slot(); },
+        [this]() { record_auth_success(); },
+        [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
+        [this]() { return record_fallback_connection(); });
+}
+
+shared_ptr<Session> Service::create_session(boost::asio::io_context &target_io_context) {
+    if (config.run_type == Config::SERVER) {
+        return create_server_session(target_io_context);
+    }
+    if (config.run_type == Config::FORWARD) {
+        return make_shared<ForwardSession>(config, target_io_context, ssl_context);
+    }
+    if (config.run_type == Config::NAT) {
+        return make_shared<NATSession>(config, target_io_context, ssl_context);
+    }
+    return make_shared<ClientSession>(config, target_io_context, ssl_context);
+}
+
 void Service::run() {
     tcp::endpoint local_endpoint;
     
@@ -442,21 +464,7 @@ void Service::stop() {
 
 // 单 io_context 模式的 accept
 void Service::async_accept() {
-    shared_ptr<Session>session(nullptr);
-    if (config.run_type == Config::SERVER) {
-        session = make_shared<ServerSession>(config, io_context, ssl_context, auth, plain_http_response,
-            [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
-            [this]() { release_fallback_slot(); },
-            [this]() { record_auth_success(); },
-            [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
-            [this]() { return record_fallback_connection(); });
-    } else if (config.run_type == Config::FORWARD) {
-        session = make_shared<ForwardSession>(config, io_context, ssl_context);
-    } else if (config.run_type == Config::NAT) {
-        session = make_shared<NATSession>(config, io_context, ssl_context);
-    } else {
-        session = make_shared<ClientSession>(config, io_context, ssl_context);
-    }
+    auto session = create_session(io_context);
     socket_acceptor.async_accept(session->accept_socket(), [this, session](const boost::system::error_code error) {
         if (error == boost::asio::error::operation_aborted) {
             return;
@@ -494,21 +502,7 @@ void Service::async_accept_worker(size_t worker_index) {
     auto& worker = workers[worker_index];
     auto& worker_io_context = *worker->io_context;
     
-    shared_ptr<Session>session(nullptr);
-    if (config.run_type == Config::SERVER) {
-        session = make_shared<ServerSession>(config, worker_io_context, ssl_context, auth, plain_http_response,
-            [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
-            [this]() { release_fallback_slot(); },
-            [this]() { record_auth_success(); },
-            [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
-            [this]() { return record_fallback_connection(); });
-    } else if (config.run_type == Config::FORWARD) {
-        session = make_shared<ForwardSession>(config, worker_io_context, ssl_context);
-    } else if (config.run_type == Config::NAT) {
-        session = make_shared<NATSession>(config, worker_io_context, ssl_context);
-    } else {
-        session = make_shared<ClientSession>(config, worker_io_context, ssl_context);
-    }
+    auto session = create_session(worker_io_context);
     
     worker->acceptor->async_accept(session->accept_socket(), [this, session, worker_index](const boost::system::error_code error) {
         if (error == boost::asio::error::operation_aborted) {

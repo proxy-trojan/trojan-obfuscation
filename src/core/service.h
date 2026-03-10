@@ -91,6 +91,8 @@ private:
     void record_auth_failure(const boost::asio::ip::tcp::endpoint& endpoint);
     void release_fallback_slot();
     bool record_fallback_connection();
+    std::shared_ptr<Session> create_server_session(boost::asio::io_context &target_io_context);
+    std::shared_ptr<Session> create_session(boost::asio::io_context &target_io_context);
     
     void async_accept();  // 单 io_context 模式
     void async_accept_worker(size_t worker_index);  // 多 io_context 模式
