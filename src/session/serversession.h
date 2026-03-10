@@ -78,6 +78,11 @@ private:
     void udp_async_read();
     void udp_async_write(const std::string &data, const boost::asio::ip::udp::endpoint &endpoint);
     void udp_recv(size_t length, const boost::asio::ip::udp::endpoint &endpoint);
+    void ensure_udp_socket_open(const boost::asio::ip::udp::endpoint::protocol_type &protocol);
+    void handle_udp_resolved_packet(const std::string &payload,
+                                    size_t packet_length,
+                                    const std::string &query_addr,
+                                    const boost::asio::ip::udp::resolver::results_type &results);
     void udp_sent();
 public:
     ServerSession(const Config &config,

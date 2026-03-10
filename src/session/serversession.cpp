@@ -297,6 +297,44 @@ void ServerSession::udp_recv(size_t length, const udp::endpoint &endpoint) {
     }
 }
 
+void ServerSession::ensure_udp_socket_open(const udp::endpoint::protocol_type &protocol) {
+    if (udp_socket.is_open()) {
+        return;
+    }
+
+    boost::system::error_code ec;
+    udp_socket.open(protocol, ec);
+    if (ec) {
+        destroy();
+        return;
+    }
+    udp_socket.bind(udp::endpoint(protocol, 0));
+    udp_async_read();
+}
+
+void ServerSession::handle_udp_resolved_packet(const string &payload,
+                                               size_t packet_length,
+                                               const string &query_addr,
+                                               const udp::resolver::results_type &results) {
+    auto iterator = results.begin();
+    if (config.tcp.prefer_ipv4) {
+        for (auto it = results.begin(); it != results.end(); ++it) {
+            const auto &addr = it->endpoint().address();
+            if (addr.is_v4()) {
+                iterator = it;
+                break;
+            }
+        }
+    }
+    Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
+    ensure_udp_socket_open(iterator->endpoint().protocol());
+    if (!udp_socket.is_open()) {
+        return;
+    }
+    sent_len += packet_length;
+    udp_async_write(payload, *iterator);
+}
+
 void ServerSession::udp_sent() {
     if (status == UDP_FORWARD) {
         UDPPacket packet;
@@ -321,30 +359,7 @@ void ServerSession::udp_sent() {
                 destroy();
                 return;
             }
-            auto iterator = results.begin();
-            if (config.tcp.prefer_ipv4) {
-                for (auto it = results.begin(); it != results.end(); ++it) {
-                    const auto &addr = it->endpoint().address();
-                    if (addr.is_v4()) {
-                        iterator = it;
-                        break;
-                    }
-                }
-            }
-            Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
-            if (!udp_socket.is_open()) {
-                auto protocol = iterator->endpoint().protocol();
-                boost::system::error_code ec;
-                udp_socket.open(protocol, ec);
-                if (ec) {
-                    destroy();
-                    return;
-                }
-                udp_socket.bind(udp::endpoint(protocol, 0));
-                udp_async_read();
-            }
-            sent_len += packet.length;
-            udp_async_write(packet.payload, *iterator);
+            handle_udp_resolved_packet(packet.payload, packet.length, query_addr, results);
         });
     }
 }

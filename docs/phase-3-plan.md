@@ -1,0 +1,220 @@
+# Phase 3 Plan
+
+## Purpose
+
+Phase 2 finished the structural refactor needed to stop `ServerSession` from being a monolithic orchestration blob.
+
+Phase 3 should build on that foundation by improving runtime clarity, testability, and future extensibility without destabilizing the current Trojan/TLS baseline.
+
+## Baseline
+
+Current working baseline:
+
+- branch: `feature_1.0_no_obfus_and_no_rules`
+- Phase 2 wrap-up: `docs/phase-2-wrap-up.md`
+- Phase 2B architecture: `docs/phase-2b-architecture.md`
+
+## Guiding Principles
+
+1. preserve current runtime behavior
+2. keep smoke/integration coverage green at every step
+3. prefer concrete seams over speculative interface hierarchies
+4. avoid reopening large monolithic files unless a new seam is being created
+5. defer QUIC/ECH-specific work until runtime and service boundaries are cleaner
+
+## Phase 3 Goals
+
+### Functional goals
+- preserve current server/client behavior
+- preserve abuse-control behavior
+- preserve fallback behavior
+- preserve release/build/test reliability
+
+### Architectural goals
+- further reduce runtime density inside `ServerSession`
+- improve seam-level testability
+- reduce construction and policy glue inside `Service`
+- prepare a cleaner decision point for future ingress experiments
+
+### Non-goals
+- no immediate QUIC implementation
+- no immediate ECH implementation
+- no full transport-adapter framework rollout
+- no multi-process redesign
+- no large protocol changes
+
+---
+
+# Phase 3A — Runtime Cleanup
+
+## Objective
+
+Continue shrinking the remaining runtime-heavy parts of `ServerSession`, with priority on the UDP path and seam-level testability.
+
+## Why this comes first
+
+Phase 2 already gave the TCP/session-admission path explicit seams:
+- `EmbeddedTlsInbound`
+- `RelayExecutor`
+- `RelayExecutionPlan`
+- `SessionAdmissionRuntime`
+- `SessionLifecycleRuntime`
+
+The most obvious remaining density is now in:
+- UDP runtime flow
+- UDP resolve/open/send orchestration
+- a small amount of remaining handshake/runtime glue
+
+## Recommended work order
+
+### 3A.1 UDP runtime cleanup
+Target areas:
+- `ServerSession::udp_sent()`
+- UDP target resolve path
+- UDP socket open/bind path
+- UDP send dispatch path
+
+Deliverables:
+- smaller, named helper steps around UDP dispatch
+- less inline orchestration inside `udp_sent()`
+- no behavior changes
+
+### 3A.2 Seam-level testing
+Add focused tests for:
+- `RelayExecutor`
+- `SessionAdmissionRuntime`
+- `SessionLifecycleRuntime`
+- execution-plan generation
+- selected UDP runtime behavior where practical
+
+Deliverables:
+- at least one new seam-level test entrypoint or targeted test harness
+- reduced reliance on smoke tests alone for regression confidence
+
+### 3A.3 Runtime-host boundary review
+After 3A.1 and 3A.2, review whether `ServerSession` can now be considered primarily a runtime host rather than an orchestration center.
+
+Decision question:
+- stop Phase 3A once the UDP path is acceptably clean,
+- or perform one more narrow cleanup pass if a single remaining hotspot stands out.
+
+## Done criteria for Phase 3A
+
+Phase 3A is done when:
+- UDP runtime flow is materially clearer than the Phase 2 baseline
+- build/test flow remains green
+- `ServerSession` no longer contains a dense UDP orchestration block comparable to the old TCP path
+- at least some seam-level tests exist beyond the current smoke suite
+
+---
+
+# Phase 3B — Service Cleanup
+
+## Objective
+
+Reduce orchestration glue inside `Service`, especially around accept-path policy handling and session construction.
+
+## Candidate seams
+
+### 3B.1 Session construction seam
+Potential extraction:
+- `SessionFactory`
+- or `ServerSessionFactory`
+
+Responsibility:
+- centralize session construction
+- centralize callback wiring
+- remove duplicated setup between single-worker and multi-worker accept paths
+
+### 3B.2 Accept policy seam
+Potential extraction:
+- `AcceptGate`
+- or `ConnectionAdmissionGate`
+
+Responsibility:
+- cooldown checks
+- per-IP concurrency gating
+- metrics/logging for accepted vs rejected connections
+
+### 3B.3 Accept-path deduplication
+Target:
+- reduce duplicated accept-complete logic between `async_accept()` and `async_accept_worker()`
+
+## Done criteria for Phase 3B
+
+Phase 3B is done when:
+- `Service` is materially thinner
+- session construction is not wired inline in multiple accept paths
+- accept policy logic is clearer and less duplicated
+
+---
+
+# Phase 3C — Future-Facing Direction Selection
+
+## Objective
+
+Choose a realistic next frontier without destabilizing the stable baseline.
+
+## Candidate directions
+
+### Option A — Continue runtime stabilization
+Best when:
+- baseline stability remains the top priority
+- future ingress work is not yet urgent
+
+### Option B — Service-layer cleanup first
+Best when:
+- `Service` becomes the next clear structural bottleneck
+- code health remains the main focus
+
+### Option C — Future ingress preparation
+Best when:
+- the project is ready to explore external edge modes
+- a clear experiment target exists
+
+Candidate experiment themes:
+- external front / ECH-ready edge preparation
+- QUIC ingress preparation
+- web-native front experimentation
+
+## Phase 3C output should be
+- an ADR or equivalent design note
+- one explicitly chosen direction
+- a short list of deferred alternatives
+
+---
+
+# Risks
+
+## Risk 1 — Endless refactor drift
+Mitigation:
+- treat each sub-phase as complete once its done criteria are met
+- avoid continuing only because more cleanup is always possible
+
+## Risk 2 — Premature abstraction
+Mitigation:
+- do not introduce interface hierarchies without a second real implementation
+- prefer concrete runtime helpers first
+
+## Risk 3 — Test debt lagging behind structure
+Mitigation:
+- require test additions during Phase 3A, not after all refactors are complete
+
+---
+
+# Recommended Sequence
+
+Recommended order:
+
+1. Phase 3A — UDP/runtime cleanup + seam-level tests
+2. Phase 3B — `Service` cleanup
+3. Phase 3C — choose the next future-facing experiment direction
+
+## Immediate next step
+
+Begin with **Phase 3A.1**:
+- extract clearer UDP dispatch helpers from `ServerSession`
+- keep behavior stable
+- keep smoke tests green
+
+That is the lowest-risk, highest-signal way to start Phase 3.
