@@ -356,18 +356,6 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
     return AcceptDecision::StartSession;
 }
 
-ExternalFrontContext Service::build_test_external_front_context() const {
-    ExternalFrontContext context;
-    context.trusted_front_id = config.external_front.test_trusted_front_id;
-    context.original_client_ip = config.external_front.test_original_client_ip;
-    context.original_client_port = config.external_front.test_original_client_port;
-    context.negotiated_alpn = config.external_front.test_negotiated_alpn;
-    context.tls_terminated_by_front = config.external_front.test_tls_terminated_by_front;
-    context.metadata_verified = config.external_front.test_metadata_verified;
-    context.ingress_mode = "test_injected_external_front";
-    return context;
-}
-
 shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context) {
     auto session = make_shared<ServerSession>(config, target_io_context, ssl_context, auth, plain_http_response,
         [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
@@ -375,8 +363,9 @@ shared_ptr<Session> Service::create_server_session(boost::asio::io_context &targ
         [this]() { record_auth_success(); },
         [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
         [this]() { return record_fallback_connection(); });
-    if (config.external_front.enabled && config.external_front.inject_test_metadata) {
-        session->set_external_front_context(build_test_external_front_context());
+    auto external_front_context = external_front_metadata_provider.maybe_build_context();
+    if (external_front_context.has_value()) {
+        session->set_external_front_context(std::move(*external_front_context));
     }
     return session;
 }
