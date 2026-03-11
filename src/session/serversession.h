@@ -29,6 +29,7 @@
 #include "core/session_admission_runtime.h"
 #include "core/session_gate.h"
 #include "core/session_lifecycle_runtime.h"
+#include "core/trusted_front_ingress.h"
 
 class ServerSession : public Session {
 private:
@@ -38,12 +39,18 @@ private:
         UDP_FORWARD,
         DESTROY
     } status;
+
+    enum class BootstrapMode {
+        StandardTls,
+        TrustedFrontIngress
+    } bootstrap_mode;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket>in_socket;
     boost::asio::ip::tcp::socket out_socket;
     boost::asio::ip::udp::resolver udp_resolver;
     Authenticator *auth;
     ServerIngressSelector ingress_selector;
     std::optional<ExternalFrontHandoff> external_front_handoff;
+    std::string trusted_front_bootstrap_buffer;
     RelayExecutor relay_executor;
     SessionAdmissionRuntime admission_runtime;
     SessionLifecycleRuntime lifecycle_runtime;
@@ -53,6 +60,7 @@ private:
     void execute_plan(const RelayExecutionPlan &plan);
     ServerIngressSelector::Selection select_ingress() const;
     void handle_handshake_payload(std::string_view data);
+    void trusted_front_ingress_async_read();
     void cancel_runtime_io();
     void close_outbound_sockets();
     void shutdown_inbound_tls();
@@ -130,6 +138,7 @@ public:
                   std::function<bool()> record_fallback_connection = {});
     boost::asio::ip::tcp::socket& accept_socket() override;
     void start() override;
+    void enable_trusted_front_ingress_mode();
     void set_external_front_handoff(ExternalFrontHandoff handoff);
     void clear_external_front_handoff();
 };

@@ -36,6 +36,7 @@ ServerSession::ServerSession(const Config &config,
                              function<bool()> record_fallback_connection) :
     Session(config, io_context),
     status(HANDSHAKE),
+    bootstrap_mode(BootstrapMode::StandardTls),
     in_socket(io_context, ssl_context),
     out_socket(io_context),
     udp_resolver(io_context),
@@ -66,6 +67,12 @@ void ServerSession::start() {
         return;
     }
     connection_slot_acquired = true;
+
+    if (bootstrap_mode == BootstrapMode::TrustedFrontIngress) {
+        trusted_front_ingress_async_read();
+        return;
+    }
+
     auto self = shared_from_this();
     in_socket.async_handshake(stream_base::server, [this, self](const boost::system::error_code error) {
         if (error) {
@@ -84,15 +91,50 @@ void ServerSession::start() {
     });
 }
 
+void ServerSession::trusted_front_ingress_async_read() {
+    auto self = shared_from_this();
+    accept_socket().async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), [this, self](const boost::system::error_code error, size_t length) {
+        if (error) {
+            destroy();
+            return;
+        }
+
+        trusted_front_bootstrap_buffer.append(reinterpret_cast<const char*>(in_read_buf.data()), length);
+        TrustedFrontIngressParser parser;
+        auto result = parser.parse(trusted_front_bootstrap_buffer);
+        if (result.parsed()) {
+            trusted_front_bootstrap_buffer.clear();
+            set_external_front_handoff(std::move(*result.handoff));
+            handle_handshake_payload(result.downstream_payload);
+            return;
+        }
+
+        if (result.status == TrustedFrontIngressParseStatus::RejectedIncompleteFrame) {
+            trusted_front_ingress_async_read();
+            return;
+        }
+
+        Log::log_with_endpoint(in_endpoint, "trusted-front ingress rejected: " + result.reason, Log::WARN);
+        destroy();
+    });
+}
+
 void ServerSession::in_async_read() {
     auto self = shared_from_this();
-    in_socket.async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), [this, self](const boost::system::error_code error, size_t length) {
+    auto read_handler = [this, self](const boost::system::error_code error, size_t length) {
         if (error) {
             destroy();
             return;
         }
         in_recv(length);
-    });
+    };
+
+    if (bootstrap_mode == BootstrapMode::TrustedFrontIngress) {
+        accept_socket().async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), read_handler);
+        return;
+    }
+
+    in_socket.async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), read_handler);
 }
 
 // 零拷贝写入 - 直接从缓冲区写入
@@ -103,13 +145,20 @@ void ServerSession::in_async_write_buffer(const uint8_t* data, size_t length) {
         in_write_data.reserve(std::max(length, in_write_data.capacity() * 2));
     }
     in_write_data.assign(data, data + length);
-    boost::asio::async_write(in_socket, boost::asio::buffer(in_write_data.data(), in_write_data.size()), [this, self](const boost::system::error_code error, size_t) {
+    auto write_handler = [this, self](const boost::system::error_code error, size_t) {
         if (error) {
             destroy();
             return;
         }
         in_sent();
-    });
+    };
+
+    if (bootstrap_mode == BootstrapMode::TrustedFrontIngress) {
+        boost::asio::async_write(accept_socket(), boost::asio::buffer(in_write_data.data(), in_write_data.size()), write_handler);
+        return;
+    }
+
+    boost::asio::async_write(in_socket, boost::asio::buffer(in_write_data.data(), in_write_data.size()), write_handler);
 }
 
 void ServerSession::in_async_write(const string &data) {
@@ -249,6 +298,10 @@ ServerIngressSelector::Selection ServerSession::select_ingress() const {
         return ingress_selector.select_external_front(*external_front_handoff->context);
     }
     return ingress_selector.select_default();
+}
+
+void ServerSession::enable_trusted_front_ingress_mode() {
+    bootstrap_mode = BootstrapMode::TrustedFrontIngress;
 }
 
 void ServerSession::set_external_front_handoff(ExternalFrontHandoff handoff) {
@@ -459,19 +512,26 @@ void ServerSession::shutdown_inbound_tls() {
         return;
     }
 
+    boost::system::error_code ec;
+    if (bootstrap_mode == BootstrapMode::TrustedFrontIngress) {
+        in_socket.next_layer().cancel(ec);
+        in_socket.next_layer().shutdown(tcp::socket::shutdown_both, ec);
+        in_socket.next_layer().close(ec);
+        return;
+    }
+
     auto self = shared_from_this();
     auto ssl_shutdown_cb = [this, self](const boost::system::error_code error) {
         if (error == boost::asio::error::operation_aborted) {
             return;
         }
-        boost::system::error_code ec;
+        boost::system::error_code close_ec;
         ssl_shutdown_timer.cancel();
-        in_socket.next_layer().cancel(ec);
-        in_socket.next_layer().shutdown(tcp::socket::shutdown_both, ec);
-        in_socket.next_layer().close(ec);
+        in_socket.next_layer().cancel(close_ec);
+        in_socket.next_layer().shutdown(tcp::socket::shutdown_both, close_ec);
+        in_socket.next_layer().close(close_ec);
     };
 
-    boost::system::error_code ec;
     in_socket.next_layer().cancel(ec);
     in_socket.async_shutdown(ssl_shutdown_cb);
     ssl_shutdown_timer.expires_after(chrono::seconds(SSL_SHUTDOWN_TIMEOUT));
