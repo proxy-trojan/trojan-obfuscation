@@ -173,6 +173,26 @@ After building and configuring:
 ./trojan -c client.json
 ```
 
+## Client Product (New)
+
+A new desktop-first, mobile-ready client shell is now being scaffolded under:
+
+```bash
+client/
+```
+
+Current client scope focuses on product-layer foundations:
+- profile management shell
+- settings/state model
+- secure storage abstraction
+- diagnostics export preview
+- fake controller boundary for future engine integration
+
+See:
+- `docs/client-product-architecture.md`
+- `docs/adr-client-product-stack.md`
+- `client/README.md`
+
 ## Validation
 
 The current baseline includes Linux smoke/integration tests for:

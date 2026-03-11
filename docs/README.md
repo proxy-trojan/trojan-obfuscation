@@ -27,6 +27,14 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - `trusted-front-edge-separation-evidence-status.md`
 - `first-tier-readiness-roadmap.md`
 - `first-tier-promotion-scorecard.md`
+- `client-product-architecture.md`
+- `adr-client-product-stack.md`
+
+## Client Workspace
+
+- `client/README.md`
+- `client/pubspec.yaml`
+- `client/lib/...`
 
 ## Runbooks
 

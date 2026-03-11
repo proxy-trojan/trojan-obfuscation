@@ -1,0 +1,19 @@
+name: trojan_pro_client
+description: Desktop-first, mobile-ready client shell for Trojan-Pro.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.3.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
