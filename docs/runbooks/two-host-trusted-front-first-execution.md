@@ -15,6 +15,18 @@ Generate a staging bundle first:
 ./scripts/prepare-two-host-trusted-front-staging.sh
 ```
 
+## Optional preflight — Local dry run
+
+Before a real two-host run, you can verify the execution flow locally:
+
+```bash
+./scripts/run-two-host-trusted-front-local-dry-run.sh \
+  <bundle_dir> \
+  ./build/ci/trojan
+```
+
+This does **not** replace the real two-host run, but it helps catch obvious orchestration mistakes early.
+
 ## Step 1 — Start backend candidate on Host B
 
 ```bash
