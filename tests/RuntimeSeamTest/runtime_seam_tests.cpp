@@ -80,6 +80,7 @@ Config make_test_config() {
     config.external_front.test_metadata_verified = false;
     config.external_front.enable_trusted_internal_handoff_stub = false;
     config.external_front.trusted_internal_source_name = "";
+    config.external_front.trusted_front_envelope_json = "";
     config.external_front.trusted_internal_front_id = "";
     config.external_front.trusted_internal_original_client_ip = "";
     config.external_front.trusted_internal_original_client_port = 0;
@@ -497,6 +498,7 @@ void test_config_trusted_internal_handoff_source_stub_respects_enablement() {
     expect_true(!disabled_input.has_value(), "trusted-internal source stub should not build input when disabled");
     auto disabled_evaluation = disabled_stub.evaluate();
     expect_true(disabled_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::Inactive, "trusted-internal source stub should evaluate to inactive when disabled");
+    expect_true(disabled_evaluation.reason == "trusted_internal_source_inactive", "inactive trusted-internal source stub should expose stable inactive reason");
     expect_true(!disabled_evaluation.input.has_value(), "inactive trusted-internal source stub should not carry input");
 
     Config enabled = make_test_config();
@@ -526,7 +528,42 @@ void test_config_trusted_internal_handoff_source_stub_respects_enablement() {
     auto enabled_evaluation = enabled_stub.evaluate();
     expect_true(enabled_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::ActiveWithInput, "trusted-internal source stub should evaluate to active-with-input when enabled");
     expect_true(enabled_evaluation.source_name == "internal_handoff_source", "trusted-internal evaluation should expose source name");
+    expect_true(enabled_evaluation.reason == "built_trusted_internal_stub_input", "trusted-internal evaluation should expose stable stub-build reason");
     expect_true(enabled_evaluation.input.has_value(), "trusted-internal evaluation should carry input when enabled");
+
+    Config envelope_enabled = make_test_config();
+    envelope_enabled.external_front.enabled = true;
+    envelope_enabled.external_front.enable_trusted_internal_handoff_stub = true;
+    envelope_enabled.external_front.trusted_front_envelope_json = R"json({
+        "source_name": "front-envelope",
+        "trusted_front_id": "front-envelope-id",
+        "original_client_ip": "203.0.113.12",
+        "original_client_port": 45680,
+        "server_name": "front.example.com",
+        "negotiated_alpn": "h2",
+        "tls_terminated_by_front": true,
+        "metadata_verified": true
+    })json";
+
+    ConfigTrustedInternalHandoffSourceStub envelope_stub(envelope_enabled);
+    auto envelope_evaluation = envelope_stub.evaluate();
+    expect_true(envelope_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::ActiveWithInput, "trusted-front envelope JSON should evaluate to active-with-input");
+    expect_true(envelope_evaluation.source_name == "front-envelope", "trusted-front envelope evaluation should surface parsed source name");
+    expect_true(envelope_evaluation.reason == "parsed_trusted_front_envelope", "trusted-front envelope evaluation should expose parse success reason");
+    expect_true(envelope_evaluation.input.has_value(), "trusted-front envelope evaluation should carry parsed input");
+    expect_true(envelope_evaluation.input->trusted_front_id == "front-envelope-id", "trusted-front envelope evaluation should preserve parsed front id");
+
+    Config invalid_envelope = make_test_config();
+    invalid_envelope.external_front.enabled = true;
+    invalid_envelope.external_front.enable_trusted_internal_handoff_stub = true;
+    invalid_envelope.external_front.trusted_internal_source_name = "fallback-name";
+    invalid_envelope.external_front.trusted_front_envelope_json = R"json({"source_name":"front-envelope"})json";
+
+    ConfigTrustedInternalHandoffSourceStub invalid_envelope_stub(invalid_envelope);
+    auto invalid_envelope_evaluation = invalid_envelope_stub.evaluate();
+    expect_true(invalid_envelope_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::ActiveWithoutInput, "invalid trusted-front envelope JSON should evaluate to active-without-input");
+    expect_true(invalid_envelope_evaluation.reason == "rejected_missing_trusted_internal_front_id", "invalid trusted-front envelope JSON should expose parse/input rejection reason");
+    expect_true(!invalid_envelope_evaluation.input.has_value(), "invalid trusted-front envelope JSON should not carry parsed input");
 }
 
 void test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input() {

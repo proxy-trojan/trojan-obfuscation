@@ -3,6 +3,7 @@
 
 #include <optional>
 #include "config.h"
+#include "trusted_front_envelope.h"
 #include "trusted_internal_handoff_input.h"
 
 class ConfigTrustedInternalHandoffSourceStub {
@@ -16,6 +17,7 @@ public:
     struct EvaluationResult {
         Decision decision{Decision::Inactive};
         std::string source_name;
+        std::string reason;
         std::optional<TrustedInternalHandoffInput> input;
     };
 

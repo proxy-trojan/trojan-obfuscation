@@ -106,6 +106,7 @@ public:
         bool test_metadata_verified;
         bool enable_trusted_internal_handoff_stub;
         std::string trusted_internal_source_name;
+        std::string trusted_front_envelope_json;
         std::string trusted_internal_front_id;
         std::string trusted_internal_original_client_ip;
         uint16_t trusted_internal_original_client_port;

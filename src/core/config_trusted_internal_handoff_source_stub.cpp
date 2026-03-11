@@ -16,6 +16,15 @@ std::optional<TrustedInternalHandoffInput> ConfigTrustedInternalHandoffSourceStu
         return std::nullopt;
     }
 
+    if (!config.external_front.trusted_front_envelope_json.empty()) {
+        TrustedFrontEnvelopeParser parser;
+        auto parse_result = parser.parse_json(config.external_front.trusted_front_envelope_json);
+        if (parse_result.parsed()) {
+            return std::move(parse_result.input);
+        }
+        return std::nullopt;
+    }
+
     TrustedInternalHandoffInput input;
     input.source_name = config.external_front.trusted_internal_source_name;
     input.trusted_front_id = config.external_front.trusted_internal_front_id;
@@ -30,13 +39,22 @@ std::optional<TrustedInternalHandoffInput> ConfigTrustedInternalHandoffSourceStu
 
 ConfigTrustedInternalHandoffSourceStub::EvaluationResult ConfigTrustedInternalHandoffSourceStub::evaluate() const {
     if (!active()) {
-        return {Decision::Inactive, source_name(), std::nullopt};
+        return {Decision::Inactive, source_name(), "trusted_internal_source_inactive", std::nullopt};
+    }
+
+    if (!config.external_front.trusted_front_envelope_json.empty()) {
+        TrustedFrontEnvelopeParser parser;
+        auto parse_result = parser.parse_json(config.external_front.trusted_front_envelope_json);
+        if (!parse_result.parsed()) {
+            return {Decision::ActiveWithoutInput, source_name(), parse_result.reason, std::nullopt};
+        }
+        return {Decision::ActiveWithInput, parse_result.input->source_name, parse_result.reason, std::move(parse_result.input)};
     }
 
     auto input = maybe_build_input();
     if (!input.has_value()) {
-        return {Decision::ActiveWithoutInput, source_name(), std::nullopt};
+        return {Decision::ActiveWithoutInput, source_name(), "missing_trusted_internal_stub_input", std::nullopt};
     }
 
-    return {Decision::ActiveWithInput, source_name(), std::move(input)};
+    return {Decision::ActiveWithInput, source_name(), "built_trusted_internal_stub_input", std::move(input)};
 }

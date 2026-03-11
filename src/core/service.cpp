@@ -363,7 +363,7 @@ std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff(
     if (trusted_internal_evaluation.decision != ConfigTrustedInternalHandoffSourceStub::Decision::Inactive) {
         if (trusted_internal_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::ActiveWithoutInput) {
             Log::log_with_date_time(
-                "external-front trusted-internal source active without input: source_name=" + trusted_internal_evaluation.source_name,
+                "external-front trusted-internal source active without input: source_name=" + trusted_internal_evaluation.source_name + " reason=" + trusted_internal_evaluation.reason,
                 Log::WARN);
             return std::nullopt;
         }
