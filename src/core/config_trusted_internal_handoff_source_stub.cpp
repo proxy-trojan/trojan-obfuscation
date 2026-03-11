@@ -7,6 +7,10 @@ bool ConfigTrustedInternalHandoffSourceStub::active() const {
     return config.external_front.enabled && config.external_front.enable_trusted_internal_handoff_stub;
 }
 
+std::string ConfigTrustedInternalHandoffSourceStub::source_name() const {
+    return config.external_front.trusted_internal_source_name;
+}
+
 std::optional<TrustedInternalHandoffInput> ConfigTrustedInternalHandoffSourceStub::maybe_build_input() const {
     if (!active()) {
         return std::nullopt;
@@ -22,4 +26,17 @@ std::optional<TrustedInternalHandoffInput> ConfigTrustedInternalHandoffSourceStu
     input.tls_terminated_by_front = config.external_front.trusted_internal_tls_terminated_by_front;
     input.metadata_verified = config.external_front.trusted_internal_metadata_verified;
     return input;
+}
+
+ConfigTrustedInternalHandoffSourceStub::EvaluationResult ConfigTrustedInternalHandoffSourceStub::evaluate() const {
+    if (!active()) {
+        return {Decision::Inactive, source_name(), std::nullopt};
+    }
+
+    auto input = maybe_build_input();
+    if (!input.has_value()) {
+        return {Decision::ActiveWithoutInput, source_name(), std::nullopt};
+    }
+
+    return {Decision::ActiveWithInput, source_name(), std::move(input)};
 }

@@ -359,19 +359,19 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
 }
 
 std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff() {
-    auto trusted_internal_input = trusted_internal_handoff_source_stub.maybe_build_input();
-    if (trusted_internal_handoff_source_stub.active()) {
-        if (!trusted_internal_input.has_value()) {
+    auto trusted_internal_evaluation = trusted_internal_handoff_source_stub.evaluate();
+    if (trusted_internal_evaluation.decision != ConfigTrustedInternalHandoffSourceStub::Decision::Inactive) {
+        if (trusted_internal_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::ActiveWithoutInput) {
             Log::log_with_date_time(
-                "external-front trusted-internal source active without input",
+                "external-front trusted-internal source active without input: source_name=" + trusted_internal_evaluation.source_name,
                 Log::WARN);
             return std::nullopt;
         }
 
-        auto build_result = external_front_handoff_builder.build_trusted_internal_handoff(*trusted_internal_input);
+        auto build_result = external_front_handoff_builder.build_trusted_internal_handoff(*trusted_internal_evaluation.input);
         if (!build_result.built()) {
             Log::log_with_date_time(
-                "external-front trusted-internal source rejected before handoff apply: " + build_result.reason,
+                "external-front trusted-internal source rejected before handoff apply: source_name=" + trusted_internal_evaluation.source_name + " reason=" + build_result.reason,
                 Log::WARN);
             return std::nullopt;
         }

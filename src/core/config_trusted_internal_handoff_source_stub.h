@@ -7,10 +7,24 @@
 
 class ConfigTrustedInternalHandoffSourceStub {
 public:
+    enum class Decision {
+        Inactive,
+        ActiveWithoutInput,
+        ActiveWithInput
+    };
+
+    struct EvaluationResult {
+        Decision decision{Decision::Inactive};
+        std::string source_name;
+        std::optional<TrustedInternalHandoffInput> input;
+    };
+
     explicit ConfigTrustedInternalHandoffSourceStub(const Config &config);
 
     bool active() const;
+    std::string source_name() const;
     std::optional<TrustedInternalHandoffInput> maybe_build_input() const;
+    EvaluationResult evaluate() const;
 
 private:
     const Config &config;

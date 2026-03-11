@@ -494,6 +494,9 @@ void test_config_trusted_internal_handoff_source_stub_respects_enablement() {
     expect_true(!disabled_stub.active(), "trusted-internal source stub should report inactive when disabled");
     auto disabled_input = disabled_stub.maybe_build_input();
     expect_true(!disabled_input.has_value(), "trusted-internal source stub should not build input when disabled");
+    auto disabled_evaluation = disabled_stub.evaluate();
+    expect_true(disabled_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::Inactive, "trusted-internal source stub should evaluate to inactive when disabled");
+    expect_true(!disabled_evaluation.input.has_value(), "inactive trusted-internal source stub should not carry input");
 
     Config enabled = make_test_config();
     enabled.external_front.enabled = true;
@@ -519,6 +522,10 @@ void test_config_trusted_internal_handoff_source_stub_respects_enablement() {
     expect_true(enabled_input->negotiated_alpn == "h2", "trusted-internal source stub should preserve negotiated ALPN");
     expect_true(enabled_input->tls_terminated_by_front, "trusted-internal source stub should preserve tls termination flag");
     expect_true(enabled_input->metadata_verified, "trusted-internal source stub should preserve metadata verified flag");
+    auto enabled_evaluation = enabled_stub.evaluate();
+    expect_true(enabled_evaluation.decision == ConfigTrustedInternalHandoffSourceStub::Decision::ActiveWithInput, "trusted-internal source stub should evaluate to active-with-input when enabled");
+    expect_true(enabled_evaluation.source_name == "internal_handoff_source", "trusted-internal evaluation should expose source name");
+    expect_true(enabled_evaluation.input.has_value(), "trusted-internal evaluation should carry input when enabled");
 }
 
 void test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input() {
