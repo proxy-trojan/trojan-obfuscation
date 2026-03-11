@@ -75,10 +75,10 @@ The backend currently supports:
 - mTLS-capable trusted-front listener shape
 
 ## Next step for actual execution
-Implement or script a front-side transport sender that:
-1. opens mTLS connection to backend trusted-front listener
-2. writes `<envelope_length>\n<json_envelope><downstream_payload>`
-3. captures backend response and logs
+Use or adapt `scripts/send-trusted-front-frame.py` so the front host can:
+1. open an mTLS connection to the backend trusted-front listener
+2. write `<envelope_length>\n<json_envelope><downstream_payload>`
+3. capture backend response and logs
 EOF
 
 cat > "$OUT_DIR/README.md" <<'EOF'

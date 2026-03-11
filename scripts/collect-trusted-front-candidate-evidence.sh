@@ -183,35 +183,27 @@ printf '' | openssl s_client \
   -CAfile "$TMPDIR/ca.crt" > "$OUT_DIR/openssl-s_client-trusted-front.txt" 2>&1 || true
 
 # Send a trusted-front ingress frame carrying a simple downstream HTTP payload.
-python3 - <<'PY' "$TRUSTED_FRONT_PORT" "$TMPDIR/client.crt" "$TMPDIR/client.key" "$TMPDIR/ca.crt" > "$OUT_DIR/client-transport.txt" 2>&1
-import json, socket, ssl, sys
-port = int(sys.argv[1])
-client_cert, client_key, ca_file = sys.argv[2:5]
-envelope = {
-    "source_name": "local-trusted-front",
-    "trusted_front_id": "local-front-id",
-    "original_client_ip": "203.0.113.10",
-    "original_client_port": 44321,
-    "server_name": "front.example.com",
-    "negotiated_alpn": "h2",
-    "tls_terminated_by_front": True,
-    "metadata_verified": True,
-}
-envelope_bytes = json.dumps(envelope, separators=(",", ":")).encode()
-downstream = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
-frame = str(len(envelope_bytes)).encode() + b"\n" + envelope_bytes + downstream
-ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_file)
-ctx.load_cert_chain(certfile=client_cert, keyfile=client_key)
-ctx.check_hostname = False
-with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
-    with ctx.wrap_socket(sock, server_hostname="localhost") as tls_sock:
-        tls_sock.sendall(frame)
-        try:
-            tls_sock.settimeout(2)
-            data = tls_sock.recv(4096)
-            print(data.decode(errors='replace'))
-        except TimeoutError:
-            print('[no immediate downstream response captured]')
+cat > "$TMPDIR/envelope.json" <<'EOF'
+{"source_name":"local-trusted-front","trusted_front_id":"local-front-id","original_client_ip":"203.0.113.10","original_client_port":44321,"server_name":"front.example.com","negotiated_alpn":"h2","tls_terminated_by_front":true,"metadata_verified":true}
+EOF
+printf 'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n' > "$TMPDIR/downstream.txt"
+python3 "$PROJECT_ROOT/scripts/send-trusted-front-frame.py" \
+  --host 127.0.0.1 \
+  --port "$TRUSTED_FRONT_PORT" \
+  --server-name localhost \
+  --ca "$TMPDIR/ca.crt" \
+  --cert "$TMPDIR/client.crt" \
+  --key "$TMPDIR/client.key" \
+  --envelope-json-file "$TMPDIR/envelope.json" \
+  --payload-file "$TMPDIR/downstream.txt" \
+  --output "$OUT_DIR/client-transport.raw" > /dev/null 2>&1 || true
+python3 - <<'PY' "$OUT_DIR/client-transport.raw" > "$OUT_DIR/client-transport.txt" 2>&1
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if not path.exists() or not path.read_bytes():
+    print('[no immediate downstream response captured]')
+else:
+    print(path.read_text(errors='replace'))
 PY
 
 if command -v ctest >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/build/ci/CTestTestfile.cmake" ]]; then
