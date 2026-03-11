@@ -61,6 +61,13 @@ At minimum capture:
 - front response file
 - any passive/public observation notes
 - rollback notes
+- runtime metrics summary line
+- first trusted-front admission / metadata / ingress rejection signal seen
+
+Helpful references while reading evidence:
+- `docs/runbooks/operator-signals.md`
+- `docs/runbooks/candidate-log-reading.md`
+- `docs/runbooks/rollback-verification.md`
 
 ## Step 4 — Stop backend candidate when done
 

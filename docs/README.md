@@ -33,3 +33,6 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - `runbooks/two-host-trusted-front-first-execution.md`
 - `runbooks/compare-validation-summaries.md`
 - `runbooks/profile-selection.md`
+- `runbooks/operator-signals.md`
+- `runbooks/candidate-log-reading.md`
+- `runbooks/rollback-verification.md`

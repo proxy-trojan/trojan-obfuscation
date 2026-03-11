@@ -73,6 +73,9 @@ After rollback, confirm:
 
 If any of these are false, rollback is incomplete.
 
+Detailed verification helper:
+- `docs/runbooks/rollback-verification.md`
+
 ---
 
 # 4. Safety Checks
