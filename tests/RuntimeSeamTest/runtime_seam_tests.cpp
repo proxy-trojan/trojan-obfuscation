@@ -80,6 +80,9 @@ Config make_test_config() {
     config.external_front.test_tls_terminated_by_front = false;
     config.external_front.test_metadata_verified = false;
     config.external_front.enable_trusted_internal_handoff_stub = false;
+    config.external_front.enable_trusted_front_listener = false;
+    config.external_front.trusted_front_listener_addr = "127.0.0.1";
+    config.external_front.trusted_front_listener_port = 0;
     config.external_front.trusted_internal_source_name = "";
     config.external_front.trusted_front_envelope_json = "";
     config.external_front.trusted_internal_front_id = "";

@@ -76,6 +76,7 @@ private:
     // 单 io_context 模式的后备（用于不支持 SO_REUSEPORT 的平台）
     boost::asio::io_context io_context;
     boost::asio::ip::tcp::acceptor socket_acceptor;
+    std::unique_ptr<boost::asio::ip::tcp::acceptor> trusted_front_acceptor;
     std::vector<std::thread> thread_pool;
     
     AbuseController abuse_controller;
@@ -110,14 +111,17 @@ private:
     AcceptDecision evaluate_incoming_connection(const boost::asio::ip::tcp::endpoint &endpoint);
     std::optional<ExternalFrontHandoff> maybe_build_external_front_handoff();
     void maybe_apply_external_front_handoff(ServerSession &session, std::optional<ExternalFrontHandoff> handoff);
-    std::shared_ptr<Session> create_server_session(boost::asio::io_context &target_io_context);
+    std::shared_ptr<Session> create_server_session(boost::asio::io_context &target_io_context, bool apply_default_handoff = true);
     std::shared_ptr<Session> create_session(boost::asio::io_context &target_io_context);
+    std::shared_ptr<ServerSession> create_trusted_front_server_session(boost::asio::io_context &target_io_context);
     bool handle_accept_completion(const std::shared_ptr<Session> &session,
                                   const boost::system::error_code &error,
-                                  const std::string &success_log_message);
+                                  const std::string &success_log_message,
+                                  bool bypass_public_admission = false);
     
     void async_accept();  // 单 io_context 模式
     void async_accept_worker(size_t worker_index);  // 多 io_context 模式
+    void async_accept_trusted_front();
     void udp_async_read();
     void setup_acceptor(boost::asio::ip::tcp::acceptor& acceptor, const boost::asio::ip::tcp::endpoint& endpoint);
     

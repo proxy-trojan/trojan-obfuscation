@@ -98,6 +98,18 @@ Service::Service(Config &config, bool test) :
             setup_acceptor(socket_acceptor, listen_endpoint);
         }
 
+        if (config.run_type == Config::SERVER && config.external_front.enabled && config.external_front.enable_trusted_front_listener) {
+            if (use_multi_io_context) {
+                Log::log_with_date_time("trusted-front listener is currently only supported in shared-io-context mode", Log::WARN);
+            } else {
+                tcp::endpoint trusted_front_endpoint = *resolver.resolve(
+                    config.external_front.trusted_front_listener_addr,
+                    to_string(config.external_front.trusted_front_listener_port)).begin();
+                trusted_front_acceptor = make_unique<tcp::acceptor>(io_context);
+                setup_acceptor(*trusted_front_acceptor, trusted_front_endpoint);
+            }
+        }
+
         if (config.run_type == Config::FORWARD) {
             auto udp_bind_endpoint = udp::endpoint(listen_endpoint.address(), listen_endpoint.port());
             udp_socket.open(udp_bind_endpoint.protocol());
@@ -421,15 +433,25 @@ void Service::maybe_apply_external_front_handoff(ServerSession &session, std::op
     session.set_external_front_handoff(std::move(*handoff));
 }
 
-shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context) {
+shared_ptr<Session> Service::create_server_session(boost::asio::io_context &target_io_context, bool apply_default_handoff) {
     auto session = make_shared<ServerSession>(config, target_io_context, ssl_context, auth, plain_http_response,
         [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
         [this]() { release_fallback_slot(); },
         [this]() { record_auth_success(); },
         [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
         [this]() { return record_fallback_connection(); });
-    auto external_front_handoff = maybe_build_external_front_handoff();
-    maybe_apply_external_front_handoff(*session, std::move(external_front_handoff));
+    if (apply_default_handoff) {
+        auto external_front_handoff = maybe_build_external_front_handoff();
+        maybe_apply_external_front_handoff(*session, std::move(external_front_handoff));
+    }
+    return session;
+}
+
+shared_ptr<ServerSession> Service::create_trusted_front_server_session(boost::asio::io_context &target_io_context) {
+    auto session = std::dynamic_pointer_cast<ServerSession>(create_server_session(target_io_context, false));
+    if (session) {
+        session->enable_trusted_front_ingress_mode();
+    }
     return session;
 }
 
@@ -448,7 +470,8 @@ shared_ptr<Session> Service::create_session(boost::asio::io_context &target_io_c
 
 bool Service::handle_accept_completion(const shared_ptr<Session> &session,
                                        const boost::system::error_code &error,
-                                       const string &success_log_message) {
+                                       const string &success_log_message,
+                                       bool bypass_public_admission) {
     if (error == boost::asio::error::operation_aborted) {
         return false;
     }
@@ -456,7 +479,7 @@ bool Service::handle_accept_completion(const shared_ptr<Session> &session,
         boost::system::error_code ec;
         auto endpoint = session->accept_socket().remote_endpoint(ec);
         if (!ec) {
-            auto decision = evaluate_incoming_connection(endpoint);
+            auto decision = bypass_public_admission ? AcceptDecision::StartSession : evaluate_incoming_connection(endpoint);
             if (decision == AcceptDecision::RejectCooldown) {
                 ++runtime_metrics.rejected_connections_total;
                 Log::log_with_endpoint(endpoint, "connection rejected: IP is in authentication cooldown", Log::WARN);
@@ -533,6 +556,9 @@ void Service::run() {
     } else {
         // 单 io_context 模式
         async_accept();
+        if (trusted_front_acceptor) {
+            async_accept_trusted_front();
+        }
         if (config.run_type == Config::FORWARD) {
             udp_async_read();
         }
@@ -570,6 +596,9 @@ void Service::stop() {
         }
     } else {
         socket_acceptor.cancel(ec);
+        if (trusted_front_acceptor) {
+            trusted_front_acceptor->cancel(ec);
+        }
     }
     
     if (udp_socket.is_open()) {
@@ -599,6 +628,19 @@ void Service::async_accept_worker(size_t worker_index) {
     worker->acceptor->async_accept(session->accept_socket(), [this, session, worker_index](const boost::system::error_code error) {
         if (handle_accept_completion(session, error, "incoming connection (worker " + to_string(worker_index) + ")")) {
             async_accept_worker(worker_index);
+        }
+    });
+}
+
+void Service::async_accept_trusted_front() {
+    if (!trusted_front_acceptor) {
+        return;
+    }
+
+    auto session = create_trusted_front_server_session(io_context);
+    trusted_front_acceptor->async_accept(session->accept_socket(), [this, session](const boost::system::error_code error) {
+        if (handle_accept_completion(session, error, "incoming trusted-front connection", true)) {
+            async_accept_trusted_front();
         }
     });
 }
