@@ -47,7 +47,7 @@ It avoids claiming transport or anti-detection properties that the codebase does
 ## What is not actually supported today
 - QUIC ingress
 - true ECH support in the implemented runtime path
-- external-front handoff mode
+- production external-front handoff mode
 - WebSocket transport mode
 - gRPC transport mode
 - HTTP/2 Trojan transport implementation
@@ -85,7 +85,7 @@ The current roadmap aims to make the backend ready for:
 | Plain HTTP response | Yes | Yes | Useful for simple camouflage |
 | ALPN selection / override | Yes | Yes | Already configurable |
 | MySQL auth/quota | Optional | Optional | Build/runtime option |
-| External trusted front handoff | No | Planned | Phase 3C target direction |
+| External trusted front handoff | Partial / internal-only only | Planned | Stage-1 internal wiring exists; no real trusted-front source or rollout yet |
 | ECH-ready deployment posture | Partial / preparatory only | Planned | Likely at the front layer, not immediate backend-native ECH |
 | QUIC ingress | No | No (not default path) | Explicitly deferred |
 | WebSocket transport | No | No | Not on current roadmap |
@@ -184,8 +184,8 @@ The external-front direction is chosen for architecture and probe-resistance pot
 
 ### Remaining limits
 - public edge and backend are still tightly coupled in the embedded TLS deployment model
-- no explicit trusted-front contract yet
-- no external metadata validation path yet
+- no real trusted-front source yet
+- no production trusted-front transport boundary yet
 
 ## After planned external-front direction
 ### Expected security improvements
