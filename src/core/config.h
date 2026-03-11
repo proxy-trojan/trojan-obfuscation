@@ -106,9 +106,14 @@ public:
         bool test_metadata_verified;
         bool enable_trusted_internal_handoff_stub;
         bool enable_trusted_front_listener;
+        bool trusted_front_listener_use_mtls;
         bool require_trusted_front_loopback_source;
         std::string trusted_front_listener_addr;
         uint16_t trusted_front_listener_port;
+        std::string trusted_front_tls_cert;
+        std::string trusted_front_tls_key;
+        std::string trusted_front_tls_key_password;
+        std::string trusted_front_tls_ca;
         std::string trusted_internal_source_name;
         std::string trusted_front_envelope_json;
         std::string trusted_internal_front_id;

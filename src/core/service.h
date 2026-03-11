@@ -91,6 +91,7 @@ private:
 
     // 共享资源
     boost::asio::ssl::context ssl_context;
+    boost::asio::ssl::context trusted_front_ssl_context;
     Authenticator *auth;
     std::string plain_http_response;
     

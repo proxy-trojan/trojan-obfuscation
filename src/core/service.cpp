@@ -57,6 +57,7 @@ Service::Service(Config &config, bool test) :
     trusted_internal_handoff_source_stub(config),
     external_front_metadata_provider(config),
     ssl_context(context::sslv23),
+    trusted_front_ssl_context(context::sslv23),
     auth(nullptr),
     udp_socket(io_context) {
 #ifndef ENABLE_NAT
@@ -123,6 +124,23 @@ Service::Service(Config &config, bool test) :
     ssl_context.set_options(context::default_workarounds | context::no_sslv2 | context::no_sslv3 | context::single_dh_use);
     if (!config.ssl.curves.empty()) {
         SSL_CTX_set1_curves_list(native_context, config.ssl.curves.c_str());
+    }
+    if (config.run_type == Config::SERVER && config.external_front.enabled && config.external_front.enable_trusted_front_listener && config.external_front.trusted_front_listener_use_mtls) {
+        if (config.external_front.trusted_front_tls_cert.empty() || config.external_front.trusted_front_tls_key.empty() || config.external_front.trusted_front_tls_ca.empty()) {
+            throw runtime_error("trusted-front mTLS listener requires trusted_front_tls_cert, trusted_front_tls_key, and trusted_front_tls_ca");
+        }
+        auto trusted_native_context = trusted_front_ssl_context.native_handle();
+        trusted_front_ssl_context.set_options(context::default_workarounds | context::no_sslv2 | context::no_sslv3 | context::single_dh_use);
+        trusted_front_ssl_context.use_certificate_chain_file(config.external_front.trusted_front_tls_cert);
+        trusted_front_ssl_context.set_password_callback([this](size_t, context_base::password_purpose) {
+            return this->config.external_front.trusted_front_tls_key_password;
+        });
+        trusted_front_ssl_context.use_private_key_file(config.external_front.trusted_front_tls_key, context::pem);
+        trusted_front_ssl_context.load_verify_file(config.external_front.trusted_front_tls_ca);
+        trusted_front_ssl_context.set_verify_mode(verify_peer | verify_fail_if_no_peer_cert);
+        if (!config.ssl.curves.empty()) {
+            SSL_CTX_set1_curves_list(trusted_native_context, config.ssl.curves.c_str());
+        }
     }
     if (config.run_type == Config::SERVER) {
         ssl_context.use_certificate_chain_file(config.ssl.cert);
@@ -449,10 +467,14 @@ shared_ptr<Session> Service::create_server_session(boost::asio::io_context &targ
 }
 
 shared_ptr<ServerSession> Service::create_trusted_front_server_session(boost::asio::io_context &target_io_context) {
-    auto session = std::dynamic_pointer_cast<ServerSession>(create_server_session(target_io_context, false));
-    if (session) {
-        session->enable_trusted_front_ingress_mode();
-    }
+    auto &trusted_front_context = config.external_front.trusted_front_listener_use_mtls ? trusted_front_ssl_context : ssl_context;
+    auto session = make_shared<ServerSession>(config, target_io_context, trusted_front_context, auth, plain_http_response,
+        [this](const tcp::endpoint& endpoint) { release_connection_slot(endpoint); },
+        [this]() { release_fallback_slot(); },
+        [this]() { record_auth_success(); },
+        [this](const tcp::endpoint& endpoint) { record_auth_failure(endpoint); },
+        [this]() { return record_fallback_connection(); });
+    session->enable_trusted_front_ingress_mode(config.external_front.trusted_front_listener_use_mtls);
     return session;
 }
 

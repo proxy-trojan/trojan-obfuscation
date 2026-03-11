@@ -73,6 +73,19 @@ void ServerSession::start() {
         return;
     }
 
+    if (bootstrap_mode == BootstrapMode::TrustedFrontIngressMtls) {
+        auto self = shared_from_this();
+        in_socket.async_handshake(stream_base::server, [this, self](const boost::system::error_code error) {
+            if (error) {
+                Log::log_with_endpoint(in_endpoint, "trusted-front mTLS handshake failed: " + error.message(), Log::ERROR);
+                destroy();
+                return;
+            }
+            trusted_front_ingress_async_read();
+        });
+        return;
+    }
+
     auto self = shared_from_this();
     in_socket.async_handshake(stream_base::server, [this, self](const boost::system::error_code error) {
         if (error) {
@@ -93,7 +106,7 @@ void ServerSession::start() {
 
 void ServerSession::trusted_front_ingress_async_read() {
     auto self = shared_from_this();
-    accept_socket().async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), [this, self](const boost::system::error_code error, size_t length) {
+    auto read_handler = [this, self](const boost::system::error_code error, size_t length) {
         if (error) {
             destroy();
             return;
@@ -116,7 +129,14 @@ void ServerSession::trusted_front_ingress_async_read() {
 
         Log::log_with_endpoint(in_endpoint, "trusted-front ingress rejected: " + result.reason, Log::WARN);
         destroy();
-    });
+    };
+
+    if (bootstrap_mode == BootstrapMode::TrustedFrontIngress) {
+        accept_socket().async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), read_handler);
+        return;
+    }
+
+    in_socket.async_read_some(boost::asio::buffer(in_read_buf.data(), in_read_buf.size()), read_handler);
 }
 
 void ServerSession::in_async_read() {
@@ -300,8 +320,8 @@ ServerIngressSelector::Selection ServerSession::select_ingress() const {
     return ingress_selector.select_default();
 }
 
-void ServerSession::enable_trusted_front_ingress_mode() {
-    bootstrap_mode = BootstrapMode::TrustedFrontIngress;
+void ServerSession::enable_trusted_front_ingress_mode(bool use_mtls) {
+    bootstrap_mode = use_mtls ? BootstrapMode::TrustedFrontIngressMtls : BootstrapMode::TrustedFrontIngress;
 }
 
 void ServerSession::set_external_front_handoff(ExternalFrontHandoff handoff) {

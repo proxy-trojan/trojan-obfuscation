@@ -42,7 +42,8 @@ private:
 
     enum class BootstrapMode {
         StandardTls,
-        TrustedFrontIngress
+        TrustedFrontIngress,
+        TrustedFrontIngressMtls
     } bootstrap_mode;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket>in_socket;
     boost::asio::ip::tcp::socket out_socket;
@@ -138,7 +139,7 @@ public:
                   std::function<bool()> record_fallback_connection = {});
     boost::asio::ip::tcp::socket& accept_socket() override;
     void start() override;
-    void enable_trusted_front_ingress_mode();
+    void enable_trusted_front_ingress_mode(bool use_mtls = false);
     void set_external_front_handoff(ExternalFrontHandoff handoff);
     void clear_external_front_handoff();
 };

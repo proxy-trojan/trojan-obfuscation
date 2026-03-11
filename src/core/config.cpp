@@ -128,9 +128,14 @@ void Config::populate(const ptree &tree) {
     external_front.test_metadata_verified = tree.get("external_front.test_metadata_verified", false);
     external_front.enable_trusted_internal_handoff_stub = tree.get("external_front.enable_trusted_internal_handoff_stub", false);
     external_front.enable_trusted_front_listener = tree.get("external_front.enable_trusted_front_listener", false);
+    external_front.trusted_front_listener_use_mtls = tree.get("external_front.trusted_front_listener_use_mtls", false);
     external_front.require_trusted_front_loopback_source = tree.get("external_front.require_trusted_front_loopback_source", true);
     external_front.trusted_front_listener_addr = tree.get("external_front.trusted_front_listener_addr", std::string("127.0.0.1"));
     external_front.trusted_front_listener_port = tree.get("external_front.trusted_front_listener_port", 0);
+    external_front.trusted_front_tls_cert = tree.get("external_front.trusted_front_tls_cert", std::string());
+    external_front.trusted_front_tls_key = tree.get("external_front.trusted_front_tls_key", std::string());
+    external_front.trusted_front_tls_key_password = tree.get("external_front.trusted_front_tls_key_password", std::string());
+    external_front.trusted_front_tls_ca = tree.get("external_front.trusted_front_tls_ca", std::string());
     external_front.trusted_internal_source_name = tree.get("external_front.trusted_internal_source_name", std::string());
     external_front.trusted_front_envelope_json = tree.get("external_front.trusted_front_envelope_json", std::string());
     external_front.trusted_internal_front_id = tree.get("external_front.trusted_internal_front_id", std::string());
