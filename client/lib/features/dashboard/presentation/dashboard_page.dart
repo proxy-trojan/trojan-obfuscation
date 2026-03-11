@@ -71,6 +71,9 @@ class DashboardPage extends StatelessWidget {
                       runSpacing: 12,
                       children: <Widget>[
                         _kv('Secure Storage', services.secureStorage.backendName),
+                        _kv('Local State', services.localStateStore.backendName),
+                        _kv('Profiles Loaded', services.profileStore.loaded ? 'Yes' : 'No'),
+                        _kv('Settings Loaded', services.settingsStore.loaded ? 'Yes' : 'No'),
                         _kv('Update Channel', settings.updateChannel.name),
                         _kv('Theme Mode', settings.themeMode.name),
                         _kv('Launch On Login', settings.launchOnLogin ? 'Enabled' : 'Disabled'),

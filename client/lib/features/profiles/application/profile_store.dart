@@ -1,15 +1,26 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../platform/services/local_state_store.dart';
 import '../domain/client_profile.dart';
+import 'profile_serialization.dart';
 
 class ProfileStore extends ChangeNotifier {
-  ProfileStore({List<ClientProfile>? initialProfiles})
-      : _profiles = List<ClientProfile>.from(initialProfiles ?? const []),
+  ProfileStore({
+    List<ClientProfile>? initialProfiles,
+    required LocalStateStore localStateStore,
+    required ProfileSerialization serialization,
+  })  : _localStateStore = localStateStore,
+        _serialization = serialization,
+        _profiles = List<ClientProfile>.from(initialProfiles ?? const []),
         _selectedProfileId =
             initialProfiles != null && initialProfiles.isNotEmpty ? initialProfiles.first.id : null;
 
-  ProfileStore.withSampleProfiles()
-      : _profiles = <ClientProfile>[
+  ProfileStore.withSampleProfiles({
+    required LocalStateStore localStateStore,
+    required ProfileSerialization serialization,
+  })  : _localStateStore = localStateStore,
+        _serialization = serialization,
+        _profiles = <ClientProfile>[
           ClientProfile(
             id: 'sample-hk-1',
             name: 'Sample • Hong Kong',
@@ -35,12 +46,19 @@ class ProfileStore extends ChangeNotifier {
         ],
         _selectedProfileId = 'sample-hk-1';
 
+  static const String _profilesKey = 'profiles.json';
+
+  final LocalStateStore _localStateStore;
+  final ProfileSerialization _serialization;
   final List<ClientProfile> _profiles;
   String? _selectedProfileId;
+  bool _loaded = false;
 
   List<ClientProfile> get profiles => List<ClientProfile>.unmodifiable(_profiles);
 
   String? get selectedProfileId => _selectedProfileId;
+
+  bool get loaded => _loaded;
 
   ClientProfile? get selectedProfile {
     final selectedId = _selectedProfileId;
@@ -49,6 +67,23 @@ class ProfileStore extends ChangeNotifier {
       if (profile.id == selectedId) return profile;
     }
     return _profiles.isEmpty ? null : _profiles.first;
+  }
+
+  Future<void> load() async {
+    final raw = await _localStateStore.read(_profilesKey);
+    if (raw != null && raw.trim().isNotEmpty) {
+      final profiles = _serialization.decodeProfileList(raw);
+      _profiles
+        ..clear()
+        ..addAll(profiles);
+      _selectedProfileId = _profiles.isEmpty ? null : _profiles.first.id;
+    }
+    _loaded = true;
+    notifyListeners();
+  }
+
+  Future<void> save() async {
+    await _localStateStore.write(_profilesKey, _serialization.encodeProfileList(_profiles));
   }
 
   void selectProfile(String id) {
@@ -71,6 +106,7 @@ class ProfileStore extends ChangeNotifier {
     );
     _profiles.add(profile);
     _selectedProfileId = profile.id;
+    save();
     notifyListeners();
     return profile;
   }
@@ -83,6 +119,7 @@ class ProfileStore extends ChangeNotifier {
       _profiles[index] = profile.copyWith(updatedAt: DateTime.now());
     }
     _selectedProfileId = profile.id;
+    save();
     notifyListeners();
   }
 
@@ -91,6 +128,7 @@ class ProfileStore extends ChangeNotifier {
     if (selected == null) return;
     _profiles.removeWhere((item) => item.id == selected.id);
     _selectedProfileId = _profiles.isEmpty ? null : _profiles.first.id;
+    save();
     notifyListeners();
   }
 }
