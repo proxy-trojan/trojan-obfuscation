@@ -116,6 +116,7 @@ COMPARISON_MD="$PROJECT_ROOT/build/validation/commit-ready-comparison.md"
 TWO_HOST_SUMMARY="$RUN_DIR/summary.json"
 VERDICT_DRAFT="$RUN_DIR/trusted-front-verdict-draft.md"
 CLAIMS_PACK="$RUN_DIR/trusted-front-claims-pack.md"
+STAGE_SUMMARY="$RUN_DIR/trusted-front-stage-summary.md"
 
 if [[ -f "$BASELINE_SUMMARY" && -f "$CANDIDATE_SUMMARY" && -f "$COMPARISON_MD" ]]; then
   "$PROJECT_ROOT/scripts/generate-trusted-front-verdict.py" \
@@ -132,6 +133,14 @@ if [[ -f "$BASELINE_SUMMARY" && -f "$CANDIDATE_SUMMARY" && -f "$COMPARISON_MD" ]
     --evidence-status "$PROJECT_ROOT/docs/trusted-front-edge-separation-evidence-status.md" \
     --rollout-checklist "$PROJECT_ROOT/docs/trusted-front-rollout-checklist.md" \
     --output "$CLAIMS_PACK"
+
+  if [[ -f "$CLAIMS_PACK" ]]; then
+    "$PROJECT_ROOT/scripts/generate-trusted-front-stage-summary.py" \
+      --verdict "$VERDICT_DRAFT" \
+      --claims-pack "$CLAIMS_PACK" \
+      --evidence-status "$PROJECT_ROOT/docs/trusted-front-edge-separation-evidence-status.md" \
+      --output "$STAGE_SUMMARY"
+  fi
 fi
 
 echo "completed two-host local dry run"
@@ -141,4 +150,7 @@ if [[ -f "$VERDICT_DRAFT" ]]; then
 fi
 if [[ -f "$CLAIMS_PACK" ]]; then
   echo "claims_pack=$CLAIMS_PACK"
+fi
+if [[ -f "$STAGE_SUMMARY" ]]; then
+  echo "stage_summary=$STAGE_SUMMARY"
 fi
