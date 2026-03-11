@@ -40,3 +40,4 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - `runbooks/rollback-verification.md`
 - `runbooks/fill-baseline-vs-trusted-front-verdict.md`
 - `runbooks/generate-trusted-front-verdict-draft.md`
+- `runbooks/generate-trusted-front-claims-pack.md`
