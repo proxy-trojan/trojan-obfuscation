@@ -127,6 +127,10 @@ cat > "$TMPDIR/config.json" <<EOF
 }
 EOF
 
+cp "$TMPDIR/config.json" "$OUT_DIR/config.snapshot.json"
+"$PROJECT_ROOT/scripts/check-profile-mode.sh" --json "$TMPDIR/config.json" > "$OUT_DIR/profile-mode.json"
+"$PROJECT_ROOT/scripts/check-profile-mode.sh" "$TMPDIR/config.json" > "$OUT_DIR/profile-mode.txt"
+
 "$TROJAN_BIN" -c "$TMPDIR/config.json" -l "$OUT_DIR/server.log" >"$OUT_DIR/server.stdout" 2>&1 &
 TROJAN_PID=$!
 
@@ -143,15 +147,57 @@ while time.time() < deadline:
 raise SystemExit('server did not start listening in time')
 PY
 
+GENERATED_AT="$(date -Iseconds)"
+
 {
   echo "# Baseline Validation Evidence"
   echo
-  echo "- Generated: $(date -Iseconds)"
+  echo "- Generated: $GENERATED_AT"
   echo "- Trojan binary: $TROJAN_BIN"
   echo "- Output dir: $OUT_DIR"
   echo "- Local port: $TROJAN_PORT"
   echo "- Fallback port: $REMOTE_PORT"
+  echo "- Config snapshot: $OUT_DIR/config.snapshot.json"
+  echo "- Profile mode: $OUT_DIR/profile-mode.json"
 } > "$OUT_DIR/summary.md"
+
+python3 - <<'PY' "$OUT_DIR/summary.json" "$GENERATED_AT" "$TROJAN_BIN" "$OUT_DIR" "$TROJAN_PORT" "$REMOTE_PORT" "$OUT_DIR/profile-mode.json"
+import json
+import pathlib
+import sys
+
+summary_path = pathlib.Path(sys.argv[1])
+generated_at = sys.argv[2]
+trojan_bin = sys.argv[3]
+out_dir = sys.argv[4]
+trojan_port = int(sys.argv[5])
+remote_port = int(sys.argv[6])
+profile_mode = json.loads(pathlib.Path(sys.argv[7]).read_text())
+
+summary = {
+    "artifact_paths": {
+        "config_snapshot": f"{out_dir}/config.snapshot.json",
+        "curl_body": f"{out_dir}/curl-body.txt",
+        "curl_headers": f"{out_dir}/curl-headers.txt",
+        "openssl_s_client": f"{out_dir}/openssl-s_client.txt",
+        "profile_mode": f"{out_dir}/profile-mode.json",
+        "server_log": f"{out_dir}/server.log",
+        "server_stdout": f"{out_dir}/server.stdout",
+        "summary_md": f"{out_dir}/summary.md"
+    },
+    "generated_at": generated_at,
+    "out_dir": out_dir,
+    "ports": {
+        "fallback": remote_port,
+        "public": trojan_port
+    },
+    "profile_label": "baseline",
+    "profile_mode": profile_mode,
+    "trojan_bin": trojan_bin
+}
+
+summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+PY
 
 printf '' | openssl s_client -connect 127.0.0.1:${TROJAN_PORT} -servername localhost -alpn http/1.1 > "$OUT_DIR/openssl-s_client.txt" 2>&1 || true
 curl -ksS https://localhost:${TROJAN_PORT}/ -D "$OUT_DIR/curl-headers.txt" -o "$OUT_DIR/curl-body.txt" || true

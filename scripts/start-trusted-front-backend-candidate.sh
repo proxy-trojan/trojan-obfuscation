@@ -30,6 +30,9 @@ CONFIG_OUT="$BUNDLE_DIR/backend/backend-candidate.runtime.json"
 LOG_OUT="$BUNDLE_DIR/backend/backend-candidate.log"
 STDOUT_OUT="$BUNDLE_DIR/backend/backend-candidate.stdout"
 PID_OUT="$BUNDLE_DIR/backend/backend-candidate.pid"
+PROFILE_MODE_JSON="$BUNDLE_DIR/backend/backend-candidate.profile-mode.json"
+PROFILE_MODE_TXT="$BUNDLE_DIR/backend/backend-candidate.profile-mode.txt"
+SUMMARY_JSON="$BUNDLE_DIR/backend/backend-candidate.summary.json"
 
 for path in "$CA_FILE" "$TF_CERT" "$TF_KEY" "$PUBLIC_CERT" "$PUBLIC_KEY"; do
   if [[ ! -f "$path" ]]; then
@@ -108,6 +111,9 @@ cat > "$CONFIG_OUT" <<EOF
 }
 EOF
 
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-profile-mode.sh" --json "$CONFIG_OUT" > "$PROFILE_MODE_JSON"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-profile-mode.sh" "$CONFIG_OUT" > "$PROFILE_MODE_TXT"
+
 if [[ -f "$PID_OUT" ]]; then
   old_pid=$(cat "$PID_OUT" 2>/dev/null || true)
   if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
@@ -133,8 +139,55 @@ while time.time() < deadline:
 raise SystemExit('trusted-front listener did not start in time')
 PY
 
+python3 - <<'PY' "$SUMMARY_JSON" "$CONFIG_OUT" "$PROFILE_MODE_JSON" "$LOG_OUT" "$STDOUT_OUT" "$PID_OUT" "$PUBLIC_ADDR" "$PUBLIC_PORT" "$TRUSTED_ADDR" "$TRUSTED_PORT" "$FALLBACK_ADDR" "$FALLBACK_PORT"
+import json
+import pathlib
+import sys
+
+summary_path = pathlib.Path(sys.argv[1])
+config_out = sys.argv[2]
+profile_mode = json.loads(pathlib.Path(sys.argv[3]).read_text())
+log_out = sys.argv[4]
+stdout_out = sys.argv[5]
+pid_out = sys.argv[6]
+public_addr = sys.argv[7]
+public_port = int(sys.argv[8])
+trusted_addr = sys.argv[9]
+trusted_port = int(sys.argv[10])
+fallback_addr = sys.argv[11]
+fallback_port = int(sys.argv[12])
+
+summary = {
+    "artifact_paths": {
+        "config": config_out,
+        "log": log_out,
+        "pid": pid_out,
+        "profile_mode": sys.argv[3],
+        "stdout": stdout_out,
+    },
+    "fallback": {
+        "addr": fallback_addr,
+        "port": fallback_port,
+    },
+    "profile_label": "candidate",
+    "profile_mode": profile_mode,
+    "public_listener": {
+        "addr": public_addr,
+        "port": public_port,
+    },
+    "trusted_front_listener": {
+        "addr": trusted_addr,
+        "port": trusted_port,
+    },
+}
+
+summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+PY
+
 echo "started trusted-front backend candidate"
 echo "config=$CONFIG_OUT"
+echo "profile_mode=$PROFILE_MODE_JSON"
+echo "summary=$SUMMARY_JSON"
 echo "log=$LOG_OUT"
 echo "stdout=$STDOUT_OUT"
 echo "pid=$(cat "$PID_OUT")"

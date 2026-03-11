@@ -41,6 +41,10 @@ The script writes an evidence bundle under:
 
 Typical files include:
 - `summary.md`
+- `summary.json`
+- `config.snapshot.json`
+- `profile-mode.json`
+- `profile-mode.txt`
 - `openssl-s_client-trusted-front.txt`
 - `client-transport.txt`
 - `server.log`
@@ -61,5 +65,15 @@ Use this evidence to answer only these questions first:
 - does the trusted-front candidate path actually start?
 - does the mTLS-capable internal listener work?
 - does the candidate path remain compatible with the existing runtime/test baseline?
+- does `profile-mode.json` clearly report `mode=candidate`?
 
 Only after that should the project move to a stronger staging comparison.
+
+When both baseline and candidate bundles exist, you can generate a summary-level comparison with:
+
+```bash
+./scripts/compare-validation-summaries.py \
+  --baseline <baseline-summary.json> \
+  --candidate <candidate-summary.json> \
+  --output <comparison.md>
+```

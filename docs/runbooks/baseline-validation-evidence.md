@@ -16,6 +16,10 @@ The script creates an output directory under:
 
 The evidence bundle includes at least:
 - `summary.md`
+- `summary.json`
+- `config.snapshot.json`
+- `profile-mode.json`
+- `profile-mode.txt`
 - `openssl-s_client.txt`
 - `curl-headers.txt`
 - `curl-body.txt`
@@ -57,12 +61,16 @@ Example:
 3. starts the Trojan server in embedded-TLS baseline mode
 4. captures a local `openssl s_client` snapshot
 5. captures a local HTTPS request through the baseline listener
-6. copies server logs and optional `ctest` output into the evidence bundle
+6. writes a config snapshot and profile-mode summary into the evidence bundle
+7. copies server logs and optional `ctest` output into the evidence bundle
 
 ## Verify
 
 After the script finishes, confirm:
 - `summary.md` exists
+- `summary.json` exists
+- `config.snapshot.json` exists
+- `profile-mode.json` reports `mode=baseline`
 - `server.log` exists
 - `curl-headers.txt` shows an HTTP response
 - `openssl-s_client.txt` contains a completed TLS session transcript
@@ -83,3 +91,12 @@ It is a baseline evidence capture tool, not a final comparison result.
 Use the same evidence shape later for:
 - mainstream Trojan/TLS comparison
 - trusted-front staging candidate comparison
+
+When both baseline and candidate bundles exist, you can generate a summary-level comparison with:
+
+```bash
+./scripts/compare-validation-summaries.py \
+  --baseline <baseline-summary.json> \
+  --candidate <candidate-summary.json> \
+  --output <comparison.md>
+```
