@@ -143,6 +143,18 @@ if [[ -f "$BASELINE_SUMMARY" && -f "$CANDIDATE_SUMMARY" && -f "$COMPARISON_MD" ]
   fi
 fi
 
+cp "$TWO_HOST_SUMMARY" "$PROJECT_ROOT/build/validation/latest-two-host-summary.json"
+printf '%s\n' "$RUN_DIR" > "$PROJECT_ROOT/build/validation/latest-two-host-run.txt"
+if [[ -f "$VERDICT_DRAFT" ]]; then
+  cp "$VERDICT_DRAFT" "$PROJECT_ROOT/build/validation/latest-trusted-front-verdict-draft.md"
+fi
+if [[ -f "$CLAIMS_PACK" ]]; then
+  cp "$CLAIMS_PACK" "$PROJECT_ROOT/build/validation/latest-trusted-front-claims-pack.md"
+fi
+if [[ -f "$STAGE_SUMMARY" ]]; then
+  cp "$STAGE_SUMMARY" "$PROJECT_ROOT/build/validation/latest-trusted-front-stage-summary.md"
+fi
+
 echo "completed two-host local dry run"
 echo "run_dir=$RUN_DIR"
 if [[ -f "$VERDICT_DRAFT" ]]; then
