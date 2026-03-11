@@ -106,6 +106,7 @@ public:
         bool test_metadata_verified;
         bool enable_trusted_internal_handoff_stub;
         bool enable_trusted_front_listener;
+        bool require_trusted_front_loopback_source;
         std::string trusted_front_listener_addr;
         uint16_t trusted_front_listener_port;
         std::string trusted_internal_source_name;

@@ -36,6 +36,7 @@
 #include "external_front_handoff_builder.h"
 #include "external_front_handoff_contract.h"
 #include "external_front_metadata_provider.h"
+#include "trusted_front_admission_policy.h"
 #include "session/udpforwardsession.h"
 
 #include <thread>
@@ -84,6 +85,7 @@ private:
     FallbackController fallback_controller;
     ExternalFrontHandoffBuilder external_front_handoff_builder;
     ExternalFrontHandoffContract external_front_handoff_contract;
+    TrustedFrontAdmissionPolicy trusted_front_admission_policy;
     ConfigTrustedInternalHandoffSourceStub trusted_internal_handoff_source_stub;
     ConfigExternalFrontMetadataProvider external_front_metadata_provider;
 

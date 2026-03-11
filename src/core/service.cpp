@@ -53,6 +53,7 @@ Service::Service(Config &config, bool test) :
     abuse_controller(config.abuse_control),
     runtime_metrics(),
     fallback_controller(config.abuse_control, runtime_metrics),
+    trusted_front_admission_policy(config),
     trusted_internal_handoff_source_stub(config),
     external_front_metadata_provider(config),
     ssl_context(context::sslv23),
@@ -479,6 +480,17 @@ bool Service::handle_accept_completion(const shared_ptr<Session> &session,
         boost::system::error_code ec;
         auto endpoint = session->accept_socket().remote_endpoint(ec);
         if (!ec) {
+            if (bypass_public_admission) {
+                auto trusted_front_decision = trusted_front_admission_policy.evaluate(endpoint);
+                if (!trusted_front_decision.allowed()) {
+                    ++runtime_metrics.rejected_connections_total;
+                    Log::log_with_endpoint(endpoint, "trusted-front connection rejected: " + trusted_front_decision.reason, Log::WARN);
+                    boost::system::error_code close_ec;
+                    session->accept_socket().shutdown(tcp::socket::shutdown_both, close_ec);
+                    session->accept_socket().close(close_ec);
+                    return true;
+                }
+            }
             auto decision = bypass_public_admission ? AcceptDecision::StartSession : evaluate_incoming_connection(endpoint);
             if (decision == AcceptDecision::RejectCooldown) {
                 ++runtime_metrics.rejected_connections_total;

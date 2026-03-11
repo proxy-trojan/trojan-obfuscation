@@ -9,6 +9,7 @@
 #include "core/config.h"
 #include "core/config_trusted_internal_handoff_source_stub.h"
 #include "core/external_front_handoff_builder.h"
+#include "core/trusted_front_admission_policy.h"
 #include "core/trusted_front_envelope.h"
 #include "core/trusted_front_ingress.h"
 #include "core/external_front_handoff_contract.h"
@@ -81,6 +82,7 @@ Config make_test_config() {
     config.external_front.test_metadata_verified = false;
     config.external_front.enable_trusted_internal_handoff_stub = false;
     config.external_front.enable_trusted_front_listener = false;
+    config.external_front.require_trusted_front_loopback_source = true;
     config.external_front.trusted_front_listener_addr = "127.0.0.1";
     config.external_front.trusted_front_listener_port = 0;
     config.external_front.trusted_internal_source_name = "";
@@ -613,6 +615,26 @@ void test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_
     expect_true(accepted_decision.reason == "accepted_trusted_internal_handoff_input", "accepted trusted-internal input should expose stable acceptance reason");
 }
 
+void test_trusted_front_admission_policy_defaults_to_loopback_only_and_can_be_relaxed() {
+    Config strict = make_test_config();
+    TrustedFrontAdmissionPolicy strict_policy(strict);
+
+    auto loopback = strict_policy.evaluate(loopback_endpoint(8443));
+    expect_true(loopback.allowed(), "loopback trusted-front source should be allowed by default");
+    expect_true(loopback.reason == "allowed_loopback_trusted_front_source", "loopback trusted-front source should expose stable allow reason");
+
+    auto remote = strict_policy.evaluate(tcp::endpoint(make_address("203.0.113.9"), 8443));
+    expect_true(!remote.allowed(), "non-loopback trusted-front source should be rejected by default");
+    expect_true(remote.reason == "rejected_non_loopback_trusted_front_source", "non-loopback trusted-front source should expose stable rejection reason");
+
+    Config relaxed = make_test_config();
+    relaxed.external_front.require_trusted_front_loopback_source = false;
+    TrustedFrontAdmissionPolicy relaxed_policy(relaxed);
+    auto relaxed_remote = relaxed_policy.evaluate(tcp::endpoint(make_address("203.0.113.9"), 8443));
+    expect_true(relaxed_remote.allowed(), "trusted-front source policy should allow non-loopback sources when explicitly relaxed");
+    expect_true(relaxed_remote.reason == "allowed_unrestricted_trusted_front_source", "relaxed trusted-front source policy should expose stable allow reason");
+}
+
 void test_trusted_front_envelope_parser_rejects_bad_payloads_and_accepts_valid_json() {
     TrustedFrontEnvelopeParser parser;
 
@@ -849,6 +871,7 @@ int main() {
         test_config_external_front_metadata_provider_respects_enablement();
         test_config_trusted_internal_handoff_source_stub_respects_enablement();
         test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input();
+        test_trusted_front_admission_policy_defaults_to_loopback_only_and_can_be_relaxed();
         test_trusted_front_envelope_parser_rejects_bad_payloads_and_accepts_valid_json();
         test_trusted_front_ingress_parser_rejects_bad_frames_and_accepts_valid_frame();
         test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs();
