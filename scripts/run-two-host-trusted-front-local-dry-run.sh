@@ -32,7 +32,13 @@ PUBLIC_CERT="$BUNDLE_DIR/backend/trusted-front-server.crt"
 PUBLIC_KEY="$BUNDLE_DIR/backend/trusted-front-server.key"
 for path in "$PUBLIC_CERT" "$PUBLIC_KEY"; do
   if [[ ! -f "$path" ]]; then
+    LATEST_BUNDLE=$(find "$(cd "$(dirname "$0")/.." && pwd)/build/staging" -maxdepth 1 -type d -name 'two-host-trusted-front-*' 2>/dev/null | sort | tail -1 || true)
+    echo "bundle_dir does not look like a prepared two-host staging bundle: $BUNDLE_DIR" >&2
     echo "missing required file: $path" >&2
+    echo "expected layout comes from scripts/prepare-two-host-trusted-front-staging.sh" >&2
+    if [[ -n "$LATEST_BUNDLE" ]]; then
+      echo "latest prepared bundle: $LATEST_BUNDLE" >&2
+    fi
     exit 2
   fi
 done
@@ -103,5 +109,36 @@ summary = {
 (run / 'summary.json').write_text(json.dumps(summary, indent=2))
 PY
 
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BASELINE_SUMMARY="$PROJECT_ROOT/build/validation/baseline-commit-ready/summary.json"
+CANDIDATE_SUMMARY="$PROJECT_ROOT/build/validation/candidate-commit-ready/summary.json"
+COMPARISON_MD="$PROJECT_ROOT/build/validation/commit-ready-comparison.md"
+TWO_HOST_SUMMARY="$RUN_DIR/summary.json"
+VERDICT_DRAFT="$RUN_DIR/trusted-front-verdict-draft.md"
+CLAIMS_PACK="$RUN_DIR/trusted-front-claims-pack.md"
+
+if [[ -f "$BASELINE_SUMMARY" && -f "$CANDIDATE_SUMMARY" && -f "$COMPARISON_MD" ]]; then
+  "$PROJECT_ROOT/scripts/generate-trusted-front-verdict.py" \
+    --baseline "$BASELINE_SUMMARY" \
+    --candidate "$CANDIDATE_SUMMARY" \
+    --comparison "$COMPARISON_MD" \
+    --two-host-summary "$TWO_HOST_SUMMARY" \
+    --output "$VERDICT_DRAFT" \
+    --scope "two-host local dry-run comparison" \
+    --candidate-shape "trusted-front candidate with two-host dry-run support"
+
+  "$PROJECT_ROOT/scripts/generate-trusted-front-claims-pack.py" \
+    --verdict "$VERDICT_DRAFT" \
+    --evidence-status "$PROJECT_ROOT/docs/trusted-front-edge-separation-evidence-status.md" \
+    --rollout-checklist "$PROJECT_ROOT/docs/trusted-front-rollout-checklist.md" \
+    --output "$CLAIMS_PACK"
+fi
+
 echo "completed two-host local dry run"
 echo "run_dir=$RUN_DIR"
+if [[ -f "$VERDICT_DRAFT" ]]; then
+  echo "verdict_draft=$VERDICT_DRAFT"
+fi
+if [[ -f "$CLAIMS_PACK" ]]; then
+  echo "claims_pack=$CLAIMS_PACK"
+fi

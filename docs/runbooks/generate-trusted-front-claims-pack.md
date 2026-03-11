@@ -45,3 +45,5 @@ The claims pack includes:
 
 Use this only after the verdict draft exists.
 The claims pack is a communication aid, not a replacement for evidence review.
+
+For the local two-host dry-run pipeline, `scripts/run-two-host-trusted-front-local-dry-run.sh` now generates this pack automatically when baseline/candidate comparison inputs are present.
