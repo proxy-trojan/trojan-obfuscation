@@ -361,16 +361,21 @@ Service::AcceptDecision Service::evaluate_incoming_connection(const tcp::endpoin
 std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff() {
     auto trusted_internal_input = trusted_internal_handoff_source_stub.maybe_build_input();
     if (trusted_internal_handoff_source_stub.active()) {
-        auto trusted_internal_handoff = trusted_internal_input.has_value()
-            ? external_front_handoff_builder.maybe_build_trusted_internal_handoff(*trusted_internal_input)
-            : std::nullopt;
-        if (!trusted_internal_handoff.has_value()) {
+        if (!trusted_internal_input.has_value()) {
             Log::log_with_date_time(
-                "trusted-internal handoff source active but input was rejected",
+                "external-front trusted-internal source active without input",
                 Log::WARN);
             return std::nullopt;
         }
-        return trusted_internal_handoff;
+
+        auto build_result = external_front_handoff_builder.build_trusted_internal_handoff(*trusted_internal_input);
+        if (!build_result.built()) {
+            Log::log_with_date_time(
+                "external-front trusted-internal source rejected before handoff apply: " + build_result.reason,
+                Log::WARN);
+            return std::nullopt;
+        }
+        return std::move(build_result.handoff);
     }
 
     auto injection = external_front_metadata_provider.evaluate_injection();
@@ -386,7 +391,14 @@ std::optional<ExternalFrontHandoff> Service::maybe_build_external_front_handoff(
         return std::nullopt;
     }
 
-    return external_front_handoff_builder.maybe_build_test_injected_handoff(injection);
+    auto build_result = external_front_handoff_builder.build_test_injected_handoff(injection);
+    if (!build_result.built()) {
+        Log::log_with_date_time(
+            "external-front test-injected handoff build rejected: mode=" + injection.mode + " reason=" + build_result.reason,
+            Log::WARN);
+        return std::nullopt;
+    }
+    return std::move(build_result.handoff);
 }
 
 void Service::maybe_apply_external_front_handoff(ServerSession &session, std::optional<ExternalFrontHandoff> handoff) {
@@ -394,16 +406,17 @@ void Service::maybe_apply_external_front_handoff(ServerSession &session, std::op
         return;
     }
 
+    auto source_kind = external_front_handoff_source_kind_name(handoff->source_kind);
     auto decision = external_front_handoff_contract.evaluate(*handoff);
     if (!decision.accepted()) {
         Log::log_with_date_time(
-            "external-front handoff rejected: " + decision.reason,
+            "external-front handoff rejected: source_kind=" + source_kind + " source_name=" + handoff->source_name + " reason=" + decision.reason,
             Log::WARN);
         return;
     }
 
     Log::log_with_date_time(
-        "external-front handoff applied: " + handoff->source_name + " (" + decision.reason + ")",
+        "external-front handoff applied: source_kind=" + source_kind + " source_name=" + handoff->source_name + " reason=" + decision.reason,
         Log::INFO);
     session.set_external_front_handoff(std::move(*handoff));
 }

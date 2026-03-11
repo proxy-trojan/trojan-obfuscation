@@ -1,24 +1,24 @@
 #include "external_front_handoff_builder.h"
 
-std::optional<ExternalFrontHandoff> ExternalFrontHandoffBuilder::maybe_build_test_injected_handoff(
+ExternalFrontHandoffBuildResult ExternalFrontHandoffBuilder::build_test_injected_handoff(
     const ExternalFrontMetadataProvider::InjectionResult &injection) const {
     if (!injection.context.has_value()) {
-        return std::nullopt;
+        return {std::nullopt, "rejected_missing_test_injected_context"};
     }
 
     ExternalFrontHandoff handoff;
     handoff.source_kind = ExternalFrontHandoffSourceKind::TestInjected;
     handoff.source_name = injection.mode;
     handoff.context = injection.context;
-    return handoff;
+    return {std::move(handoff), "built_test_injected_handoff"};
 }
 
-std::optional<ExternalFrontHandoff> ExternalFrontHandoffBuilder::maybe_build_trusted_internal_handoff(
+ExternalFrontHandoffBuildResult ExternalFrontHandoffBuilder::build_trusted_internal_handoff(
     const TrustedInternalHandoffInput &input) const {
     TrustedInternalHandoffInputContract contract;
     auto decision = contract.evaluate(input);
     if (!decision.accepted()) {
-        return std::nullopt;
+        return {std::nullopt, decision.reason};
     }
 
     ExternalFrontContext context;
@@ -35,5 +35,5 @@ std::optional<ExternalFrontHandoff> ExternalFrontHandoffBuilder::maybe_build_tru
     handoff.source_kind = ExternalFrontHandoffSourceKind::TrustedInternalHandoff;
     handoff.source_name = input.source_name;
     handoff.context = std::move(context);
-    return handoff;
+    return {std::move(handoff), decision.reason};
 }

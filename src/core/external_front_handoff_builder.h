@@ -7,12 +7,21 @@
 #include "session_types.h"
 #include "trusted_internal_handoff_input.h"
 
+struct ExternalFrontHandoffBuildResult {
+    std::optional<ExternalFrontHandoff> handoff;
+    std::string reason;
+
+    bool built() const {
+        return handoff.has_value();
+    }
+};
+
 class ExternalFrontHandoffBuilder {
 public:
-    std::optional<ExternalFrontHandoff> maybe_build_test_injected_handoff(
+    ExternalFrontHandoffBuildResult build_test_injected_handoff(
         const ExternalFrontMetadataProvider::InjectionResult &injection) const;
 
-    std::optional<ExternalFrontHandoff> maybe_build_trusted_internal_handoff(
+    ExternalFrontHandoffBuildResult build_trusted_internal_handoff(
         const TrustedInternalHandoffInput &input) const;
 };
 

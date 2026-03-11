@@ -570,8 +570,9 @@ void test_external_front_handoff_builder_shapes_test_injected_and_trusted_intern
     ExternalFrontMetadataProvider::InjectionResult inactive_injection;
     inactive_injection.decision = ExternalFrontMetadataProvider::Decision::Inactive;
     inactive_injection.mode = "test_injected_external_front";
-    auto inactive_handoff = builder.maybe_build_test_injected_handoff(inactive_injection);
-    expect_true(!inactive_handoff.has_value(), "builder should not shape test-injected handoff without metadata context");
+    auto inactive_handoff = builder.build_test_injected_handoff(inactive_injection);
+    expect_true(!inactive_handoff.built(), "builder should not shape test-injected handoff without metadata context");
+    expect_true(inactive_handoff.reason == "rejected_missing_test_injected_context", "test-injected build rejection should expose stable reason");
 
     ExternalFrontMetadataProvider::InjectionResult active_injection;
     active_injection.decision = ExternalFrontMetadataProvider::Decision::ActiveWithMetadata;
@@ -581,12 +582,13 @@ void test_external_front_handoff_builder_shapes_test_injected_and_trusted_intern
     injected_context.original_client_ip = "203.0.113.10";
     active_injection.context = injected_context;
 
-    auto test_handoff = builder.maybe_build_test_injected_handoff(active_injection);
-    expect_true(test_handoff.has_value(), "builder should shape test-injected handoff when metadata exists");
-    expect_true(test_handoff->source_kind == ExternalFrontHandoffSourceKind::TestInjected, "test-injected handoff should expose test source kind");
-    expect_true(test_handoff->source_name == "test_injected_external_front", "test-injected handoff should preserve source name");
-    expect_true(test_handoff->context.has_value(), "test-injected handoff should carry metadata context");
-    expect_true(test_handoff->context->trusted_front_id == "front-1", "test-injected handoff should preserve metadata context");
+    auto test_handoff = builder.build_test_injected_handoff(active_injection);
+    expect_true(test_handoff.built(), "builder should shape test-injected handoff when metadata exists");
+    expect_true(test_handoff.reason == "built_test_injected_handoff", "test-injected build should expose stable success reason");
+    expect_true(test_handoff.handoff->source_kind == ExternalFrontHandoffSourceKind::TestInjected, "test-injected handoff should expose test source kind");
+    expect_true(test_handoff.handoff->source_name == "test_injected_external_front", "test-injected handoff should preserve source name");
+    expect_true(test_handoff.handoff->context.has_value(), "test-injected handoff should carry metadata context");
+    expect_true(test_handoff.handoff->context->trusted_front_id == "front-1", "test-injected handoff should preserve metadata context");
 
     TrustedInternalHandoffInput trusted_input;
     trusted_input.source_name = "internal_handoff_source";
@@ -597,14 +599,15 @@ void test_external_front_handoff_builder_shapes_test_injected_and_trusted_intern
     trusted_input.negotiated_alpn = "h2";
     trusted_input.tls_terminated_by_front = true;
     trusted_input.metadata_verified = true;
-    auto trusted_handoff = builder.maybe_build_trusted_internal_handoff(trusted_input);
-    expect_true(trusted_handoff.has_value(), "trusted-internal builder should shape handoff for accepted input");
-    expect_true(trusted_handoff->source_kind == ExternalFrontHandoffSourceKind::TrustedInternalHandoff, "trusted-internal builder should expose trusted-internal source kind");
-    expect_true(trusted_handoff->source_name == "internal_handoff_source", "trusted-internal builder should preserve source name");
-    expect_true(trusted_handoff->context.has_value(), "trusted-internal builder should always carry metadata context");
-    expect_true(trusted_handoff->context->trusted_front_id == "internal-front", "trusted-internal builder should preserve trusted front id");
-    expect_true(trusted_handoff->context->original_client_ip == "203.0.113.11", "trusted-internal builder should preserve original client ip");
-    expect_true(trusted_handoff->context->ingress_mode == "trusted_internal_handoff", "trusted-internal builder should mark trusted internal ingress mode");
+    auto trusted_handoff = builder.build_trusted_internal_handoff(trusted_input);
+    expect_true(trusted_handoff.built(), "trusted-internal builder should shape handoff for accepted input");
+    expect_true(trusted_handoff.reason == "accepted_trusted_internal_handoff_input", "trusted-internal builder should surface accepted input reason");
+    expect_true(trusted_handoff.handoff->source_kind == ExternalFrontHandoffSourceKind::TrustedInternalHandoff, "trusted-internal builder should expose trusted-internal source kind");
+    expect_true(trusted_handoff.handoff->source_name == "internal_handoff_source", "trusted-internal builder should preserve source name");
+    expect_true(trusted_handoff.handoff->context.has_value(), "trusted-internal builder should always carry metadata context");
+    expect_true(trusted_handoff.handoff->context->trusted_front_id == "internal-front", "trusted-internal builder should preserve trusted front id");
+    expect_true(trusted_handoff.handoff->context->original_client_ip == "203.0.113.11", "trusted-internal builder should preserve original client ip");
+    expect_true(trusted_handoff.handoff->context->ingress_mode == "trusted_internal_handoff", "trusted-internal builder should mark trusted internal ingress mode");
 }
 
 void test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context() {
