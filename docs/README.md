@@ -35,6 +35,7 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - `client/README.md`
 - `client/pubspec.yaml`
 - `client/lib/...`
+- `client-development-notes.md`
 
 ## Runbooks
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/controller/domain/client_connection_status.dart';
+import '../features/dashboard/presentation/dashboard_page.dart';
 import '../features/diagnostics/presentation/diagnostics_page.dart';
 import '../features/profiles/presentation/profiles_page.dart';
 import '../features/settings/presentation/settings_page.dart';
@@ -21,12 +22,18 @@ class _ClientAppShellState extends State<ClientAppShell> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
+      DashboardPage(services: widget.services),
       ProfilesPage(services: widget.services),
       SettingsPage(services: widget.services),
       DiagnosticsPage(services: widget.services),
     ];
 
     final destinations = <NavigationRailDestination>[
+      const NavigationRailDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        selectedIcon: Icon(Icons.dashboard),
+        label: Text('Dashboard'),
+      ),
       const NavigationRailDestination(
         icon: Icon(Icons.dns_outlined),
         selectedIcon: Icon(Icons.dns),

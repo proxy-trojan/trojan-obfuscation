@@ -6,6 +6,7 @@ Desktop-first, mobile-ready client shell for the Trojan-Pro project.
 
 This is **Phase A client shell scaffolding**.
 Current scope focuses on product-layer concerns:
+- dashboard / status shell
 - profile management shell
 - profile create/edit/import/export flow
 - settings/state model
