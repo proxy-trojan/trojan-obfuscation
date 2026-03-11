@@ -10,6 +10,7 @@
 #include "core/config_trusted_internal_handoff_source_stub.h"
 #include "core/external_front_handoff_builder.h"
 #include "core/trusted_front_envelope.h"
+#include "core/trusted_front_ingress.h"
 #include "core/external_front_handoff_contract.h"
 #include "core/external_front_inbound.h"
 #include "core/trusted_internal_handoff_input.h"
@@ -646,6 +647,40 @@ void test_trusted_front_envelope_parser_rejects_bad_payloads_and_accepts_valid_j
     expect_true(valid_envelope.input->original_client_ip == "203.0.113.10", "valid envelope should preserve original client ip");
 }
 
+void test_trusted_front_ingress_parser_rejects_bad_frames_and_accepts_valid_frame() {
+    TrustedFrontIngressParser parser;
+
+    auto incomplete = parser.parse("12");
+    expect_true(!incomplete.parsed(), "trusted-front ingress parser should reject incomplete frames without a newline separator");
+    expect_true(incomplete.reason == "rejected_incomplete_trusted_front_ingress_frame", "incomplete frame should expose stable rejection reason");
+
+    auto invalid_length = parser.parse("abc\n{}");
+    expect_true(!invalid_length.parsed(), "trusted-front ingress parser should reject invalid envelope length prefixes");
+    expect_true(invalid_length.reason == "rejected_invalid_trusted_front_ingress_length", "invalid length prefix should expose stable rejection reason");
+
+    auto invalid_envelope = parser.parse("40\n{\"source_name\":\"x\"}payload");
+    expect_true(!invalid_envelope.parsed(), "trusted-front ingress parser should reject invalid envelope content");
+    expect_true(invalid_envelope.reason == "rejected_incomplete_trusted_front_ingress_frame", "short frame should expose incomplete-frame rejection reason");
+
+    std::string valid_envelope = R"json({
+        "source_name":"front-a",
+        "trusted_front_id":"front-a-id",
+        "original_client_ip":"203.0.113.10",
+        "original_client_port":44321,
+        "server_name":"front.example.com",
+        "negotiated_alpn":"h2",
+        "tls_terminated_by_front":true,
+        "metadata_verified":true
+    })json";
+    std::string valid_frame = std::to_string(valid_envelope.size()) + "\n" + valid_envelope + std::string("trojan-handshake-payload");
+    auto valid = parser.parse(valid_frame);
+    expect_true(valid.parsed(), "trusted-front ingress parser should accept valid frames");
+    expect_true(valid.reason == "parsed_trusted_front_ingress", "valid ingress frame should expose stable success reason");
+    expect_true(valid.handoff->source_kind == ExternalFrontHandoffSourceKind::TrustedInternalHandoff, "valid ingress frame should build trusted-internal handoff");
+    expect_true(valid.handoff->source_name == "front-a", "valid ingress frame should preserve parsed source name");
+    expect_true(valid.downstream_payload == "trojan-handshake-payload", "valid ingress frame should preserve downstream payload");
+}
+
 void test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs() {
     ExternalFrontHandoffBuilder builder;
 
@@ -812,6 +847,7 @@ int main() {
         test_config_trusted_internal_handoff_source_stub_respects_enablement();
         test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input();
         test_trusted_front_envelope_parser_rejects_bad_payloads_and_accepts_valid_json();
+        test_trusted_front_ingress_parser_rejects_bad_frames_and_accepts_valid_frame();
         test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs();
         test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context();
         test_server_ingress_selector_routes_external_front_selection();
