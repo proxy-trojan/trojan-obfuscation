@@ -23,6 +23,7 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - `baseline-validation-report.md`
 - `trusted-front-candidate-validation-report.md`
 - `baseline-vs-trusted-front-candidate-comparison-report.md`
+- `trusted-front-edge-separation-evidence-status.md`
 - `first-tier-readiness-roadmap.md`
 - `first-tier-promotion-scorecard.md`
 
