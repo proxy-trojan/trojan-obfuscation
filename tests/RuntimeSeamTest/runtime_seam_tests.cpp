@@ -9,6 +9,7 @@
 #include "core/config.h"
 #include "core/config_trusted_internal_handoff_source_stub.h"
 #include "core/external_front_handoff_builder.h"
+#include "core/trusted_front_envelope.h"
 #include "core/external_front_handoff_contract.h"
 #include "core/external_front_inbound.h"
 #include "core/trusted_internal_handoff_input.h"
@@ -571,6 +572,43 @@ void test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_
     expect_true(accepted_decision.reason == "accepted_trusted_internal_handoff_input", "accepted trusted-internal input should expose stable acceptance reason");
 }
 
+void test_trusted_front_envelope_parser_rejects_bad_payloads_and_accepts_valid_json() {
+    TrustedFrontEnvelopeParser parser;
+
+    auto invalid_json = parser.parse_json("not-json");
+    expect_true(!invalid_json.parsed(), "parser should reject invalid JSON payloads");
+    expect_true(invalid_json.reason == "rejected_invalid_trusted_front_envelope_json", "invalid JSON should expose stable rejection reason");
+
+    auto invalid_envelope = parser.parse_json(R"json({
+        "source_name": "front-a",
+        "trusted_front_id": "",
+        "original_client_ip": "203.0.113.10",
+        "original_client_port": 44321,
+        "server_name": "front.example.com",
+        "negotiated_alpn": "h2",
+        "tls_terminated_by_front": true,
+        "metadata_verified": true
+    })json");
+    expect_true(!invalid_envelope.parsed(), "parser should reject invalid trusted-front envelopes");
+    expect_true(invalid_envelope.reason == "rejected_missing_trusted_internal_front_id", "invalid envelope should surface input-contract rejection reason");
+
+    auto valid_envelope = parser.parse_json(R"json({
+        "source_name": "front-a",
+        "trusted_front_id": "front-a-id",
+        "original_client_ip": "203.0.113.10",
+        "original_client_port": 44321,
+        "server_name": "front.example.com",
+        "negotiated_alpn": "h2",
+        "tls_terminated_by_front": true,
+        "metadata_verified": true
+    })json");
+    expect_true(valid_envelope.parsed(), "parser should accept valid trusted-front envelope payloads");
+    expect_true(valid_envelope.reason == "parsed_trusted_front_envelope", "valid envelope should expose stable parse success reason");
+    expect_true(valid_envelope.input->source_name == "front-a", "valid envelope should preserve source name");
+    expect_true(valid_envelope.input->trusted_front_id == "front-a-id", "valid envelope should preserve trusted front id");
+    expect_true(valid_envelope.input->original_client_ip == "203.0.113.10", "valid envelope should preserve original client ip");
+}
+
 void test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs() {
     ExternalFrontHandoffBuilder builder;
 
@@ -736,6 +774,7 @@ int main() {
         test_config_external_front_metadata_provider_respects_enablement();
         test_config_trusted_internal_handoff_source_stub_respects_enablement();
         test_trusted_internal_handoff_input_contract_rejects_incomplete_inputs_and_accepts_verified_input();
+        test_trusted_front_envelope_parser_rejects_bad_payloads_and_accepts_valid_json();
         test_external_front_handoff_builder_shapes_test_injected_and_trusted_internal_handoffs();
         test_external_front_handoff_contract_accepts_known_sources_and_rejects_unknown_or_missing_context();
         test_server_ingress_selector_routes_external_front_selection();

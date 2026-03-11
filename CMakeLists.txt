@@ -138,6 +138,7 @@ else()
                    src/core/config_trusted_internal_handoff_source_stub.cpp
                    src/core/external_front_handoff_builder.cpp
                    src/core/external_front_handoff_contract.cpp
+                   src/core/trusted_front_envelope.cpp
                    src/core/trusted_internal_handoff_input.cpp
                    src/core/external_front_metadata_provider.cpp
                    src/core/external_front_trust_policy.cpp
