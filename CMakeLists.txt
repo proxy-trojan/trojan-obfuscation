@@ -154,7 +154,13 @@ else()
 
     add_test(NAME RuntimeSeamTests COMMAND runtime_seam_tests)
 
+    add_test(NAME LinuxSmokeTest-e2e-deploy
+             COMMAND bash ${CMAKE_SOURCE_DIR}/tests/LinuxSmokeTest/e2e-deploy-test.sh ${CMAKE_BINARY_DIR}/trojan)
+
     set_tests_properties(LinuxSmokeTest-server-config-fails PROPERTIES DEPENDS "LinuxSmokeTest-basic")
     set_tests_properties(LinuxSmokeTest-auth-fail-cooldown PROPERTIES DEPENDS "LinuxSmokeTest-basic")
     set_tests_properties(LinuxSmokeTest-fallback-budget PROPERTIES DEPENDS "LinuxSmokeTest-basic")
+    set_tests_properties(LinuxSmokeTest-e2e-deploy PROPERTIES
+        DEPENDS "LinuxSmokeTest-basic"
+        TIMEOUT 120)
 endif()

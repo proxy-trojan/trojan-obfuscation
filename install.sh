@@ -1,15 +1,15 @@
 #!/bin/bash
 # Trojan-Pro One-Click Installer
 # Suitable for consumption via curl/wget
-# Usage: bash <(curl -sL https://raw.githubusercontent.com/proxy-trojan/trojan-obfuscation/feature_1.0_no_obfus_and_no_rules/install.sh)
+# Usage: bash <(curl -sL https://raw.githubusercontent.com/proxy-trojan/trojan-obfuscation/main/install.sh)
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
 # Repo Information
-REPO_URL="https://github.com/proxy-trojan/trojan-obfuscation/archive/refs/heads/feature_1.0_no_obfus_and_no_rules.zip"
-# Note: Update this URL if the branch is different (e.g., master)
+REPO_URL="https://github.com/proxy-trojan/trojan-obfuscation/archive/refs/heads/main.zip"
+# Note: Update this URL if the branch is different
 
 check_root() {
     if [[ $EUID -ne 0 ]]; then

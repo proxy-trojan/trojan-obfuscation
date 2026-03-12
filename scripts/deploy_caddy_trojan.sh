@@ -19,10 +19,10 @@ BACKUP_DIR="/etc/trojan/backups"
 WEB_DIR="/var/www/html"
 DOCKER_COMPOSE_FILE="/etc/trojan/docker-compose.yml"
 REPO_URL="https://github.com/proxy-trojan/trojan-obfuscation"
-REPO_BRANCH="feature_1.0_no_obfus_and_no_rules"
+REPO_BRANCH="main"
 RELEASE_API_URL="https://api.github.com/repos/proxy-trojan/trojan-obfuscation/releases/latest"
 CORE_INSTALL_MODE=""  # "download" or "compile"
-SCRIPT_VERSION="2.2"
+SCRIPT_VERSION="3.0"
 
 # Command-line arguments
 CLI_DOMAIN=""
@@ -187,6 +187,7 @@ setup_languages() {
     MSG_en_USERS_ADD="Add password"
     MSG_en_USERS_REMOVE="Remove password"
     MSG_en_USERS_BACK="Back to main menu"
+    MSG_en_MENU_EXPORT="Export Client Configs"
 
     # Certificate options
     MSG_en_CERT_TYPE_PROMPT="Select certificate type:"
@@ -366,6 +367,7 @@ setup_languages() {
     MSG_cn_USERS_ADD="添加密码"
     MSG_cn_USERS_REMOVE="删除密码"
     MSG_cn_USERS_BACK="返回主菜单"
+    MSG_cn_MENU_EXPORT="导出客户端配置"
 
     # Certificate options / 证书选项
     MSG_cn_CERT_TYPE_PROMPT="请选择证书类型："
@@ -1665,16 +1667,65 @@ setup_ssl() {
 }
 
 # ==================== Trojan/Caddy Config ====================
+# 生成伪装站点 HTML 页面
+generate_camouflage_site() {
+    mkdir -p "$WEB_DIR"
+    cat > "$WEB_DIR/index.html" << 'SITEEOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               display: flex; justify-content: center; align-items: center;
+               min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .container { text-align: center; color: white; padding: 2rem; }
+        h1 { font-size: 3rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome</h1>
+        <p>This server is running normally.</p>
+    </div>
+</body>
+</html>
+SITEEOF
+}
+
 configure_caddy_overload() {
     local caddy_conf="/etc/caddy/Caddyfile"
     mkdir -p /etc/caddy
+    mkdir -p "$WEB_DIR"
     mkdir -p /var/log/caddy
-    
+
+    # 生成伪装站点 HTML
+    generate_camouflage_site
+
+    # Caddy 配置：伪装站点 + 安全头
     cat > "$caddy_conf" << EOF
+# Caddy 作为 Trojan 的伪装后端
+# 非 Trojan 流量到达时，显示正常网站
+
 :8080 {
-    respond "Service Overload" 503
+    root * ${WEB_DIR}
+    file_server
+
     log {
-        output file /var/log/caddy/access.log
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+
+    # 安全头
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
     }
 }
 EOF
@@ -1742,6 +1793,17 @@ configure_trojan() {
         "fast_open": true,
         "fast_open_qlen": 20
     },
+    "mysql": {
+        "enabled": false,
+        "server_addr": "127.0.0.1",
+        "server_port": 3306,
+        "database": "trojan",
+        "username": "trojan",
+        "password": "",
+        "key": "",
+        "cert": "",
+        "ca": ""
+    },
     "abuse_control": {
         "enabled": true,
         "per_ip_max_connections": 64,
@@ -1765,6 +1827,292 @@ EOF
         tail -20 /tmp/trojan-config-check.log 2>/dev/null || true
         exit 1
     fi
+}
+
+# ==================== 客户端配置生成 ====================
+CLIENT_CONFIG_DIR="/etc/trojan/clients"
+
+generate_client_configs() {
+    log_info "Generating client configuration files..."
+
+    mkdir -p "$CLIENT_CONFIG_DIR"
+
+    # 1. 基础客户端配置（无混淆）
+    generate_basic_client_config
+
+    # 2. 带混淆的客户端配置
+    generate_obfuscation_client_config
+
+    # 3. Clash 配置
+    generate_clash_config
+
+    # 4. 配置信息卡片
+    generate_config_card
+
+    log_info "Client configs: $CLIENT_CONFIG_DIR"
+}
+
+generate_basic_client_config() {
+    cat > "$CLIENT_CONFIG_DIR/client-basic.json" << EOF
+{
+    "_comment": "基础客户端配置 - 适用于标准 Trojan 客户端 / Basic client config",
+    "run_type": "client",
+    "local_addr": "127.0.0.1",
+    "local_port": 1080,
+    "remote_addr": "${DOMAIN}",
+    "remote_port": 443,
+    "password": [
+        "${PASSWORD}"
+    ],
+    "log_level": 1,
+    "ssl": {
+        "verify": true,
+        "verify_hostname": true,
+        "cert": "",
+        "cipher": "",
+        "cipher_tls13": "",
+        "sni": "${DOMAIN}",
+        "alpn": [
+            "h2",
+            "http/1.1"
+        ],
+        "reuse_session": true,
+        "session_ticket": true,
+        "curves": ""
+    },
+    "tcp": {
+        "no_delay": true,
+        "keep_alive": true,
+        "reuse_port": false,
+        "fast_open": false,
+        "fast_open_qlen": 20
+    }
+}
+EOF
+}
+
+generate_obfuscation_client_config() {
+    cat > "$CLIENT_CONFIG_DIR/client-obfuscation.json" << EOF
+{
+    "_comment": "高级混淆客户端配置 / Advanced obfuscation client config",
+    "_note": "需要使用支持混淆模块的 Trojan 客户端",
+
+    "run_type": "client",
+    "local_addr": "127.0.0.1",
+    "local_port": 1080,
+    "remote_addr": "${DOMAIN}",
+    "remote_port": 443,
+    "password": [
+        "${PASSWORD}"
+    ],
+    "log_level": 1,
+
+    "ssl": {
+        "verify": true,
+        "verify_hostname": true,
+        "cert": "",
+        "cipher": "",
+        "cipher_tls13": "",
+        "sni": "${DOMAIN}",
+        "alpn": [
+            "h2",
+            "http/1.1"
+        ],
+        "reuse_session": true,
+        "session_ticket": true,
+        "curves": ""
+    },
+
+    "tcp": {
+        "prefer_ipv4": false,
+        "no_delay": true,
+        "keep_alive": true,
+        "reuse_port": false,
+        "fast_open": false,
+        "fast_open_qlen": 20
+    },
+
+    "obfuscation": {
+        "enabled": true,
+
+        "fingerprint": {
+            "_comment": "TLS 指纹随机化 - 模拟真实浏览器",
+            "_options": "chrome, firefox, safari, edge, random",
+            "enabled": true,
+            "type": "random",
+            "grease": true
+        },
+
+        "handshake_mimicry": {
+            "_comment": "握手数据混淆 - 从真实网站采集特征",
+            "enabled": true,
+            "cache_file": "~/.trojan/handshake.bin",
+            "prefetch": true,
+            "prefetch_domains": [
+                "www.google.com",
+                "www.cloudflare.com",
+                "www.microsoft.com",
+                "www.apple.com"
+            ]
+        },
+
+        "timing": {
+            "_comment": "时序混淆配置",
+            "_profiles": "aggressive(低延迟) / balanced(平衡) / stealth(高隐蔽)",
+            "profile": "aggressive"
+        },
+
+        "padding": {
+            "_comment": "协议填充 - 增加流量随机性",
+            "enabled": false,
+            "min_bytes": 0,
+            "max_bytes": 64
+        },
+
+        "record_splitting": {
+            "_comment": "TLS 记录分片",
+            "enabled": false
+        },
+
+        "cache": {
+            "_comment": "缓存配置 - 减少启动延迟",
+            "enabled": true,
+            "directory": "~/.trojan/cache"
+        },
+
+        "tls": {
+            "_comment": "TLS 版本控制",
+            "enforce_tls13": true,
+            "min_version": "0x0304"
+        }
+    }
+}
+EOF
+}
+
+generate_clash_config() {
+    cat > "$CLIENT_CONFIG_DIR/clash-config.yaml" << EOF
+# Clash 配置文件
+# 适用于 Clash / ClashX / Clash for Windows / Clash for Android
+
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+
+proxies:
+  - name: "${DOMAIN}"
+    type: trojan
+    server: ${DOMAIN}
+    port: 443
+    password: ${PASSWORD}
+    sni: ${DOMAIN}
+    skip-cert-verify: false
+    udp: true
+
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies:
+      - "${DOMAIN}"
+      - DIRECT
+
+rules:
+  # 私有地址直连
+  - IP-CIDR,127.0.0.0/8,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT
+  - IP-CIDR,10.0.0.0/8,DIRECT
+  - IP-CIDR,172.16.0.0/12,DIRECT
+  # 默认代理
+  - MATCH,Proxy
+EOF
+}
+
+generate_config_card() {
+    # 获取公网 IP
+    local server_ip=""
+    server_ip=$(curl -s4 --connect-timeout 5 ip.sb 2>/dev/null)
+    if [[ -z "$server_ip" ]]; then
+        server_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null)
+    fi
+    if [[ -z "$server_ip" ]]; then
+        server_ip="YOUR_SERVER_IP"
+    fi
+
+    cat > "$CLIENT_CONFIG_DIR/README.txt" << EOF
+╔══════════════════════════════════════════════════════════════════════╗
+║                     Trojan 客户端连接信息                            ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+=== 服务器信息 / Server Info ===
+  地址/Host:   ${DOMAIN}
+  IP:          ${server_ip}
+  端口/Port:   443
+  密码/Pass:   ${PASSWORD}
+
+=== 配置文件说明 / Config Files ===
+
+1. client-basic.json
+   - 基础配置，适用于所有标准 Trojan 客户端
+   - Basic config for standard Trojan clients
+
+2. client-obfuscation.json  [推荐 / Recommended]
+   - 包含高级混淆功能（TLS 指纹伪装、握手混淆、时序混淆）
+   - Advanced obfuscation: TLS fingerprint, handshake mimicry, timing
+
+3. clash-config.yaml
+   - 适用于 Clash 系列客户端
+   - For ClashX (macOS) / Clash for Windows / Clash for Android
+
+=== Trojan URL (一键导入 / One-click Import) ===
+  trojan://${PASSWORD}@${DOMAIN}:443?security=tls&type=tcp&sni=${DOMAIN}#${DOMAIN}
+
+=== 使用方法 / Usage ===
+
+1. 命令行 (Linux/macOS):
+   trojan /path/to/client-obfuscation.json
+
+2. 浏览器代理: SOCKS5 127.0.0.1:1080
+
+=== 下载配置 / Download ===
+  scp -r root@${DOMAIN}:${CLIENT_CONFIG_DIR} ./trojan-client/
+
+生成时间: $(date '+%Y-%m-%d %H:%M:%S')
+EOF
+}
+
+# 导出客户端配置压缩包
+do_export_client_config() {
+    if [[ ! -d "$CLIENT_CONFIG_DIR" ]]; then
+        log_error "Client config directory not found. Please install first."
+        return 1
+    fi
+
+    local export_dir="/tmp/trojan-client-$(date +%Y%m%d%H%M%S)"
+    mkdir -p "$export_dir"
+    cp -r "$CLIENT_CONFIG_DIR"/* "$export_dir/"
+
+    local archive_name="trojan-client-config.tar.gz"
+    tar -czf "/tmp/$archive_name" -C /tmp "$(basename "$export_dir")"
+
+    echo ""
+    echo -e "${GREEN}Client configs exported:${NC}"
+    echo -e "  Archive: ${YELLOW}/tmp/$archive_name${NC}"
+    echo ""
+
+    # 读取域名
+    local domain=""
+    if [[ -f "/etc/trojan/.domain" ]]; then
+        domain=$(cat /etc/trojan/.domain)
+    fi
+    if [[ -n "$domain" ]]; then
+        echo -e "Download command (run on local machine):"
+        echo -e "  ${CYAN}scp root@${domain}:/tmp/$archive_name ./${NC}"
+        echo ""
+    fi
+
+    rm -rf "$export_dir"
+    pause
 }
 
 setup_services_host() {
@@ -2148,6 +2496,9 @@ do_install() {
     local backup_file="$BACKUP_DIR/trojan_backup_initial.tar.gz"
     tar -czf "$backup_file" -C / etc/trojan/config.json etc/trojan/.domain etc/trojan/.password 2>/dev/null || true
 
+    # 生成客户端配置文件
+    generate_client_configs
+
     clear
     echo ""
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -2174,6 +2525,15 @@ do_install() {
     echo -e "  📊 $(t CMD_STATUS):   ${PURPLE}systemctl status trojan${NC}"
     echo -e "  📋 $(t CMD_LOGS):     ${PURPLE}journalctl -u trojan -f${NC}"
     echo -e "  🔄 $(t CMD_RESTART):  ${PURPLE}systemctl restart trojan${NC}"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━ $(t CLIENT_CFG) ━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  📁 Basic:       ${YELLOW}${CLIENT_CONFIG_DIR}/client-basic.json${NC}"
+    echo -e "  📁 Obfuscation: ${YELLOW}${CLIENT_CONFIG_DIR}/client-obfuscation.json${NC}"
+    echo -e "  📁 Clash:       ${YELLOW}${CLIENT_CONFIG_DIR}/clash-config.yaml${NC}"
+    echo -e "  📋 README:      ${YELLOW}${CLIENT_CONFIG_DIR}/README.txt${NC}"
+    echo ""
+    echo -e "  📦 Download:    ${CYAN}scp -r root@${DOMAIN}:${CLIENT_CONFIG_DIR} ./trojan-client/${NC}"
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  $(t NON_COMPLIANT)"
@@ -3032,13 +3392,14 @@ show_menu() {
     echo -e "${CYAN}7.${NC} $(t MENU_USERS)"
     echo -e "${CYAN}8.${NC} $(t MENU_BACKUP)"
     echo -e "${CYAN}9.${NC} $(t MENU_RESTORE)"
+    echo -e "${CYAN}e.${NC} $(t MENU_EXPORT)"
     echo -e "${CYAN}u.${NC} $(t MENU_UNINSTALL)"
     echo -e "${CYAN}0.${NC} $(t MENU_EXIT)"
 
     echo -e "\n${BLUE}Tip: Run via one-click:${NC} ${YELLOW}bash <(curl -sL ${REPO_URL/github.com/raw.githubusercontent.com}/$REPO_BRANCH/install.sh)${NC}"
     echo -e "${BLUE}CLI mode:${NC} ${YELLOW}$0 --help${NC}"
     echo ""
-    read -r -p "Select [0-9,u]: " choice
+    read -r -p "Select [0-9,e,u]: " choice
 
     case $choice in
         1) do_install ;;
@@ -3050,6 +3411,7 @@ show_menu() {
         7) do_manage_users ;;
         8) do_backup ;;
         9) do_restore ;;
+        e|E) do_export_client_config ;;
         u|U) do_uninstall ;;
         0) exit 0 ;;
         *) echo "Invalid choice"; sleep 1 ;;
