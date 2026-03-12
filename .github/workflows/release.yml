@@ -141,7 +141,17 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install OpenSSL
+      - name: Install x86_64 OpenSSL
+        if: matrix.arch == 'x86_64'
+        run: |
+          softwareupdate --install-rosetta --agree-to-license || true
+          if [ ! -x /usr/local/bin/brew ]; then
+            NONINTERACTIVE=1 arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          arch -x86_64 /usr/local/bin/brew install openssl@3
+
+      - name: Install arm64 OpenSSL
+        if: matrix.arch == 'arm64'
         run: |
           brew install openssl@3
 
@@ -160,7 +170,11 @@ jobs:
 
       - name: Build
         run: |
-          OPENSSL_ROOT="$(brew --prefix openssl@3)"
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            OPENSSL_ROOT="/usr/local/opt/openssl@3"
+          else
+            OPENSSL_ROOT="$(brew --prefix openssl@3)"
+          fi
 
           mkdir -p build && cd build
           cmake .. \
@@ -171,6 +185,9 @@ jobs:
             -DBoost_NO_SYSTEM_PATHS=ON \
             -DBOOST_USE_STATIC_LIBS=ON \
             -DOPENSSL_ROOT_DIR=$OPENSSL_ROOT \
+            -DOPENSSL_INCLUDE_DIR=$OPENSSL_ROOT/include \
+            -DOPENSSL_SSL_LIBRARY=$OPENSSL_ROOT/lib/libssl.dylib \
+            -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_ROOT/lib/libcrypto.dylib \
             -DENABLE_MYSQL=OFF \
             -DENABLE_SSL_KEYLOG=OFF \
             -Wno-dev
