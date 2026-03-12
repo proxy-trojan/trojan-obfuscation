@@ -6,13 +6,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+---
+
+## [v1.1.1] - 2026-03-12
+
 ### EN
-- Align client package versioning with formal stable release naming.
-- Upgrade GitHub Actions workflow actions to Node 24-ready major versions.
+- Align client package version naming to stable release style (`1.1.0` / `1.1.0-1`).
+- Upgrade core workflow actions to latest major versions (checkout/upload/download/setup-java).
+- Make release notes client artifact names pattern-based to avoid stale hardcoded names.
+- Disable Flutter action cache integration in client packaging jobs to avoid Node 20 deprecation noise from transitive `actions/cache@v4`.
 
 ### 中文
-- 将 client 打包版本命名对齐为正式稳定版风格。
-- 将 GitHub Actions workflow 中的 action 升级到兼容 Node 24 的主版本。
+- 将 client 打包版本命名对齐为稳定版风格（`1.1.0` / `1.1.0-1`）。
+- 升级核心 workflow action 到最新主版本（checkout/upload/download/setup-java）。
+- 将 release notes 中的 client 产物命名改为模式匹配，避免硬编码过期。
+- 在 client packaging 作业中关闭 Flutter action 缓存集成，避免由传递依赖 `actions/cache@v4` 带来的 Node 20 弃用告警。
 
 ---
 

@@ -494,11 +494,11 @@ jobs:
 
           | Platform | Artifact |
           |----------|----------|
-          | Linux | `trojan-pro-client_0.1.0~internal.alpha.1-1_amd64.deb` |
-          | Linux | `trojan-pro-client_0.1.0-internal-alpha.1_linux-x64-bundle.tar.gz` |
-          | Windows | `trojan-pro-client_0.1.0-internal-alpha.1_windows-x64.zip` |
-          | macOS | `trojan-pro-client_0.1.0-internal-alpha.1_macos-app.zip` |
-          | Android | `trojan-pro-client_0.1.0-internal-alpha.1_android-release.apk` |
+          | Linux | `trojan-pro-client_*_amd64.deb` |
+          | Linux | `trojan-pro-client_*_linux-x64-bundle.tar.gz` |
+          | Windows | `trojan-pro-client_*_windows-x64.zip` |
+          | macOS | `trojan-pro-client_*_macos-app.zip` |
+          | Android | `trojan-pro-client_*_android-release.apk` |
 
           ### Verification
 

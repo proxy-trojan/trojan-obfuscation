@@ -63,7 +63,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          cache: false
 
       - name: Install Linux desktop dependencies
         run: |
@@ -143,7 +143,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          cache: false
 
       - name: Ensure Windows scaffolding exists
         shell: bash
@@ -208,7 +208,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          cache: false
 
       - name: Ensure macOS scaffolding exists
         run: |
@@ -274,7 +274,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          cache: false
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
