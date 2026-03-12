@@ -34,8 +34,13 @@ if [[ -z "$APP_PATH" ]]; then
 fi
 
 mkdir -p "$ARTIFACT_DIR"
-rm -f "$ZIP_PATH"
+rm -f "$ZIP_PATH" "$ZIP_PATH.sha256"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+(
+  cd "$ARTIFACT_DIR"
+  shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256"
+)
 
 echo "built zip: $ZIP_PATH"
+echo "built checksum: $ZIP_PATH.sha256"

@@ -29,5 +29,10 @@ fi
 
 mkdir -p "$ARTIFACT_DIR"
 cp "$APK_SOURCE" "$APK_PATH"
+(
+  cd "$ARTIFACT_DIR"
+  sha256sum "$(basename "$APK_PATH")" > "$(basename "$APK_PATH").sha256"
+)
 
 echo "collected apk: $APK_PATH"
+echo "built checksum: $APK_PATH.sha256"

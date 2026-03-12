@@ -36,7 +36,13 @@ if [[ ! -d "$RELEASE_BUNDLE_DIR" ]]; then
 fi
 
 mkdir -p "$ARTIFACT_OUT_DIR"
+rm -f "$TAR_PATH" "$TAR_PATH.sha256"
 
 tar -C "$(dirname "$RELEASE_BUNDLE_DIR")" -czf "$TAR_PATH" "$(basename "$RELEASE_BUNDLE_DIR")"
+(
+  cd "$ARTIFACT_OUT_DIR"
+  sha256sum "$(basename "$TAR_PATH")" > "$(basename "$TAR_PATH").sha256"
+)
 
 echo "built tarball: $TAR_PATH"
+echo "built checksum: $TAR_PATH.sha256"

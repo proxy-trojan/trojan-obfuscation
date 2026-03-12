@@ -28,7 +28,7 @@ if [[ ! -d "$WINDOWS_RELEASE_DIR" ]]; then
 fi
 
 mkdir -p "$ARTIFACT_DIR"
-rm -f "$ZIP_PATH"
+rm -f "$ZIP_PATH" "$ZIP_PATH.sha256"
 
 if command -v 7z >/dev/null 2>&1; then
   (
@@ -40,4 +40,10 @@ else
     "Compress-Archive -Path '$WINDOWS_RELEASE_DIR\\*' -DestinationPath '$ZIP_PATH' -Force"
 fi
 
+(
+  cd "$ARTIFACT_DIR"
+  sha256sum "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256"
+)
+
 echo "built zip: $ZIP_PATH"
+echo "built checksum: $ZIP_PATH.sha256"

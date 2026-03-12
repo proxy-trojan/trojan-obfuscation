@@ -84,9 +84,14 @@ if [[ ! -d "$CLIENT_DIR/linux" ]]; then
   exit 1
 fi
 
-flutter pub get
-flutter analyze
-flutter build linux --release
+if [[ ! -d "$RELEASE_BUNDLE_DIR" || ! -f "$RELEASE_BUNDLE_DIR/$EXECUTABLE_NAME" ]]; then
+  echo "release bundle missing or incomplete; building linux release bundle first"
+  flutter pub get
+  flutter analyze
+  flutter build linux --release
+else
+  echo "reusing existing linux release bundle: $RELEASE_BUNDLE_DIR"
+fi
 
 if [[ ! -d "$RELEASE_BUNDLE_DIR" ]]; then
   echo "release bundle missing: $RELEASE_BUNDLE_DIR" >&2
@@ -115,10 +120,15 @@ if [[ -f "$ROOT_DIR/$ICON_SOURCE" ]]; then
   cp "$ROOT_DIR/$ICON_SOURCE" "$ICON_TARGET_DIR/${ICON_NAME}.png"
 fi
 
-rm -f "$DEB_PATH"
+rm -f "$DEB_PATH" "$DEB_PATH.sha256"
 dpkg-deb --build "$PACKAGE_STAGING_DIR" "$DEB_PATH"
+(
+  cd "$ARTIFACT_OUT_DIR"
+  sha256sum "$(basename "$DEB_PATH")" > "$(basename "$DEB_PATH").sha256"
+)
 
 echo "built package: $DEB_PATH"
+echo "built checksum: $DEB_PATH.sha256"
 echo "version label: $VERSION_LABEL"
 echo "deb version: $DEB_VERSION"
 echo "staging dir: $PACKAGE_STAGING_DIR"

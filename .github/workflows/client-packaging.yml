@@ -1,6 +1,20 @@
 name: Client Packaging
 
 on:
+  workflow_call:
+    inputs:
+      build_android:
+        required: false
+        type: string
+        default: 'false'
+      release_label:
+        required: false
+        type: string
+        default: ''
+      deb_version:
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       build_android:
@@ -78,7 +92,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
           DEB_VERSION_INPUT: ${{ inputs.deb_version }}
@@ -113,7 +127,9 @@ jobs:
           name: client-linux-${{ steps.meta.outputs.version_label }}
           path: |
             packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.deb
+            packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.deb.sha256
             packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.tar.gz
+            packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.tar.gz.sha256
 
   windows-client-package:
     name: Windows client package (.zip)
@@ -150,7 +166,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
         shell: bash
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
@@ -182,7 +198,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: client-windows-${{ steps.meta.outputs.version_label }}
-          path: packaging/windows/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip
+          path: |
+            packaging/windows/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip
+            packaging/windows/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip.sha256
 
   macos-client-package:
     name: macOS client package (.app zip)
@@ -217,7 +235,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
           DEB_VERSION_INPUT: ${{ inputs.deb_version }}
@@ -245,11 +263,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: client-macos-${{ steps.meta.outputs.version_label }}
-          path: packaging/macos/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip
+          path: |
+            packaging/macos/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip
+            packaging/macos/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip.sha256
 
   android-client-package:
     name: Android client package (.apk)
-    if: github.event_name == 'workflow_dispatch' && inputs.build_android == 'true'
+    if: github.event_name != 'push' && inputs.build_android == 'true'
     runs-on: ubuntu-22.04
 
     steps:
@@ -287,7 +307,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
           DEB_VERSION_INPUT: ${{ inputs.deb_version }}
@@ -315,4 +335,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: client-android-${{ steps.meta.outputs.version_label }}
-          path: packaging/android/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.apk
+          path: |
+            packaging/android/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.apk
+            packaging/android/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.apk.sha256

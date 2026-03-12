@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name for release'
+        description: 'Tag name for release (used for manual run labeling only)'
         required: false
         default: 'nightly'
+      build_android_client:
+        description: 'Also build Android client APK lane'
+        required: false
+        default: 'false'
 
 env:
   BUILD_TYPE: Release
@@ -291,10 +295,104 @@ jobs:
             dist/*.sha256
 
   # ============================================
+  # Client Packaging (multi-platform client artifacts)
+  # ============================================
+  client-packaging:
+    name: Client packaging (Linux/Windows/macOS + optional Android)
+    uses: ./.github/workflows/client-packaging.yml
+    with:
+      build_android: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_client == 'true' && 'true' || 'false' }}
+
+  # ============================================
+  # Artifact Validation (workflow_dispatch)
+  # ============================================
+  validate-artifacts:
+    name: Validate artifacts (core + client)
+    runs-on: ubuntu-22.04
+    needs: [build-linux, build-macos, build-windows, client-packaging]
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Install validation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip dpkg
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f | sort
+
+      - name: Verify checksum files
+        run: |
+          cd artifacts
+          shopt -s nullglob
+          files=( *.sha256 )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .sha256 files found" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            sha256sum -c "$f"
+          done
+
+      - name: Validate expected core artifacts exist
+        run: |
+          cd artifacts
+          ls -1 trojan-*-linux-x86_64.tar.gz >/dev/null
+          ls -1 trojan-*-linux-aarch64.tar.gz >/dev/null
+          ls -1 trojan-*-macos-x86_64.tar.gz >/dev/null
+          ls -1 trojan-*-macos-arm64.tar.gz >/dev/null
+          ls -1 trojan-*-windows-x86_64.zip >/dev/null
+
+      - name: Validate expected client artifacts exist
+        run: |
+          cd artifacts
+          ls -1 trojan-pro-client_*_amd64.deb >/dev/null
+          ls -1 trojan-pro-client_*_linux-x64-bundle.tar.gz >/dev/null
+          ls -1 trojan-pro-client_*_windows-x64.zip >/dev/null
+          ls -1 trojan-pro-client_*_macos-app.zip >/dev/null
+          if [ "${{ inputs.build_android_client }}" = "true" ]; then
+            ls -1 trojan-pro-client_*_android-release.apk >/dev/null
+          fi
+
+      - name: Inspect package internals (sanity)
+        run: |
+          cd artifacts
+          DEB_FILE=$(ls -1 trojan-pro-client_*_amd64.deb | head -n1)
+          ZIP_FILE=$(ls -1 trojan-pro-client_*_windows-x64.zip | head -n1)
+          APP_ZIP=$(ls -1 trojan-pro-client_*_macos-app.zip | head -n1)
+          dpkg-deb -I "$DEB_FILE" >/dev/null
+          unzip -l "$ZIP_FILE" | grep -E '\.exe$' >/dev/null
+          unzip -l "$APP_ZIP" | grep -E '\.app/' >/dev/null
+          if [ "${{ inputs.build_android_client }}" = "true" ]; then
+            APK_FILE=$(ls -1 trojan-pro-client_*_android-release.apk | head -n1)
+            unzip -l "$APK_FILE" | grep -E 'AndroidManifest\.xml' >/dev/null
+          fi
+
+      - name: Publish validation summary
+        run: |
+          {
+            echo "## Build Validation Summary"
+            echo "- workflow: Build and Release (manual dispatch)"
+            echo "- core artifacts: Linux x86_64/aarch64, macOS x86_64/arm64, Windows x86_64"
+            echo "- client artifacts: Linux .deb + bundle, Windows zip, macOS app zip"
+            echo "- android client lane: ${{ inputs.build_android_client }}"
+            echo "- checksum verification: passed"
+            echo "- package sanity checks: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================
   # Create GitHub Release
   # ============================================
   release:
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build-linux, build-macos, build-windows, client-packaging]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
 
@@ -370,6 +468,8 @@ jobs:
           files: |
             artifacts/*.tar.gz
             artifacts/*.zip
+            artifacts/*.deb
+            artifacts/*.apk
             artifacts/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
