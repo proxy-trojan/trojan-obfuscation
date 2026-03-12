@@ -1,0 +1,22 @@
+name: Release task
+description: Track release preparation or validation work
+labels: ["type/release"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Target version
+      placeholder: v1.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Release checklist
+      description: What must be true before release?
+    validations:
+      required: true
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Blockers / risks

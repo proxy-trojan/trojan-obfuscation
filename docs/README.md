@@ -15,7 +15,15 @@ This directory only keeps the current, useful project documentation.
 ## Release / delivery
 
 - `branching-and-release-status.md` — current branch strategy and release flow
+- `release-playbook.md` — formal release procedure and rollback guidance
+- `product-roadmap.md` — staged roadmap for formal product development
+- `v1.2.0-backlog.md` — focused backlog for the next milestone
 - `../CHANGELOG.md` — versioned release history
+
+## Decisions
+
+- `decisions/001-branch-and-release-strategy.md`
+- `decisions/002-client-product-direction.md`
 
 ## Client docs
 

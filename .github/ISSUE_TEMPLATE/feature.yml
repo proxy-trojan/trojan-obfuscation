@@ -1,0 +1,28 @@
+name: Feature
+description: Propose a product or engineering feature
+labels: ["type/feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are we solving?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should be built?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Non-goals
+      description: What is in scope and what is not?
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: How will we know this is done?
