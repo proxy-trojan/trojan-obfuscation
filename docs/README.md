@@ -36,6 +36,18 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - `client/pubspec.yaml`
 - `client/lib/...`
 - `client-development-notes.md`
+- `client-internal-alpha-checklist.md`
+- `client-runtime-smoke-test.md`
+- `client-wrap-up-summary-2026-03-11.md`
+- `client-finish-line-packet.md`
+- `client-ui-validation-review-2026-03-11.md`
+- `client-ui-validation-plan.md`
+- `client-ui-ux-checklist.md`
+- `client-packaging-readiness.md`
+- `client-linux-packaging-plan.md`
+- `client-linux-packaging-scaffold.md`
+- `client-packaging-next-actions.md`
+- `client-cross-platform-packaging.md`
 
 ## Runbooks
 

@@ -86,6 +86,22 @@ class ProfileStore extends ChangeNotifier {
     await _localStateStore.write(_profilesKey, _serialization.encodeProfileList(_profiles));
   }
 
+  Future<void> syncStoredPasswordFlags(Map<String, bool> flagsByProfileId) async {
+    var changed = false;
+    for (var i = 0; i < _profiles.length; i++) {
+      final profile = _profiles[i];
+      final nextHasStoredPassword = flagsByProfileId[profile.id] ?? false;
+      if (profile.hasStoredPassword == nextHasStoredPassword) {
+        continue;
+      }
+      _profiles[i] = profile.copyWith(hasStoredPassword: nextHasStoredPassword);
+      changed = true;
+    }
+    if (!changed) return;
+    await save();
+    notifyListeners();
+  }
+
   void selectProfile(String id) {
     if (_selectedProfileId == id) return;
     _selectedProfileId = id;

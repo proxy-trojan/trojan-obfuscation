@@ -181,16 +181,26 @@ A new desktop-first, mobile-ready client shell is now being scaffolded under:
 client/
 ```
 
-Current client scope focuses on product-layer foundations:
-- profile management shell
-- settings/state model
-- secure storage abstraction
-- diagnostics export preview
-- fake controller boundary for future engine integration
+Current client scope has advanced into a desktop-first product skeleton:
+- profile create/edit/import/export
+- local state lifecycle + file-backed persistence seam
+- secure-storage Trojan password flow
+- diagnostics preview/export
+- packaging/update workflow skeleton
+- typed controller boundary
+- fake/real shell adapter seam
+- first executable real-adapter connect-path skeleton
+- runtime session visibility (pid / exit / log tail)
 
 See:
 - `docs/client-product-architecture.md`
 - `docs/adr-client-product-stack.md`
+- `docs/client-finish-line-packet.md`
+- `docs/client-internal-alpha-checklist.md`
+- `docs/client-runtime-smoke-test.md`
+- `docs/client-wrap-up-summary-2026-03-11.md`
+- `docs/client-packaging-readiness.md`
+- `docs/client-linux-packaging-plan.md`
 - `client/README.md`
 
 ## Validation

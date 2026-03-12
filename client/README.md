@@ -11,7 +11,15 @@ Current scope focuses on product-layer concerns:
 - profile create/edit/import/export flow
 - settings/state model
 - fake controller boundary
-- secure storage abstraction
+- grouped controller timeline for action/progress/result visibility
+- typed controller boundary contract (command/result/telemetry)
+- adapter-backed fake/real shell controller seam
+- real shell adapter launch/config + first executable connect-path skeleton (with binary probe)
+- runtime session visibility (pid / last exit / log tail)
+- secure storage abstraction + Trojan password handling (set/rotate/view/clear)
+- portable profile export that excludes secret material
+- packaging/update workflow skeleton + dry-run manifest/metadata snapshots
+- packaging snapshot export (manifest / metadata / rollback plan) with export status/history
 - diagnostics export preview
 
 It does **not** yet embed a real connectivity/runtime engine.
@@ -22,13 +30,51 @@ It does **not** yet embed a real connectivity/runtime engine.
 - Linux
 - later: iOS / Android
 
-## When Flutter is available
+## Local validation
 
 ```bash
 cd client
 flutter pub get
-flutter run -d linux   # or windows / macos
+flutter analyze
+flutter run -d linux
+flutter build linux --release
 ```
+
+Cross-platform desktop outputs are prepared through CI runners:
+- Windows runner → `flutter build windows --release`
+- macOS runner → `flutter build macos`
+
+If you want to exercise the real shell adapter skeleton:
+
+```bash
+export TROJAN_CLIENT_ENABLE_REAL_ADAPTER=1
+export TROJAN_CLIENT_BINARY=/absolute/path/to/trojan   # optional if auto-discovery is wrong
+```
+
+## Packaging outputs
+
+Locally verified now:
+- Linux `.deb`
+- Linux release-bundle `.tar.gz`
+
+CI matrix targets:
+- Windows release `.zip`
+- macOS `.app.zip`
+- optional Android `.apk`
+
+## Internal alpha handoff
+
+Use these docs as the current finish-line packet:
+- `../docs/client-finish-line-packet.md`
+- `../docs/client-internal-alpha-checklist.md`
+- `../docs/client-runtime-smoke-test.md`
+- `../docs/client-wrap-up-summary-2026-03-11.md`
+- `../docs/client-ui-ux-checklist.md`
+- `../docs/client-packaging-readiness.md`
+- `../docs/client-linux-packaging-plan.md`
+- `../docs/client-linux-packaging-scaffold.md`
+- `../docs/client-packaging-next-actions.md`
+- `../docs/client-cross-platform-packaging.md`
 
 ## Current architecture
 

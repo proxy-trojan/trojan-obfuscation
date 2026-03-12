@@ -29,6 +29,7 @@ class ProfileSerialization {
       verifyTls: (json['verifyTls'] as bool?) ?? true,
       notes: (json['notes'] as String?) ?? '',
       updatedAt: DateTime.tryParse((json['updatedAt'] as String?) ?? '') ?? DateTime.now(),
+      hasStoredPassword: (json['hasStoredPassword'] as bool?) ?? false,
     );
   }
 
@@ -43,6 +44,7 @@ class ProfileSerialization {
       'verifyTls': profile.verifyTls,
       'notes': profile.notes,
       'updatedAt': profile.updatedAt.toIso8601String(),
+      'hasStoredPassword': profile.hasStoredPassword,
     };
   }
 }

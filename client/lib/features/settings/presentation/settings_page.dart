@@ -21,8 +21,8 @@ class SettingsPage extends StatelessWidget {
           child: Column(
             children: <Widget>[
               DropdownButtonFormField<ThemeMode>(
-                value: settings.themeMode,
-                decoration: const InputDecoration(labelText: 'Theme mode'),
+                initialValue: settings.themeMode,
+                decoration: const InputDecoration(labelText: 'Appearance'),
                 items: ThemeMode.values
                     .map(
                       (mode) => DropdownMenuItem<ThemeMode>(
@@ -37,8 +37,8 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<UpdateChannel>(
-                value: settings.updateChannel,
-                decoration: const InputDecoration(labelText: 'Update channel'),
+                initialValue: settings.updateChannel,
+                decoration: const InputDecoration(labelText: 'Update Track'),
                 items: UpdateChannel.values
                     .map(
                       (channel) => DropdownMenuItem<UpdateChannel>(
@@ -48,21 +48,39 @@ class SettingsPage extends StatelessWidget {
                     )
                     .toList(),
                 onChanged: (UpdateChannel? value) {
-                  if (value != null) services.settingsStore.setUpdateChannel(value);
+                  if (value != null) {
+                    services.settingsStore.setUpdateChannel(value);
+                    services.packagingStore.syncUpdatePreferences(
+                      channel: value,
+                      autoCheckForUpdates: services.settingsStore.settings.autoCheckForUpdates,
+                    );
+                  }
                 },
               ),
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
+                value: settings.autoCheckForUpdates,
+                onChanged: (bool value) {
+                  services.settingsStore.setAutoCheckForUpdates(value);
+                  services.packagingStore.syncUpdatePreferences(
+                    channel: services.settingsStore.settings.updateChannel,
+                    autoCheckForUpdates: value,
+                  );
+                },
+                title: const Text('Check for updates automatically'),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 value: settings.launchOnLogin,
                 onChanged: services.settingsStore.setLaunchOnLogin,
-                title: const Text('Launch on login'),
+                title: const Text('Open on login'),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: settings.collectDiagnostics,
                 onChanged: services.settingsStore.setCollectDiagnostics,
-                title: const Text('Collect diagnostics'),
+                title: const Text('Collect troubleshooting data'),
               ),
               const SizedBox(height: 8),
               Row(

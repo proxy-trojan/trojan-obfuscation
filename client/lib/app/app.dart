@@ -30,7 +30,7 @@ class TrojanClientApp extends StatelessWidget {
             ),
             useMaterial3: true,
           ),
-          home: ClientAppShell(services: services),
+          home: TrojanClientAppShell(services: services),
         );
       },
     );

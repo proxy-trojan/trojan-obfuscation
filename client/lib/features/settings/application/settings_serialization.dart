@@ -12,6 +12,7 @@ class SettingsSerialization {
       updateChannel: UpdateChannel.values.byName(
         (decoded['updateChannel'] as String?) ?? UpdateChannel.stable.name,
       ),
+      autoCheckForUpdates: (decoded['autoCheckForUpdates'] as bool?) ?? true,
       launchOnLogin: (decoded['launchOnLogin'] as bool?) ?? false,
       collectDiagnostics: (decoded['collectDiagnostics'] as bool?) ?? true,
       diagnosticsRetentionDays: (decoded['diagnosticsRetentionDays'] as num?)?.toInt() ?? 7,
@@ -23,6 +24,7 @@ class SettingsSerialization {
       'version': 1,
       'themeMode': settings.themeMode.name,
       'updateChannel': settings.updateChannel.name,
+      'autoCheckForUpdates': settings.autoCheckForUpdates,
       'launchOnLogin': settings.launchOnLogin,
       'collectDiagnostics': settings.collectDiagnostics,
       'diagnosticsRetentionDays': settings.diagnosticsRetentionDays,

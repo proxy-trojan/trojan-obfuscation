@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=@DISPLAY_NAME@
+Comment=@DESKTOP_COMMENT@
+Exec=@INSTALL_PREFIX@/@EXECUTABLE_NAME@
+TryExec=@INSTALL_PREFIX@/@EXECUTABLE_NAME@
+Icon=@ICON_NAME@
+Terminal=false
+Type=Application
+Categories=@DESKTOP_CATEGORIES@
+Keywords=@DESKTOP_KEYWORDS@
+StartupNotify=true
+StartupWMClass=@DESKTOP_STARTUP_WM_CLASS@

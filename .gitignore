@@ -62,3 +62,11 @@ dist/
 .vscode/
 *.swp
 *.swo
+
+# Client packaging outputs / temp staging
+packaging/**/artifacts/
+packaging/linux/staging/
+
+# Python cache
+scripts/__pycache__/
+*.pyc

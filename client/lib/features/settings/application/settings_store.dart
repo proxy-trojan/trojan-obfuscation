@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../platform/services/local_state_store.dart';
@@ -44,6 +43,12 @@ class SettingsStore extends ChangeNotifier {
 
   void setUpdateChannel(UpdateChannel value) {
     _settings = _settings.copyWith(updateChannel: value);
+    save();
+    notifyListeners();
+  }
+
+  void setAutoCheckForUpdates(bool value) {
+    _settings = _settings.copyWith(autoCheckForUpdates: value);
     save();
     notifyListeners();
   }

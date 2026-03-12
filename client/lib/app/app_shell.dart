@@ -1,118 +1,98 @@
 import 'package:flutter/material.dart';
 
-import '../features/controller/domain/client_connection_status.dart';
+import '../features/advanced/presentation/advanced_page.dart';
 import '../features/dashboard/presentation/dashboard_page.dart';
-import '../features/diagnostics/presentation/diagnostics_page.dart';
 import '../features/profiles/presentation/profiles_page.dart';
 import '../features/settings/presentation/settings_page.dart';
 import '../platform/services/service_registry.dart';
 
-class ClientAppShell extends StatefulWidget {
-  const ClientAppShell({super.key, required this.services});
+class TrojanClientAppShell extends StatefulWidget {
+  const TrojanClientAppShell({super.key, required this.services});
 
   final ClientServiceRegistry services;
 
   @override
-  State<ClientAppShell> createState() => _ClientAppShellState();
+  State<TrojanClientAppShell> createState() => _TrojanClientAppShellState();
 }
 
-class _ClientAppShellState extends State<ClientAppShell> {
+class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
   int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      DashboardPage(services: widget.services),
+      DashboardPage(
+        services: widget.services,
+        onOpenProfiles: () => setState(() => _selectedIndex = 1),
+        onOpenAdvanced: () => setState(() => _selectedIndex = 3),
+      ),
       ProfilesPage(services: widget.services),
       SettingsPage(services: widget.services),
-      DiagnosticsPage(services: widget.services),
+      AdvancedPage(services: widget.services),
     ];
 
-    final destinations = <NavigationRailDestination>[
-      const NavigationRailDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard),
-        label: Text('Dashboard'),
-      ),
-      const NavigationRailDestination(
-        icon: Icon(Icons.dns_outlined),
-        selectedIcon: Icon(Icons.dns),
-        label: Text('Profiles'),
-      ),
-      const NavigationRailDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings),
-        label: Text('Settings'),
-      ),
-      const NavigationRailDestination(
-        icon: Icon(Icons.assignment_outlined),
-        selectedIcon: Icon(Icons.assignment),
-        label: Text('Diagnostics'),
-      ),
-    ];
-
-    return AnimatedBuilder(
-      animation: widget.services.controller,
-      builder: (BuildContext context, _) {
-        final status = widget.services.controller.status;
-
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Trojan-Pro Client'),
-            actions: <Widget>[
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Center(child: _StatusChip(status: status)),
-              ),
-            ],
-          ),
-          body: Row(
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              NavigationRail(
-                selectedIndex: _selectedIndex,
-                labelType: NavigationRailLabelType.all,
-                onDestinationSelected: (int index) {
-                  setState(() => _selectedIndex = index);
-                },
-                destinations: destinations,
+              Text(
+                'Trojan Pro Client',
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const VerticalDivider(width: 1),
+              Text(
+                'Desktop-first connection client. Keep main tasks simple; keep advanced tools out of the way.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: pages[_selectedIndex],
+                child: Row(
+                  children: <Widget>[
+                    NavigationRail(
+                      selectedIndex: _selectedIndex,
+                      onDestinationSelected: (int index) {
+                        setState(() => _selectedIndex = index);
+                      },
+                      labelType: NavigationRailLabelType.all,
+                      destinations: const <NavigationRailDestination>[
+                        NavigationRailDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home),
+                          label: Text('Home'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.storage_outlined),
+                          selectedIcon: Icon(Icons.storage),
+                          label: Text('Profiles'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings),
+                          label: Text('Settings'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.tune_outlined),
+                          selectedIcon: Icon(Icons.tune),
+                          label: Text('Advanced'),
+                        ),
+                      ],
+                    ),
+                    const VerticalDivider(width: 24),
+                    Expanded(
+                      child: IndexedStack(
+                        index: _selectedIndex,
+                        children: pages,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        );
-      },
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final ClientConnectionStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color;
-    switch (status.phase) {
-      case ClientConnectionPhase.connected:
-        color = Colors.green;
-      case ClientConnectionPhase.connecting:
-        color = Colors.orange;
-      case ClientConnectionPhase.error:
-        color = Colors.red;
-      case ClientConnectionPhase.disconnected:
-        color = Colors.grey;
-    }
-
-    return Chip(
-      avatar: CircleAvatar(backgroundColor: color, radius: 6),
-      label: Text(status.message),
+        ),
+      ),
     );
   }
 }

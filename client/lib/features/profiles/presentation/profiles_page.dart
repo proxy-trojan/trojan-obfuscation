@@ -6,6 +6,7 @@ import '../../controller/domain/client_connection_status.dart';
 import '../domain/client_profile.dart';
 import 'import_export_dialog.dart';
 import 'profile_editor_dialog.dart';
+import 'profile_secret_dialog.dart';
 
 class ProfilesPage extends StatelessWidget {
   const ProfilesPage({super.key, required this.services});
@@ -99,11 +100,51 @@ class ProfilesPage extends StatelessWidget {
   Future<void> _importProfile(BuildContext context) async {
     final text = await showImportTextDialog(context);
     if (text == null || text.trim().isEmpty) return;
+    if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final profile = services.profilePortability.importProfile(text);
-      services.profileStore.upsertProfile(profile);
-      messenger.showSnackBar(SnackBar(content: Text('Imported profile: ${profile.name}')));
+      final bundle = services.profilePortability.importBundle(text);
+      final profile = bundle.profile;
+      final hasStoredPassword = await services.profileSecrets.hasTrojanPassword(profile.id);
+      services.profileStore.upsertProfile(
+        profile.copyWith(hasStoredPassword: hasStoredPassword),
+      );
+
+      final needsPasswordHandoff =
+          bundle.sourceDeviceHadStoredPassword && !hasStoredPassword;
+      final bundleClaimsPasswordIncluded = bundle.trojanPasswordIncluded;
+      final message = bundleClaimsPasswordIncluded
+          ? 'Imported profile: ${profile.name}. Incoming bundle claimed embedded password material — ignored by design for safety.'
+          : hasStoredPassword
+              ? 'Imported profile: ${profile.name}. Local secure storage already has a password for this profile id.'
+              : needsPasswordHandoff
+                  ? 'Imported profile: ${profile.name}. Source device had a stored Trojan password — re-enter it on this device to complete handoff.'
+                  : 'Imported profile: ${profile.name}. Password stays external.';
+
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+
+      if (needsPasswordHandoff) {
+        if (!context.mounted) return;
+        final handoffPassword = await showTrojanPasswordDialog(
+          context,
+          title: 'Complete Password Handoff',
+          helperText: 'This imported profile needs a local Trojan password to finish handoff.',
+          submitLabel: 'Save & Complete',
+        );
+        if (!context.mounted) return;
+        if (handoffPassword != null && handoffPassword.trim().isNotEmpty) {
+          await services.profileSecrets.saveTrojanPassword(
+            profileId: profile.id,
+            password: handoffPassword,
+          );
+          services.profileStore.upsertProfile(
+            profile.copyWith(hasStoredPassword: true),
+          );
+          messenger.showSnackBar(
+            SnackBar(content: Text('Password handoff completed for ${profile.name}.')),
+          );
+        }
+      }
     } catch (_) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Import failed: JSON format is invalid for this shell.')),
@@ -143,18 +184,37 @@ class _SelectedProfileCard extends StatelessWidget {
             child: const Text('Edit'),
           ),
           OutlinedButton(
-            onPressed: services.profileStore.removeSelectedProfile,
+            onPressed: () => _setTrojanPassword(context),
+            child: Text(selected.hasStoredPassword ? 'Update Password' : 'Set Password'),
+          ),
+          OutlinedButton(
+            onPressed: selected.hasStoredPassword ? () => _rotateTrojanPassword(context) : null,
+            child: const Text('Rotate Password'),
+          ),
+          OutlinedButton(
+            onPressed: selected.hasStoredPassword ? () => _viewTrojanPassword(context) : null,
+            child: const Text('View Password'),
+          ),
+          OutlinedButton(
+            onPressed: selected.hasStoredPassword ? () => _clearTrojanPassword(context) : null,
+            child: const Text('Clear Password'),
+          ),
+          OutlinedButton(
+            onPressed: () => _removeProfile(context),
             child: const Text('Remove'),
           ),
           FilledButton(
             onPressed: status.isBusy
                 ? null
-                : () {
-                    if (active && status.phase == ClientConnectionPhase.connected) {
-                      services.controller.disconnect();
-                    } else {
-                      services.controller.connect(selected);
-                    }
+                : () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final result = active && status.phase == ClientConnectionPhase.connected
+                        ? await services.controller.disconnect()
+                        : await services.controller.connect(selected);
+                    if (!context.mounted) return;
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(result.summary)),
+                    );
                   },
             child: Text(
               active && status.phase == ClientConnectionPhase.connected ? 'Disconnect' : 'Connect',
@@ -169,6 +229,9 @@ class _SelectedProfileCard extends StatelessWidget {
           _detail('SNI', selected.sni),
           _detail('Local SOCKS Port', '${selected.localSocksPort}'),
           _detail('TLS Verification', selected.verifyTls ? 'Enabled' : 'Disabled'),
+          _detail('Runtime Mode', services.controller.runtimeConfig.mode),
+          _detail('Runtime Endpoint', services.controller.runtimeConfig.endpointHint),
+          _detail('Trojan Password', selected.hasStoredPassword ? 'Stored in secure storage' : 'Not stored'),
           _detail('Updated', selected.updatedAt.toIso8601String()),
           if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
           const SizedBox(height: 12),
@@ -184,9 +247,153 @@ class _SelectedProfileCard extends StatelessWidget {
     services.profileStore.upsertProfile(updated);
   }
 
+  Future<void> _setTrojanPassword(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final password = await showTrojanPasswordDialog(
+      context,
+      title: selected.hasStoredPassword ? 'Update Trojan Password' : 'Set Trojan Password',
+      submitLabel: selected.hasStoredPassword ? 'Save Update' : 'Save Password',
+    );
+    if (password == null || password.trim().isEmpty) return;
+    try {
+      await services.profileSecrets.saveTrojanPassword(
+        profileId: selected.id,
+        password: password,
+      );
+      services.profileStore.upsertProfile(selected.copyWith(
+        hasStoredPassword: true,
+        updatedAt: DateTime.now(),
+      ));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Trojan password stored in secure storage.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to store password: $error')),
+      );
+    }
+  }
+
+  Future<void> _rotateTrojanPassword(BuildContext context) async {
+    await _setTrojanPassword(context);
+  }
+
+  Future<void> _viewTrojanPassword(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final password = await services.profileSecrets.readTrojanPassword(selected.id);
+      if (!context.mounted) return;
+      if (password == null || password.trim().isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('No Trojan password stored for this profile.')),
+        );
+        return;
+      }
+      await showTrojanPasswordRevealDialog(
+        context,
+        profileName: selected.name,
+        password: password,
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to read password: $error')),
+      );
+    }
+  }
+
+  Future<void> _clearTrojanPassword(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await _confirmAction(
+      context,
+      title: 'Clear Trojan Password?',
+      body: 'This removes the stored Trojan password from local secure storage.',
+      confirmLabel: 'Clear',
+    );
+    if (!confirmed) return;
+
+    try {
+      await services.profileSecrets.clearTrojanPassword(selected.id);
+      services.profileStore.upsertProfile(selected.copyWith(
+        hasStoredPassword: false,
+        updatedAt: DateTime.now(),
+      ));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Trojan password removed from secure storage.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to clear password: $error')),
+      );
+    }
+  }
+
+  Future<void> _removeProfile(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await _confirmAction(
+      context,
+      title: 'Remove Profile?',
+      body: 'This removes profile metadata and clears its stored Trojan password (if present).',
+      confirmLabel: 'Remove',
+    );
+    if (!confirmed) return;
+
+    try {
+      if (selected.hasStoredPassword) {
+        await services.profileSecrets.clearTrojanPassword(selected.id);
+      }
+      services.profileStore.removeSelectedProfile();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Removed profile: ${selected.name}')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to remove profile: $error')),
+      );
+    }
+  }
+
   Future<void> _export(BuildContext context) async {
     final text = services.profilePortability.exportProfile(selected);
-    await showExportTextDialog(context, title: 'Exported Profile JSON', text: text);
+    await showExportTextDialog(
+      context,
+      title: 'Exported Profile JSON',
+      text: text,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Profile JSON exported. Trojan password is not included in this bundle.'),
+      ),
+    );
+  }
+
+  Future<bool> _confirmAction(
+    BuildContext context, {
+    required String title,
+    required String body,
+    required String confirmLabel,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(body),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+
+    return result ?? false;
   }
 
   Widget _detail(String label, String value) {

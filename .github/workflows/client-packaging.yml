@@ -1,0 +1,318 @@
+name: Client Packaging
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_android:
+        description: 'Also build Android APK lane (requires Android SDK on runner)'
+        required: false
+        default: 'false'
+      release_label:
+        description: 'Override version label for packaging outputs (optional)'
+        required: false
+        default: ''
+      deb_version:
+        description: 'Override Debian package version (optional)'
+        required: false
+        default: ''
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - 'packaging/**'
+      - 'scripts/build-client-linux-package.sh'
+      - 'scripts/build-client-linux-bundle-tar.sh'
+      - 'scripts/read-client-release-metadata.sh'
+      - 'scripts/override-client-release-metadata.py'
+      - 'scripts/package-client-windows-zip.sh'
+      - 'scripts/package-client-macos-app-zip.sh'
+      - 'scripts/collect-client-android-apk.sh'
+      - '.github/workflows/client-packaging.yml'
+
+jobs:
+  linux-client-package:
+    name: Linux client package (.deb + tar.gz)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libsecret-1-dev \
+            lld \
+            zip
+
+      - name: Ensure Linux scaffolding exists
+        run: |
+          if [ ! -d client/linux ]; then
+            (cd client && flutter create . --platforms=linux)
+          fi
+
+      - name: Export release metadata
+        id: meta
+        run: |
+          chmod +x scripts/read-client-release-metadata.sh
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Override release metadata from workflow input
+        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        env:
+          RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
+          DEB_VERSION_INPUT: ${{ inputs.deb_version }}
+        run: |
+          chmod +x scripts/override-client-release-metadata.py
+          scripts/override-client-release-metadata.py packaging/linux/release-metadata.env
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Flutter analyze
+        working-directory: client
+        run: |
+          flutter pub get
+          flutter analyze
+
+      - name: Build Linux bundle
+        working-directory: client
+        run: flutter build linux --release
+
+      - name: Build Debian package
+        run: |
+          chmod +x scripts/build-client-linux-package.sh
+          scripts/build-client-linux-package.sh
+
+      - name: Build Linux tar.gz bundle
+        run: |
+          chmod +x scripts/build-client-linux-bundle-tar.sh
+          scripts/build-client-linux-bundle-tar.sh
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-linux-${{ steps.meta.outputs.version_label }}
+          path: |
+            packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.deb
+            packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.tar.gz
+
+  windows-client-package:
+    name: Windows client package (.zip)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Ensure Windows scaffolding exists
+        shell: bash
+        run: |
+          if [ ! -d client/windows ]; then
+            (cd client && flutter create . --platforms=windows)
+          fi
+
+      - name: Export release metadata
+        id: meta
+        shell: bash
+        run: |
+          chmod +x scripts/read-client-release-metadata.sh
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Override release metadata from workflow input
+        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        shell: bash
+        env:
+          RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
+          DEB_VERSION_INPUT: ${{ inputs.deb_version }}
+        run: |
+          chmod +x scripts/override-client-release-metadata.py
+          scripts/override-client-release-metadata.py packaging/linux/release-metadata.env
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Flutter analyze
+        working-directory: client
+        shell: bash
+        run: |
+          flutter pub get
+          flutter analyze
+
+      - name: Build Windows release bundle
+        working-directory: client
+        shell: bash
+        run: flutter build windows --release
+
+      - name: Package Windows zip
+        shell: bash
+        run: |
+          chmod +x scripts/package-client-windows-zip.sh
+          scripts/package-client-windows-zip.sh
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-windows-${{ steps.meta.outputs.version_label }}
+          path: packaging/windows/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip
+
+  macos-client-package:
+    name: macOS client package (.app zip)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Ensure macOS scaffolding exists
+        run: |
+          if [ ! -d client/macos ]; then
+            (cd client && flutter create . --platforms=macos)
+          fi
+
+      - name: Export release metadata
+        id: meta
+        run: |
+          chmod +x scripts/read-client-release-metadata.sh
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Override release metadata from workflow input
+        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        env:
+          RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
+          DEB_VERSION_INPUT: ${{ inputs.deb_version }}
+        run: |
+          chmod +x scripts/override-client-release-metadata.py
+          scripts/override-client-release-metadata.py packaging/linux/release-metadata.env
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Flutter analyze
+        working-directory: client
+        run: |
+          flutter pub get
+          flutter analyze
+
+      - name: Build macOS app
+        working-directory: client
+        run: flutter build macos
+
+      - name: Package macOS app zip
+        run: |
+          chmod +x scripts/package-client-macos-app-zip.sh
+          scripts/package-client-macos-app-zip.sh
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-macos-${{ steps.meta.outputs.version_label }}
+          path: packaging/macos/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.zip
+
+  android-client-package:
+    name: Android client package (.apk)
+    if: github.event_name == 'workflow_dispatch' && inputs.build_android == 'true'
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Android scaffolding exists
+        run: |
+          if [ ! -d client/android ]; then
+            (cd client && flutter create . --platforms=android)
+          fi
+
+      - name: Accept Android licenses
+        run: yes | flutter doctor --android-licenses || true
+
+      - name: Export release metadata
+        id: meta
+        run: |
+          chmod +x scripts/read-client-release-metadata.sh
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Override release metadata from workflow input
+        if: github.event_name == 'workflow_dispatch' && (inputs.release_label != '' || inputs.deb_version != '')
+        env:
+          RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
+          DEB_VERSION_INPUT: ${{ inputs.deb_version }}
+        run: |
+          chmod +x scripts/override-client-release-metadata.py
+          scripts/override-client-release-metadata.py packaging/linux/release-metadata.env
+          scripts/read-client-release-metadata.sh --github-output
+
+      - name: Flutter analyze
+        working-directory: client
+        run: |
+          flutter pub get
+          flutter analyze
+
+      - name: Build Android APK
+        working-directory: client
+        run: flutter build apk --release
+
+      - name: Collect APK artifact
+        run: |
+          chmod +x scripts/collect-client-android-apk.sh
+          scripts/collect-client-android-apk.sh
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-android-${{ steps.meta.outputs.version_label }}
+          path: packaging/android/artifacts/${{ steps.meta.outputs.release_dir_name }}/*.apk

@@ -9,6 +9,7 @@ class ClientProfile {
     required this.verifyTls,
     required this.updatedAt,
     this.notes = '',
+    this.hasStoredPassword = false,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class ClientProfile {
   final bool verifyTls;
   final String notes;
   final DateTime updatedAt;
+  final bool hasStoredPassword;
 
   ClientProfile copyWith({
     String? id,
@@ -31,6 +33,7 @@ class ClientProfile {
     bool? verifyTls,
     String? notes,
     DateTime? updatedAt,
+    bool? hasStoredPassword,
   }) {
     return ClientProfile(
       id: id ?? this.id,
@@ -42,6 +45,7 @@ class ClientProfile {
       verifyTls: verifyTls ?? this.verifyTls,
       notes: notes ?? this.notes,
       updatedAt: updatedAt ?? this.updatedAt,
+      hasStoredPassword: hasStoredPassword ?? this.hasStoredPassword,
     );
   }
 }

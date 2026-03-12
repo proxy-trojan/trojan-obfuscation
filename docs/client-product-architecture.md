@@ -139,6 +139,8 @@ It also makes it possible to:
 - test the UI without the engine
 - swap integration strategy later
 - keep diagnostics/export flows deterministic
+- move from fake adapter to real adapter without rewriting the app shell
+- stage real runtime integration by first rendering launch/config plans, then promoting that seam into config write + process launch/stop, then surfacing session/log visibility for debugging
 
 ---
 
@@ -154,7 +156,7 @@ Build first:
 - release/update channel skeleton
 
 ### Exit condition
-A user can install the app, create/import a profile, store secrets safely, view state, and export diagnostics — even if transport integration is still stubbed.
+A user can install the app, create/import a profile, store secrets safely, view state, export diagnostics, and exercise a typed local controller boundary — even if transport integration is still stubbed.
 
 ## Phase B — Desktop-first usable product
 Build next:

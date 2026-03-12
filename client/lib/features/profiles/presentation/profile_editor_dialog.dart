@@ -94,6 +94,14 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
                 minLines: 2,
                 maxLines: 4,
               ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'You will save the password after the profile is created.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _verifyTls,
@@ -131,6 +139,7 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       verifyTls: _verifyTls,
       notes: _notesController.text.trim(),
       updatedAt: DateTime.now(),
+      hasStoredPassword: initial?.hasStoredPassword ?? false,
     );
     Navigator.of(context).pop(profile);
   }
