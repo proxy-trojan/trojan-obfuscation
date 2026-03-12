@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -108,7 +108,7 @@ jobs:
             trojan-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}
           path: |
@@ -137,7 +137,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -218,7 +218,7 @@ jobs:
             trojan-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}
           path: |
@@ -238,7 +238,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -295,7 +295,7 @@ jobs:
             trojan-${{ steps.version.outputs.version }}-windows-x86_64.zip.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-x86_64
           path: |
@@ -322,7 +322,7 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -451,10 +451,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

@@ -51,10 +51,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -122,7 +122,7 @@ jobs:
           scripts/build-client-linux-bundle-tar.sh
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: client-linux-${{ steps.meta.outputs.version_label }}
           path: |
@@ -137,7 +137,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -189,7 +189,7 @@ jobs:
           scripts/package-client-windows-zip.sh
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: client-windows-${{ steps.meta.outputs.version_label }}
           path: |
@@ -202,7 +202,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -248,7 +248,7 @@ jobs:
           scripts/package-client-macos-app-zip.sh
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: client-macos-${{ steps.meta.outputs.version_label }}
           path: |
@@ -262,10 +262,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -320,7 +320,7 @@ jobs:
           scripts/collect-client-android-apk.sh
 
       - name: Upload Android artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: client-android-${{ steps.meta.outputs.version_label }}
           path: |

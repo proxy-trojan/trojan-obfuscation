@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Unreleased]
+
+### EN
+- Align client package versioning with formal stable release naming.
+- Upgrade GitHub Actions workflow actions to Node 24-ready major versions.
+
+### 中文
+- 将 client 打包版本命名对齐为正式稳定版风格。
+- 将 GitHub Actions workflow 中的 action 升级到兼容 Node 24 的主版本。
+
+---
+
 ## [v1.1.0] - 2026-03-12
 
 ### EN
