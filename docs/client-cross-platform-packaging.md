@@ -1,5 +1,19 @@
 # Client Cross-Platform Packaging Matrix
 
+## Latest validated CI status / 最新已验证 CI 状态
+
+**EN**
+- As of 2026-03-12, GitHub Actions `Build and Release` has verified one-run delivery for:
+  - core: Linux x86_64 / aarch64, macOS x86_64 / arm64, Windows x86_64
+  - client: Linux `.deb` + `.tar.gz`, Windows `.zip`, macOS `.app.zip`
+- Android remains an optional lane and is disabled by default in manual dispatch.
+
+**中文**
+- 截至 2026-03-12，GitHub Actions `Build and Release` 已验证可在一次运行中产出：
+  - core：Linux x86_64 / aarch64、macOS x86_64 / arm64、Windows x86_64
+  - client：Linux `.deb` + `.tar.gz`、Windows `.zip`、macOS `.app.zip`
+- Android 仍为可选通道，手动触发时默认关闭。
+
 ## Current objective
 
 Turn the client packaging story from a Linux-first local script into a repeatable CI matrix with per-platform artifact expectations.

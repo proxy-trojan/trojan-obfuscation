@@ -1,5 +1,17 @@
 # Client Packaging Readiness
 
+## Latest answer / 最新结论
+
+**EN**
+- Desktop packaging is no longer only “planned” or “CI-prepared”.
+- It is now **GitHub Actions verified** for Linux / Windows / macOS client delivery.
+- The shared `Build and Release` workflow also validates checksum and artifact sanity in the same run.
+
+**中文**
+- 桌面端 packaging 已不再只是“规划中”或“CI 预备态”。
+- 它现在已经在 GitHub Actions 中完成 **Linux / Windows / macOS client 交付验证**。
+- 共享的 `Build and Release` workflow 还会在同一轮中完成 checksum 与 artifact sanity 验证。
+
 ## Current answer
 
 **Linux installable packaging is now real and locally verified.**

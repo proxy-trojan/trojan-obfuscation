@@ -4,6 +4,20 @@ A high-performance C++ implementation of the Trojan protocol, designed for speed
 
 Trojan-Pro is built upon the core principles of the original [Trojan](https://github.com/trojan-gfw/trojan) project, offering a lightweight and efficient solution for bypassing network restrictions through HTTPS mimicry.
 
+## Current Stable Baseline / 当前稳定基线
+
+**EN**
+- The validated delivery baseline has been promoted from `feature_1.0_no_obfus_and_no_rules` into the active `main` line.
+- GitHub Actions **Build and Release** now produces verified multi-platform core artifacts and multi-platform desktop client artifacts in one run.
+- Recommended ongoing development flow: `main` → `develop` → `feature/*`.
+- See `docs/branching-and-release-status.md` for the bilingual operational summary.
+
+**中文**
+- 当前已验证的稳定交付基线来自 `feature_1.0_no_obfus_and_no_rules`，并已整理为后续使用的 `main` 主线。
+- GitHub Actions 的 **Build and Release** 已可在一次运行中稳定产出 core 多平台编译产物与桌面 client 多平台分发产物。
+- 推荐后续开发流：`main` → `develop` → `feature/*`。
+- 中英双文的运维/分支摘要见 `docs/branching-and-release-status.md`。
+
 ## Features
 
 - **High Performance**: Built with C++17 and Boost.Asio for efficient asynchronous I/O and low resource usage.

@@ -62,6 +62,14 @@ CI matrix targets:
 - macOS `.app.zip`
 - optional Android `.apk`
 
+**EN**
+- As of 2026-03-12, GitHub Actions `Build and Release` has validated Linux / Windows / macOS client packaging in CI.
+- Desktop client artifacts are now part of the same delivery flow as core multi-platform artifacts.
+
+**中文**
+- 截至 2026-03-12，GitHub Actions `Build and Release` 已验证 Linux / Windows / macOS 的 client 打包链路。
+- 桌面端 client 产物现在已经并入与 core 多平台产物一致的统一交付流程。
+
 ## Internal alpha handoff
 
 Use these docs as the current finish-line packet:

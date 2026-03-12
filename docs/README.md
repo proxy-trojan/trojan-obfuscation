@@ -11,6 +11,12 @@ Trojan is an unidentifiable mechanism for bypassing GFW. This documentation intr
 - [Build](build)
 - [Usage](usage)
 
+## Current Delivery Status / 当前交付状态
+
+- `branching-and-release-status.md`
+  - EN: bilingual summary for the current stable branch strategy, validated multi-platform artifacts, and release workflow posture.
+  - 中文：当前稳定分支策略、已验证多平台产物与 release workflow 状态的中英双文摘要。
+
 ## Phase 4 / Validation Docs
 
 - `phase-4-capability-validation-plan.md`
