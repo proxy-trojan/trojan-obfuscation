@@ -1,76 +1,30 @@
 # Trojan Documentation
 
-Trojan is an unidentifiable mechanism for bypassing GFW. This documentation introduces the trojan protocol, explains its underlying ideas, and provides a guide to it.
+This directory only keeps the current, useful project documentation.
 
-## Core Contents
+## Core docs
 
-- [Overview](overview)
-- [The Trojan Protocol](protocol)
-- [Config](config)
-- [Authenticator](authenticator)
-- [Build](build)
-- [Usage](usage)
+- `overview.md` — project overview
+- `protocol.md` — Trojan protocol notes
+- `config.md` — configuration reference
+- `build.md` — build instructions
+- `usage.md` — runtime usage
+- `security.md` — security notes
+- `authenticator.md` — authentication design
 
-## Current Delivery Status / 当前交付状态
+## Release / delivery
 
-- `branching-and-release-status.md`
-  - EN: bilingual summary for the current stable branch strategy, validated multi-platform artifacts, and release workflow posture.
-  - 中文：当前稳定分支策略、已验证多平台产物与 release workflow 状态的中英双文摘要。
+- `branching-and-release-status.md` — current branch strategy and release flow
+- `../CHANGELOG.md` — versioned release history
 
-- `../CHANGELOG.md`
-  - EN: release-level change history and formal version milestones.
-  - 中文：版本级别的变更历史与正式里程碑记录。
+## Client docs
 
-## Phase 4 / Validation Docs
-
-- `phase-4-capability-validation-plan.md`
-- `capability-evaluation-matrix.md`
-- `phase-4-decision-record.md`
-- `detectability-validation-workflow.md`
-- `trusted-front-staging-topology.md`
-- `trusted-front-rollout-checklist.md`
-- `trusted-front-rollback-checklist.md`
-- `baseline-validation-report.md`
-- `trusted-front-candidate-validation-report.md`
-- `baseline-vs-trusted-front-candidate-comparison-report.md`
-- `baseline-vs-trusted-front-verdict-template.md`
-- `trusted-front-edge-separation-evidence-status.md`
-- `first-tier-readiness-roadmap.md`
-- `first-tier-promotion-scorecard.md`
-- `client-product-architecture.md`
-- `adr-client-product-stack.md`
-
-## Client Workspace
-
-- `client/README.md`
-- `client/pubspec.yaml`
-- `client/lib/...`
-- `client-development-notes.md`
-- `client-internal-alpha-checklist.md`
-- `client-runtime-smoke-test.md`
-- `client-wrap-up-summary-2026-03-11.md`
-- `client-finish-line-packet.md`
-- `client-ui-validation-review-2026-03-11.md`
-- `client-ui-validation-plan.md`
-- `client-ui-ux-checklist.md`
-- `client-packaging-readiness.md`
-- `client-linux-packaging-plan.md`
-- `client-linux-packaging-scaffold.md`
-- `client-packaging-next-actions.md`
-- `client-cross-platform-packaging.md`
+- `client-product-architecture.md` — client architecture overview
+- `adr-client-product-stack.md` — client stack decision record
+- `client-packaging-readiness.md` — current packaging status
+- `client-cross-platform-packaging.md` — packaging matrix and CI status
 
 ## Runbooks
 
-- `runbooks/baseline-validation-evidence.md`
-- `runbooks/trusted-front-candidate-validation-evidence.md`
-- `runbooks/two-host-trusted-front-first-execution.md`
-- `runbooks/compare-validation-summaries.md`
-- `runbooks/profile-selection.md`
-- `runbooks/operator-signals.md`
-- `runbooks/candidate-log-reading.md`
-- `runbooks/rollback-verification.md`
-- `runbooks/fill-baseline-vs-trusted-front-verdict.md`
-- `runbooks/generate-trusted-front-verdict-draft.md`
-- `runbooks/generate-trusted-front-claims-pack.md`
-- `runbooks/generate-trusted-front-stage-summary.md`
-- `runbooks/latest-trusted-front-artifacts.md`
+- `runbooks/local-dev.md` — local development notes
+- `runbooks/abuse-control.md` — abuse-control operational notes
