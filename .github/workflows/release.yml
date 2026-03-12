@@ -87,10 +87,14 @@ jobs:
         id: version
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.ref_name }}"
           else
-            echo "version=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+            VERSION="$(git describe --tags --always --dirty 2>/dev/null || true)"
+            if [ -z "$VERSION" ]; then
+              VERSION="${GITHUB_SHA::7}"
+            fi
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Package artifact
         run: |
@@ -120,7 +124,7 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-15
+            runner: macos-13
             arch_flag: -x86_64
             b2_arch: x86
           - arch: arm64
@@ -137,21 +141,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Rosetta (x86_64 only)
-        if: matrix.arch == 'x86_64'
-        run: |
-          softwareupdate --install-rosetta --agree-to-license || true
-
-      - name: Install x86_64 Homebrew and OpenSSL
-        if: matrix.arch == 'x86_64'
-        run: |
-          # Install x86_64 Homebrew
-          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-          # Install x86_64 OpenSSL
-          arch -x86_64 /usr/local/bin/brew install openssl@3
-
-      - name: Install arm64 OpenSSL
-        if: matrix.arch == 'arm64'
+      - name: Install OpenSSL
         run: |
           brew install openssl@3
 
@@ -170,11 +160,7 @@ jobs:
 
       - name: Build
         run: |
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            OPENSSL_ROOT="/usr/local/opt/openssl@3"
-          else
-            OPENSSL_ROOT="$(brew --prefix openssl@3)"
-          fi
+          OPENSSL_ROOT="$(brew --prefix openssl@3)"
 
           mkdir -p build && cd build
           cmake .. \
@@ -198,10 +184,14 @@ jobs:
         id: version
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.ref_name }}"
           else
-            echo "version=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+            VERSION="$(git describe --tags --always --dirty 2>/dev/null || true)"
+            if [ -z "$VERSION" ]; then
+              VERSION="${GITHUB_SHA::7}"
+            fi
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Package artifact
         run: |
@@ -271,10 +261,14 @@ jobs:
         id: version
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            echo "version=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+            VERSION="$GITHUB_REF_NAME"
           else
-            echo "version=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+            VERSION="$(git describe --tags --always --dirty 2>/dev/null || true)"
+            if [ -z "$VERSION" ]; then
+              VERSION="${GITHUB_SHA:0:7}"
+            fi
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Package artifact
         run: |
@@ -310,7 +304,7 @@ jobs:
     name: Validate artifacts (core + client)
     runs-on: ubuntu-22.04
     needs: [build-linux, build-macos, build-windows, client-packaging]
-    if: github.event_name == 'workflow_dispatch'
+    if: always() && github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Download all artifacts

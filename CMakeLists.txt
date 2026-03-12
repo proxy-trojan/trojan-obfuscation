@@ -149,7 +149,7 @@ else()
                    src/core/authenticator.cpp
                    src/core/config.cpp
                    src/core/log.cpp)
-    target_include_directories(runtime_seam_tests PRIVATE src)
+    target_include_directories(runtime_seam_tests PRIVATE src ${Boost_INCLUDE_DIRS} ${Boost_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(runtime_seam_tests ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
 
     add_test(NAME RuntimeSeamTests COMMAND runtime_seam_tests)
