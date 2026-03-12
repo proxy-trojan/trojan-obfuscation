@@ -309,7 +309,7 @@ jobs:
     name: Client packaging (Linux/Windows/macOS + optional Android)
     uses: ./.github/workflows/client-packaging.yml
     with:
-      build_android: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android_client == 'true' && 'true' || 'false' }}
+      build_android: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'true' || (github.event_name == 'workflow_dispatch' && inputs.build_android_client == 'true' && 'true' || 'false') }}
 
   # ============================================
   # Artifact Validation (workflow_dispatch)
@@ -318,7 +318,7 @@ jobs:
     name: Validate artifacts (core + client)
     runs-on: ubuntu-22.04
     needs: [build-linux, build-macos, build-windows, client-packaging]
-    if: always() && github.event_name == 'workflow_dispatch'
+    if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
 
     steps:
       - name: Download all artifacts
@@ -351,6 +351,8 @@ jobs:
           done
 
       - name: Validate expected artifacts and publish summary
+        env:
+          EXPECT_ANDROID: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'true' || (github.event_name == 'workflow_dispatch' && inputs.build_android_client == 'true' && 'true' || 'false') }}
         run: |
           cd artifacts
 
@@ -366,7 +368,7 @@ jobs:
           {
             echo "## Build Validation Summary"
             echo "- workflow: Build and Release (manual dispatch)"
-            echo "- android client lane: ${{ inputs.build_android_client }}"
+            echo "- android client lane: $EXPECT_ANDROID"
             echo
             echo "### Core artifacts"
             for pattern in \
@@ -396,7 +398,7 @@ jobs:
                 CLIENT_OK=false
               fi
             done
-            if [ "${{ inputs.build_android_client }}" = "true" ]; then
+            if [ "$EXPECT_ANDROID" = "true" ]; then
               if check_present 'trojan-pro-client_*_android-release.apk'; then
                 echo "- ✅ trojan-pro-client_*_android-release.apk"
               else
@@ -418,7 +420,7 @@ jobs:
             APP_ZIP=$(ls -1 trojan-pro-client_*_macos-app.zip | head -n1)
             unzip -l "$APP_ZIP" | grep -E '\.app/' >/dev/null || SANITY_OK=false
           fi
-          if [ "${{ inputs.build_android_client }}" = "true" ] && check_present 'trojan-pro-client_*_android-release.apk'; then
+          if [ "$EXPECT_ANDROID" = "true" ] && check_present 'trojan-pro-client_*_android-release.apk'; then
             APK_FILE=$(ls -1 trojan-pro-client_*_android-release.apk | head -n1)
             unzip -l "$APK_FILE" | grep -E 'AndroidManifest\.xml' >/dev/null || SANITY_OK=false
           fi
@@ -440,7 +442,7 @@ jobs:
   # Create GitHub Release
   # ============================================
   release:
-    needs: [build-linux, build-macos, build-windows, client-packaging]
+    needs: [build-linux, build-macos, build-windows, client-packaging, validate-artifacts]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
 
@@ -468,9 +470,19 @@ jobs:
           cat << 'EOF' > release_notes.md
           ## Trojan-Pro ${{ github.ref_name }}
 
-          ### Downloads
+          ### Release Summary / 发布摘要
 
-          | Platform | Architecture | Download |
+          **EN**
+          - Formal tagged release generated from validated multi-platform CI pipeline.
+          - Includes core binaries + desktop client packages + Android APK.
+
+          **中文**
+          - 基于已验证的多平台 CI 流程生成的正式 tag 发行版。
+          - 同时包含 core 二进制、桌面 client 包与 Android APK。
+
+          ### Core Downloads
+
+          | Platform | Architecture | Artifact |
           |----------|--------------|----------|
           | Linux | x86_64 | `trojan-${{ github.ref_name }}-linux-x86_64.tar.gz` |
           | Linux | aarch64 | `trojan-${{ github.ref_name }}-linux-aarch64.tar.gz` |
@@ -478,31 +490,31 @@ jobs:
           | macOS | arm64 (Apple Silicon) | `trojan-${{ github.ref_name }}-macos-arm64.tar.gz` |
           | Windows | x86_64 | `trojan-${{ github.ref_name }}-windows-x86_64.zip` |
 
+          ### Client Downloads
+
+          | Platform | Artifact |
+          |----------|----------|
+          | Linux | `trojan-pro-client_0.1.0~internal.alpha.1-1_amd64.deb` |
+          | Linux | `trojan-pro-client_0.1.0-internal-alpha.1_linux-x64-bundle.tar.gz` |
+          | Windows | `trojan-pro-client_0.1.0-internal-alpha.1_windows-x64.zip` |
+          | macOS | `trojan-pro-client_0.1.0-internal-alpha.1_macos-app.zip` |
+          | Android | `trojan-pro-client_0.1.0-internal-alpha.1_android-release.apk` |
+
           ### Verification
 
-          Each download includes a `.sha256` checksum file. Verify integrity:
+          Every packaged artifact includes a `.sha256` checksum file.
 
           ```bash
           # Linux/macOS
-          sha256sum -c trojan-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256
+          sha256sum -c <artifact>.sha256
 
           # macOS alternative
-          shasum -a 256 -c trojan-${{ github.ref_name }}-macos-arm64.tar.gz.sha256
-          ```
-
-          ### Quick Start
-
-          ```bash
-          # Extract
-          tar -xzf trojan-${{ github.ref_name }}-linux-x86_64.tar.gz
-
-          # Run
-          ./trojan-${{ github.ref_name }}-linux-x86_64 -c config.json
+          shasum -a 256 -c <artifact>.sha256
           ```
 
           ### Changelog
 
-          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
           EOF
 
       - name: Create Release

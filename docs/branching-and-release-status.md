@@ -110,11 +110,27 @@ git merge --ff-only feature/<topic>
 - Workflow file: `.github/workflows/release.yml`
 - Reusable client packaging workflow: `.github/workflows/client-packaging.yml`
 - Manual trigger: GitHub Actions → **Build and Release**
+- Formal release trigger: push a `v*` tag to `main`.
 
 **中文**
 - 主 workflow 文件：`.github/workflows/release.yml`
 - 可复用 client packaging workflow：`.github/workflows/client-packaging.yml`
 - 手动触发入口：GitHub Actions → **Build and Release**
+- 正式发行触发：向 `main` 推送 `v*` 标签。
+
+### Formal Release Flow / 正式发布流程
+
+**EN**
+1. Keep `main` green with multi-platform CI.
+2. Create and push a semantic tag (for example `v1.1.0`).
+3. `Build and Release` runs with core + client (including Android on tag releases).
+4. `validate-artifacts` must pass before `release` job publishes assets.
+
+**中文**
+1. 保持 `main` 在多平台 CI 下持续全绿。
+2. 创建并推送语义化标签（例如 `v1.1.0`）。
+3. `Build and Release` 在 tag 触发下构建 core + client（正式 tag 默认包含 Android）。
+4. `validate-artifacts` 必须通过，`release` job 才会发布发行资产。
 
 ---
 
