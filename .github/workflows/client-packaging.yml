@@ -92,7 +92,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: inputs.release_label != '' || inputs.deb_version != ''
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
           DEB_VERSION_INPUT: ${{ inputs.deb_version }}
@@ -160,7 +160,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: inputs.release_label != '' || inputs.deb_version != ''
         shell: bash
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
@@ -223,7 +223,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: inputs.release_label != '' || inputs.deb_version != ''
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
           DEB_VERSION_INPUT: ${{ inputs.deb_version }}
@@ -257,7 +257,7 @@ jobs:
 
   android-client-package:
     name: Android client package (.apk)
-    if: github.event_name != 'push' && inputs.build_android == 'true'
+    if: inputs.build_android == 'true'
     runs-on: ubuntu-22.04
 
     steps:
@@ -295,7 +295,7 @@ jobs:
           scripts/read-client-release-metadata.sh --github-output
 
       - name: Override release metadata from workflow input
-        if: github.event_name != 'push' && (inputs.release_label != '' || inputs.deb_version != '')
+        if: inputs.release_label != '' || inputs.deb_version != ''
         env:
           RELEASE_LABEL_INPUT: ${{ inputs.release_label }}
           DEB_VERSION_INPUT: ${{ inputs.deb_version }}
