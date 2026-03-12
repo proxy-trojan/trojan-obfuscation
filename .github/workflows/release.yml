@@ -124,7 +124,7 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-13
+            runner: macos-15
             arch_flag: -x86_64
             b2_arch: x86
           - arch: arm64
@@ -139,7 +139,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Install OpenSSL
         run: |
@@ -186,10 +186,7 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${{ github.ref_name }}"
           else
-            VERSION="$(git describe --tags --always --dirty 2>/dev/null || true)"
-            if [ -z "$VERSION" ]; then
-              VERSION="${GITHUB_SHA::7}"
-            fi
+            VERSION="${GITHUB_SHA::7}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -336,51 +333,91 @@ jobs:
             sha256sum -c "$f"
           done
 
-      - name: Validate expected core artifacts exist
+      - name: Validate expected artifacts and publish summary
         run: |
           cd artifacts
-          ls -1 trojan-*-linux-x86_64.tar.gz >/dev/null
-          ls -1 trojan-*-linux-aarch64.tar.gz >/dev/null
-          ls -1 trojan-*-macos-x86_64.tar.gz >/dev/null
-          ls -1 trojan-*-macos-arm64.tar.gz >/dev/null
-          ls -1 trojan-*-windows-x86_64.zip >/dev/null
 
-      - name: Validate expected client artifacts exist
-        run: |
-          cd artifacts
-          ls -1 trojan-pro-client_*_amd64.deb >/dev/null
-          ls -1 trojan-pro-client_*_linux-x64-bundle.tar.gz >/dev/null
-          ls -1 trojan-pro-client_*_windows-x64.zip >/dev/null
-          ls -1 trojan-pro-client_*_macos-app.zip >/dev/null
-          if [ "${{ inputs.build_android_client }}" = "true" ]; then
-            ls -1 trojan-pro-client_*_android-release.apk >/dev/null
-          fi
+          check_present() {
+            local pattern="$1"
+            compgen -G "$pattern" > /dev/null
+          }
 
-      - name: Inspect package internals (sanity)
-        run: |
-          cd artifacts
-          DEB_FILE=$(ls -1 trojan-pro-client_*_amd64.deb | head -n1)
-          ZIP_FILE=$(ls -1 trojan-pro-client_*_windows-x64.zip | head -n1)
-          APP_ZIP=$(ls -1 trojan-pro-client_*_macos-app.zip | head -n1)
-          dpkg-deb -I "$DEB_FILE" >/dev/null
-          unzip -l "$ZIP_FILE" | grep -E '\.exe$' >/dev/null
-          unzip -l "$APP_ZIP" | grep -E '\.app/' >/dev/null
-          if [ "${{ inputs.build_android_client }}" = "true" ]; then
-            APK_FILE=$(ls -1 trojan-pro-client_*_android-release.apk | head -n1)
-            unzip -l "$APK_FILE" | grep -E 'AndroidManifest\.xml' >/dev/null
-          fi
+          CORE_OK=true
+          CLIENT_OK=true
+          SANITY_OK=true
 
-      - name: Publish validation summary
-        run: |
           {
             echo "## Build Validation Summary"
             echo "- workflow: Build and Release (manual dispatch)"
-            echo "- core artifacts: Linux x86_64/aarch64, macOS x86_64/arm64, Windows x86_64"
-            echo "- client artifacts: Linux .deb + bundle, Windows zip, macOS app zip"
             echo "- android client lane: ${{ inputs.build_android_client }}"
-            echo "- checksum verification: passed"
-            echo "- package sanity checks: passed"
+            echo
+            echo "### Core artifacts"
+            for pattern in \
+              'trojan-*-linux-x86_64.tar.gz' \
+              'trojan-*-linux-aarch64.tar.gz' \
+              'trojan-*-macos-x86_64.tar.gz' \
+              'trojan-*-macos-arm64.tar.gz' \
+              'trojan-*-windows-x86_64.zip'; do
+              if check_present "$pattern"; then
+                echo "- ✅ $pattern"
+              else
+                echo "- ❌ $pattern"
+                CORE_OK=false
+              fi
+            done
+            echo
+            echo "### Client artifacts"
+            for pattern in \
+              'trojan-pro-client_*_amd64.deb' \
+              'trojan-pro-client_*_linux-x64-bundle.tar.gz' \
+              'trojan-pro-client_*_windows-x64.zip' \
+              'trojan-pro-client_*_macos-app.zip'; do
+              if check_present "$pattern"; then
+                echo "- ✅ $pattern"
+              else
+                echo "- ❌ $pattern"
+                CLIENT_OK=false
+              fi
+            done
+            if [ "${{ inputs.build_android_client }}" = "true" ]; then
+              if check_present 'trojan-pro-client_*_android-release.apk'; then
+                echo "- ✅ trojan-pro-client_*_android-release.apk"
+              else
+                echo "- ❌ trojan-pro-client_*_android-release.apk"
+                CLIENT_OK=false
+              fi
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if check_present 'trojan-pro-client_*_amd64.deb'; then
+            DEB_FILE=$(ls -1 trojan-pro-client_*_amd64.deb | head -n1)
+            dpkg-deb -I "$DEB_FILE" >/dev/null || SANITY_OK=false
+          fi
+          if check_present 'trojan-pro-client_*_windows-x64.zip'; then
+            ZIP_FILE=$(ls -1 trojan-pro-client_*_windows-x64.zip | head -n1)
+            unzip -l "$ZIP_FILE" | grep -E '\.exe$' >/dev/null || SANITY_OK=false
+          fi
+          if check_present 'trojan-pro-client_*_macos-app.zip'; then
+            APP_ZIP=$(ls -1 trojan-pro-client_*_macos-app.zip | head -n1)
+            unzip -l "$APP_ZIP" | grep -E '\.app/' >/dev/null || SANITY_OK=false
+          fi
+          if [ "${{ inputs.build_android_client }}" = "true" ] && check_present 'trojan-pro-client_*_android-release.apk'; then
+            APK_FILE=$(ls -1 trojan-pro-client_*_android-release.apk | head -n1)
+            unzip -l "$APK_FILE" | grep -E 'AndroidManifest\.xml' >/dev/null || SANITY_OK=false
+          fi
+
+          {
+            echo
+            echo "### Validation status"
+            echo "- checksum verification: passed"
+            echo "- core artifacts complete: $CORE_OK"
+            echo "- client artifacts complete: $CLIENT_OK"
+            echo "- package sanity checks: $SANITY_OK"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CORE_OK" != true ] || [ "$CLIENT_OK" != true ] || [ "$SANITY_OK" != true ]; then
+            exit 1
+          fi
 
   # ============================================
   # Create GitHub Release
