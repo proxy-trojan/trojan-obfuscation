@@ -6,6 +6,44 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### EN
+
+#### Added
+- One-click deployment script upgraded to **v3.0** (`deploy_caddy_trojan.sh`):
+  - IP certificate support via Let's Encrypt short-lived certificates (6-day validity, auto-renewal).
+  - Multi-CA fallback (Let's Encrypt → Buypass → ZeroSSL) for domain certificates.
+  - ACME notification hooks: Telegram, DingTalk, Feishu, Slack, Bark, ServerChan, Mailgun, SendGrid.
+  - Pre-compiled binary download mode (fast install without compilation).
+  - Client config generation: basic, obfuscation, and Clash formats with Trojan URL.
+  - Multi-user/password management, backup/restore, and core update functionality.
+  - BBR congestion control auto-enable.
+  - Health check and comprehensive status reporting.
+  - Full CLI argument support for non-interactive automation.
+- E2E deployment test (`e2e-deploy-test.sh`):
+  - Self-signed certificate with dynamic port allocation.
+  - SOCKS5 proxy connectivity, fallback behavior, wrong-password rejection, and concurrent connection stability tests.
+  - Registered in CMake CTest as `LinuxSmokeTest-e2e-deploy`.
+- Removed legacy `scripts/deploy.sh` (superseded by `deploy_caddy_trojan.sh` v3.0).
+
+### 中文
+
+#### 新增
+- 一键部署脚本升级至 **v3.0**（`deploy_caddy_trojan.sh`）：
+  - 支持 IP 证书（Let's Encrypt 短期证书，6 天有效期，自动续期）。
+  - 域名证书多 CA 自动降级（Let's Encrypt → Buypass → ZeroSSL）。
+  - ACME 通知钩子：Telegram、钉钉、飞书、Slack、Bark、Server酱、Mailgun、SendGrid。
+  - 预编译二进制下载模式（快速安装，免编译）。
+  - 客户端配置自动生成：基础、混淆、Clash 格式及 Trojan URL。
+  - 多用户/密码管理、备份恢复、核心更新功能。
+  - BBR 拥塞控制自动启用。
+  - 健康检查与全面状态报告。
+  - 完整 CLI 参数支持，适用于非交互式自动化部署。
+- E2E 部署测试（`e2e-deploy-test.sh`）：
+  - 自签证书 + 动态端口分配的全链路测试。
+  - 覆盖 SOCKS5 代理连通性、Fallback 行为、错误密码拒绝、并发连接稳定性。
+  - 已注册到 CMake CTest（`LinuxSmokeTest-e2e-deploy`）。
+- 移除旧版 `scripts/deploy.sh`（已被 `deploy_caddy_trojan.sh` v3.0 替代）。
+
 ---
 
 ## [v1.1.1] - 2026-03-12

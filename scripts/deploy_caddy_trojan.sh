@@ -524,7 +524,7 @@ print_banner() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║                                                              ║"
-    echo "║       Trojan + Caddy Deployment Script v${SCRIPT_VERSION}            ║"
+    echo "║       Trojan + Caddy Deployment Script v${SCRIPT_VERSION}                  ║"
     echo "║                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
