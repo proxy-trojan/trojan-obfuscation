@@ -131,6 +131,33 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Export bundle'),
     );
     expect(exportButtonAfter.onPressed, isNotNull);
+    expect(find.text('Preview excerpt'), findsOneWidget);
+  });
+
+  testWidgets('shows export success state after bundle write',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DiagnosticsPage(services: services),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Generate preview'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Export bundle'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Support bundle exported'), findsOneWidget);
+    expect(find.textContaining('Last export target:'), findsOneWidget);
   });
 
   testWidgets('shows categorized export error guidance when export fails',

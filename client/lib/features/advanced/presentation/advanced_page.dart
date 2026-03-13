@@ -237,6 +237,10 @@ class _SupportActionsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(_actionHint),
+          const SizedBox(height: 8),
+          const Text(
+            'Problem Report is the export/share path. Update Status is for packaging and release context.',
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
