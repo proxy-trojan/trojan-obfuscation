@@ -36,4 +36,6 @@ class ClientServiceRegistry {
   final SettingsStore settingsStore;
   final ClientControllerApi controller;
   final DiagnosticsExportService diagnostics;
+
+  SecureStorageStatus get secureStorageStatus => secureStorage.status;
 }

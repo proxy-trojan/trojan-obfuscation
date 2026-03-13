@@ -22,11 +22,29 @@ Optional environment variables:
 ```bash
 export TROJAN_CLIENT_ENABLE_REAL_ADAPTER=1
 export TROJAN_CLIENT_BINARY=/absolute/path/to/trojan
+export KEEP_SMOKE_ARTIFACTS=1
 ```
+
+Automation helper:
+
+```bash
+./scripts/run-client-runtime-smoke.sh
+```
+
+What the helper currently verifies:
+- `flutter analyze`
+- `flutter test`
+- `flutter build linux --debug`
+- real `trojan` client preflight with a generated config
+- desktop app launch smoke when a GUI is available
+
+In headless environments, the script will explicitly report the GUI step as skipped unless `xvfb-run` or a real `DISPLAY`/`WAYLAND_DISPLAY` is available.
 
 ---
 
 ## Step 1 — Launch Client
+
+Manual path:
 
 ```bash
 cd client
@@ -35,10 +53,18 @@ flutter analyze
 flutter run -d linux
 ```
 
+Scripted path:
+
+```bash
+./scripts/run-client-runtime-smoke.sh
+```
+
 Expected:
 - app starts
 - dashboard renders
 - no immediate crash
+
+If the environment is headless, treat `flutter build linux --debug` + trojan preflight as the minimum non-GUI signal, and record the GUI launch step as blocked by missing display infrastructure rather than by app failure.
 
 ---
 

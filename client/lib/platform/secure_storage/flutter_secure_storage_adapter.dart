@@ -12,6 +12,14 @@ class FlutterSecureStorageAdapter implements SecureStorage {
   String get backendName => 'flutter-secure-storage';
 
   @override
+  SecureStorageStatus get status => const SecureStorageStatus(
+        backendName: 'flutter-secure-storage',
+        activeBackendName: 'flutter-secure-storage',
+        isSecure: true,
+        isPersistent: true,
+      );
+
+  @override
   Future<void> deleteSecret(String key) async {
     await _storage.delete(key: _requireKey(key));
   }

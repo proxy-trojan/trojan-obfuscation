@@ -7,6 +7,14 @@ class MemorySecureStorage implements SecureStorage {
   String get backendName => 'memory-only-stub';
 
   @override
+  SecureStorageStatus get status => const SecureStorageStatus(
+        backendName: 'memory-only-stub',
+        activeBackendName: 'memory-only-stub',
+        isSecure: false,
+        isPersistent: false,
+      );
+
+  @override
   Future<void> deleteSecret(String key) async {
     _secrets.remove(key);
   }

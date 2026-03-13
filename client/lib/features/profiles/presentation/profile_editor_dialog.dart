@@ -29,16 +29,20 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
   late final TextEditingController _localSocksPortController;
   late final TextEditingController _notesController;
   bool _verifyTls = true;
+  String? _validationError;
 
   @override
   void initState() {
     super.initState();
     final initial = widget.initial;
     _nameController = TextEditingController(text: initial?.name ?? '');
-    _serverHostController = TextEditingController(text: initial?.serverHost ?? '');
-    _serverPortController = TextEditingController(text: '${initial?.serverPort ?? 443}');
+    _serverHostController =
+        TextEditingController(text: initial?.serverHost ?? '');
+    _serverPortController =
+        TextEditingController(text: '${initial?.serverPort ?? 443}');
     _sniController = TextEditingController(text: initial?.sni ?? '');
-    _localSocksPortController = TextEditingController(text: '${initial?.localSocksPort ?? 1080}');
+    _localSocksPortController =
+        TextEditingController(text: '${initial?.localSocksPort ?? 1080}');
     _notesController = TextEditingController(text: initial?.notes ?? '');
     _verifyTls = initial?.verifyTls ?? true;
   }
@@ -66,6 +70,17 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
+              if (_validationError != null) ...<Widget>[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _validationError!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: 'Profile name'),
@@ -85,7 +100,8 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
               ),
               TextField(
                 controller: _localSocksPortController,
-                decoration: const InputDecoration(labelText: 'Local SOCKS port'),
+                decoration:
+                    const InputDecoration(labelText: 'Local SOCKS port'),
                 keyboardType: TextInputType.number,
               ),
               TextField(
@@ -126,16 +142,41 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
   }
 
   void _submit() {
+    final name = _nameController.text.trim();
+    final serverHost = _serverHostController.text.trim();
+    final serverPort = int.tryParse(_serverPortController.text.trim());
+    final localSocksPort = int.tryParse(_localSocksPortController.text.trim());
+
+    String? validationError;
+    if (name.isEmpty) {
+      validationError = 'Profile name is required.';
+    } else if (serverHost.isEmpty) {
+      validationError = 'Server host is required.';
+    } else if (RegExp(r'[\s]').hasMatch(serverHost)) {
+      validationError = 'Server host must not contain whitespace.';
+    } else if (serverPort == null || serverPort < 1 || serverPort > 65535) {
+      validationError = 'Server port must be between 1 and 65535.';
+    } else if (localSocksPort == null ||
+        localSocksPort < 1 ||
+        localSocksPort > 65535) {
+      validationError = 'Local SOCKS port must be between 1 and 65535.';
+    }
+
+    if (validationError != null) {
+      setState(() => _validationError = validationError);
+      return;
+    }
+
     final initial = widget.initial;
     final profile = ClientProfile(
       id: initial?.id ?? 'profile-${DateTime.now().microsecondsSinceEpoch}',
-      name: _nameController.text.trim().isEmpty ? 'Untitled Profile' : _nameController.text.trim(),
-      serverHost: _serverHostController.text.trim().isEmpty
-          ? 'example.com'
-          : _serverHostController.text.trim(),
-      serverPort: int.tryParse(_serverPortController.text.trim()) ?? 443,
-      sni: _sniController.text.trim().isEmpty ? 'example.com' : _sniController.text.trim(),
-      localSocksPort: int.tryParse(_localSocksPortController.text.trim()) ?? 1080,
+      name: name,
+      serverHost: serverHost,
+      serverPort: serverPort!,
+      sni: _sniController.text.trim().isEmpty
+          ? serverHost
+          : _sniController.text.trim(),
+      localSocksPort: localSocksPort!,
       verifyTls: _verifyTls,
       notes: _notesController.text.trim(),
       updatedAt: DateTime.now(),

@@ -17,7 +17,8 @@ This directory only keeps the current, useful project documentation.
 - `branching-and-release-status.md` — current branch strategy and release flow
 - `release-playbook.md` — formal release procedure and rollback guidance
 - `product-roadmap.md` — staged roadmap for formal product development
-- `v1.2.0-backlog.md` — focused backlog for the next milestone
+- `v1.2.0-backlog.md` — focused backlog for the client MVP usability milestone
+- `v1.3.0-backlog.md` — backlog for the desktop beta quality milestone
 - `../CHANGELOG.md` — versioned release history
 
 ## Decisions

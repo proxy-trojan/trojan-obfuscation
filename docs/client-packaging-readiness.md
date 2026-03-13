@@ -40,5 +40,8 @@ flutter build linux --release
 - `client/README.md`
 - `docs/client-cross-platform-packaging.md`
 - `docs/client-product-architecture.md`
+- `docs/v1.2.0-release-candidate-checklist.md`
 - `packaging/linux/README.md`
 - `scripts/build-client-linux-package.sh`
+- `scripts/verify-artifact-checksums.sh`
+- `scripts/smoke-check-client-artifacts.sh`

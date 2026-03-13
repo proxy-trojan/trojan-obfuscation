@@ -20,14 +20,17 @@ class AdapterBackedClientController extends ClientControllerApi {
     required ShellControllerAdapter adapter,
     required ProfileSecretsService profileSecrets,
     ClientFilesystemLayout? filesystemLayout,
+    Duration sessionPollInterval = const Duration(milliseconds: 600),
   })  : _adapter = adapter,
         _profileSecrets = profileSecrets,
         _filesystemLayout = filesystemLayout {
     _lastSessionUpdatedAt = _adapter.session.updatedAt;
-    _sessionWatcher = Timer.periodic(const Duration(milliseconds: 600), (_) {
-      final updatedAt = _adapter.session.updatedAt;
+    _sessionWatcher = Timer.periodic(sessionPollInterval, (_) {
+      final session = _adapter.session;
+      final updatedAt = session.updatedAt;
       if (_lastSessionUpdatedAt != updatedAt) {
         _lastSessionUpdatedAt = updatedAt;
+        _reconcileStatusWithSession(session);
         notifyListeners();
       }
     });
@@ -41,6 +44,7 @@ class AdapterBackedClientController extends ClientControllerApi {
   late final Timer _sessionWatcher;
   DateTime? _lastSessionUpdatedAt;
   int _operationCounter = 0;
+  int _eventCounter = 0;
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
     ClientControllerEvent(
@@ -81,7 +85,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         commandId: operationId,
         accepted: false,
         completedAt: DateTime.now(),
-        summary: 'Cannot prepare connect plan because no Trojan password is stored for ${profile.name}.',
+        summary:
+            'Cannot prepare connect plan because no Trojan password is stored for ${profile.name}.',
         error: 'MISSING_TROJAN_PASSWORD',
       );
       _recordEvent(
@@ -134,9 +139,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     _recordEvent(
       title: 'Connect requested',
       message: commandResult.summary,
-      phase: commandResult.accepted
-          ? acceptedPhase
-          : ClientConnectionPhase.error,
+      phase:
+          commandResult.accepted ? acceptedPhase : ClientConnectionPhase.error,
       profileId: profile.id,
       kind: ClientControllerEventKind.action,
       operationId: operationId,
@@ -212,7 +216,8 @@ class AdapterBackedClientController extends ClientControllerApi {
   }
 
   String _configPathFor(String profileId) {
-    final baseDirectory = _filesystemLayout?.stateDirectoryPath ?? Directory.systemTemp.path;
+    final baseDirectory =
+        _filesystemLayout?.stateDirectoryPath ?? Directory.systemTemp.path;
     final safeProfileId = profileId.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     return '$baseDirectory${Platform.pathSeparator}runtime${Platform.pathSeparator}runtime-profile-$safeProfileId.json';
   }
@@ -221,6 +226,90 @@ class AdapterBackedClientController extends ClientControllerApi {
   void dispose() {
     _sessionWatcher.cancel();
     super.dispose();
+  }
+
+  void _reconcileStatusWithSession(ControllerRuntimeSession session) {
+    if (session.isRunning) {
+      if (_status.phase == ClientConnectionPhase.connecting) {
+        final summary = session.pid == null
+            ? 'Runtime session is active.'
+            : 'Runtime session is active. pid=${session.pid}';
+        _status = _status.copyWith(
+          phase: ClientConnectionPhase.connected,
+          message: summary,
+          updatedAt: DateTime.now(),
+        );
+        _recordEvent(
+          title: 'Runtime session active',
+          message: summary,
+          phase: ClientConnectionPhase.connected,
+          profileId: _status.activeProfileId,
+          kind: ClientControllerEventKind.progress,
+          level: ClientControllerEventLevel.info,
+        );
+      }
+      return;
+    }
+
+    if (_status.phase != ClientConnectionPhase.connected &&
+        _status.phase != ClientConnectionPhase.connecting) {
+      return;
+    }
+
+    final lastError = session.lastError?.trim();
+    final lastExitCode = session.lastExitCode;
+    if (lastError != null && lastError.isNotEmpty) {
+      final summary = 'Runtime session stopped with error: $lastError';
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: summary,
+        updatedAt: DateTime.now(),
+      );
+      _recordEvent(
+        title: 'Runtime session ended',
+        message: summary,
+        phase: ClientConnectionPhase.error,
+        profileId: _status.activeProfileId,
+        kind: ClientControllerEventKind.result,
+        level: ClientControllerEventLevel.error,
+      );
+      return;
+    }
+
+    if (lastExitCode != null && lastExitCode != 0) {
+      final summary = 'Runtime session exited with code $lastExitCode.';
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: summary,
+        updatedAt: DateTime.now(),
+      );
+      _recordEvent(
+        title: 'Runtime session ended',
+        message: summary,
+        phase: ClientConnectionPhase.error,
+        profileId: _status.activeProfileId,
+        kind: ClientControllerEventKind.result,
+        level: ClientControllerEventLevel.error,
+      );
+      return;
+    }
+
+    final summary = lastExitCode == 0
+        ? 'Runtime session ended cleanly.'
+        : 'Runtime session is no longer running.';
+    _status = ClientConnectionStatus(
+      phase: ClientConnectionPhase.disconnected,
+      message: summary,
+      updatedAt: DateTime.now(),
+    );
+    _recordEvent(
+      title: 'Runtime session ended',
+      message: summary,
+      phase: ClientConnectionPhase.disconnected,
+      profileId: null,
+      kind: ClientControllerEventKind.result,
+      level: ClientControllerEventLevel.warning,
+    );
   }
 
   void _recordEvent({
@@ -234,7 +323,7 @@ class AdapterBackedClientController extends ClientControllerApi {
     int? step,
   }) {
     final event = ClientControllerEvent(
-      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
+      id: 'event-${++_eventCounter}',
       timestamp: DateTime.now(),
       title: title,
       message: message,

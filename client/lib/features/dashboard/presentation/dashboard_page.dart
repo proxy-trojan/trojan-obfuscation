@@ -5,6 +5,20 @@ import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../profiles/domain/client_profile.dart';
 
+Widget _kvWidget(String label, String value) {
+  return SizedBox(
+    width: 220,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(value),
+      ],
+    ),
+  );
+}
+
 class DashboardPage extends StatelessWidget {
   const DashboardPage({
     super.key,
@@ -29,6 +43,7 @@ class DashboardPage extends StatelessWidget {
         final profile = services.profileStore.selectedProfile;
         final status = services.controller.status;
         final runtimeConfig = services.controller.runtimeConfig;
+        final telemetry = services.controller.telemetry;
 
         return ListView(
           children: <Widget>[
@@ -36,7 +51,8 @@ class DashboardPage extends StatelessWidget {
               _StateCalloutCard(
                 icon: Icons.playlist_add,
                 title: 'Add one profile to get started',
-                body: 'The first useful step is simple: create or import one profile, then save its password and try one connection.',
+                body:
+                    'The first useful step is simple: create or import one profile, then save its password and try one connection.',
                 primaryLabel: 'Open Profiles',
                 onPrimary: onOpenProfiles,
               )
@@ -44,7 +60,8 @@ class DashboardPage extends StatelessWidget {
               _StateCalloutCard(
                 icon: Icons.password,
                 title: 'Save the password before testing',
-                body: 'This profile is almost ready. Save the password first, then try one connection attempt.',
+                body:
+                    'This profile is almost ready. Save the password first, then try one connection attempt.',
                 primaryLabel: 'Open Profiles',
                 onPrimary: onOpenProfiles,
               )
@@ -52,7 +69,8 @@ class DashboardPage extends StatelessWidget {
               _StateCalloutCard(
                 icon: Icons.error_outline,
                 title: 'The last connection did not work',
-                body: 'Open Troubleshooting if you want a clear report. Go back to Profiles if you want to try again.',
+                body:
+                    'Open Troubleshooting if you want a clear report. Go back to Profiles if you want to try again.',
                 primaryLabel: 'Open Troubleshooting',
                 onPrimary: onOpenAdvanced,
                 secondaryLabel: 'Open Profiles',
@@ -62,23 +80,30 @@ class DashboardPage extends StatelessWidget {
             else
               SectionCard(
                 title: 'Connection Home',
-                subtitle: 'The primary path should be obvious: profile → password → connect.',
+                subtitle:
+                    'The primary path should be obvious: profile → password → connect.',
                 child: Wrap(
                   spacing: 24,
                   runSpacing: 12,
                   children: <Widget>[
-                    _kv('Connection Status', _statusLabel(status)),
-                    _kv('Selected Profile', profile.name),
-                    _kv('Password Ready', _passwordReadyLabel(profile)),
-                    _kv('Runtime Mode', runtimeConfig.mode),
-                    _kv('Update Channel', services.settingsStore.settings.updateChannel.name),
+                    _kvWidget('Connection Status', _statusLabel(status)),
+                    _kvWidget('Selected Profile', profile.name),
+                    _kvWidget('Password Ready', _passwordReadyLabel(profile)),
+                    _kvWidget('Secret Storage',
+                        services.profileSecrets.storageSummary),
+                    _kvWidget('Runtime Mode', runtimeConfig.mode),
+                    _kvWidget('Controller Backend', telemetry.backendKind),
+                    _kvWidget('Backend Version', telemetry.backendVersion),
+                    _kvWidget('Update Channel',
+                        services.settingsStore.settings.updateChannel.name),
                   ],
                 ),
               ),
             const SizedBox(height: 16),
             SectionCard(
               title: 'What to do next',
-              subtitle: 'The app should guide the user, not make them read the system.',
+              subtitle:
+                  'The app should guide the user, not make them read the system.',
               child: _NextStepGuide(
                 profile: profile,
                 status: status,
@@ -90,7 +115,8 @@ class DashboardPage extends StatelessWidget {
             if (_showExperimentGuide(profile, status)) ...<Widget>[
               const SectionCard(
                 title: 'Experiment quick start',
-                subtitle: 'Keep the workflow short and obvious when you are testing.',
+                subtitle:
+                    'Keep the workflow short and obvious when you are testing.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
@@ -98,9 +124,11 @@ class DashboardPage extends StatelessWidget {
                     SizedBox(height: 8),
                     Text('2. Save the Trojan password for that profile.'),
                     SizedBox(height: 8),
-                    Text('3. Try one connect attempt and watch the status only.'),
+                    Text(
+                        '3. Try one connect attempt and watch the status only.'),
                     SizedBox(height: 8),
-                    Text('4. If it fails, open Advanced → Troubleshooting and export the bundle.'),
+                    Text(
+                        '4. If it fails, open Advanced → Troubleshooting and export the bundle.'),
                   ],
                 ),
               ),
@@ -113,18 +141,22 @@ class DashboardPage extends StatelessWidget {
                 future: services.controller.checkHealth(),
                 builder: (BuildContext context, snapshot) {
                   final health = snapshot.data;
-                  final levelName = health == null ? 'Checking…' : health.level.name;
-                  final summary = health == null ? 'Probing local runtime' : health.summary;
+                  final levelName =
+                      health == null ? 'Checking…' : health.level.name;
+                  final summary =
+                      health == null ? 'Probing local runtime' : health.summary;
 
                   return Wrap(
                     spacing: 24,
                     runSpacing: 12,
                     children: <Widget>[
-                      _kv('Profile Ready', profile == null ? 'No' : 'Yes'),
-                      _kv('Password Ready', _passwordReadyLabel(profile)),
-                      _kv('App Ready', levelName),
-                      _kv('Status Note', summary),
-                      _kv('Runtime Path', runtimeConfig.endpointHint),
+                      _kvWidget('Profile Ready', profile == null ? 'No' : 'Yes'),
+                      _kvWidget('Password Ready', _passwordReadyLabel(profile)),
+                      _kvWidget('Secret Storage',
+                          services.profileSecrets.storageSummary),
+                      _kvWidget('App Ready', levelName),
+                      _kvWidget('Status Note', summary),
+                      _kvWidget('Runtime Path', runtimeConfig.endpointHint),
                     ],
                   );
                 },
@@ -161,24 +193,11 @@ class DashboardPage extends StatelessWidget {
     return profile.hasStoredPassword ? 'Yes' : 'No';
   }
 
-  bool _showExperimentGuide(ClientProfile? profile, ClientConnectionStatus status) {
+  bool _showExperimentGuide(
+      ClientProfile? profile, ClientConnectionStatus status) {
     if (profile == null) return true;
     if (!profile.hasStoredPassword) return true;
     return status.phase != ClientConnectionPhase.connected;
-  }
-
-  Widget _kv(String label, String value) {
-    return SizedBox(
-      width: 220,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value),
-        ],
-      ),
-    );
   }
 }
 
@@ -237,7 +256,8 @@ class _NextStepGuide extends StatelessWidget {
     if (profile == null) {
       return const _GuideModel(
         title: 'Start by adding one profile',
-        body: 'Create or import a profile first. Once that exists, the rest of the flow becomes much simpler.',
+        body:
+            'Create or import a profile first. Once that exists, the rest of the flow becomes much simpler.',
         primaryLabel: 'Open Profiles',
         primaryAction: _GuideAction.openProfiles,
       );
@@ -245,7 +265,8 @@ class _NextStepGuide extends StatelessWidget {
     if (!profile!.hasStoredPassword) {
       return const _GuideModel(
         title: 'Save the password before testing',
-        body: 'The selected profile still needs its Trojan password. Save it first, then try one connection attempt.',
+        body:
+            'The selected profile still needs its Trojan password. Save it first, then try one connection attempt.',
         primaryLabel: 'Open Profiles',
         primaryAction: _GuideAction.openProfiles,
       );
@@ -253,7 +274,8 @@ class _NextStepGuide extends StatelessWidget {
     if (status.phase == ClientConnectionPhase.error) {
       return const _GuideModel(
         title: 'The last test needs troubleshooting',
-        body: 'Your previous connection attempt failed. Open Troubleshooting if you need runtime details or a support bundle.',
+        body:
+            'Your previous connection attempt failed. Open Troubleshooting if you need runtime details or a support bundle.',
         primaryLabel: 'Open Troubleshooting',
         primaryAction: _GuideAction.openAdvanced,
         secondaryLabel: 'Open Profiles',
@@ -263,7 +285,8 @@ class _NextStepGuide extends StatelessWidget {
     if (status.phase == ClientConnectionPhase.connected) {
       return const _GuideModel(
         title: 'Connection is active',
-        body: 'You are already connected. If you want to switch profiles or disconnect, go back to Profiles.',
+        body:
+            'You are already connected. If you want to switch profiles or disconnect, go back to Profiles.',
         primaryLabel: 'Open Profiles',
         primaryAction: _GuideAction.openProfiles,
       );
@@ -271,7 +294,8 @@ class _NextStepGuide extends StatelessWidget {
     if (status.phase == ClientConnectionPhase.connecting) {
       return const _GuideModel(
         title: 'Connection attempt is running',
-        body: 'Wait for the current attempt to finish. If it stalls, open Troubleshooting for deeper details.',
+        body:
+            'Wait for the current attempt to finish. If it stalls, open Troubleshooting for deeper details.',
         primaryLabel: 'Open Troubleshooting',
         primaryAction: _GuideAction.openAdvanced,
         secondaryLabel: 'Open Profiles',
@@ -280,14 +304,14 @@ class _NextStepGuide extends StatelessWidget {
     }
     return const _GuideModel(
       title: 'You are ready for a quick test',
-      body: 'Open Profiles and use the selected profile to try one connect attempt.',
+      body:
+          'Open Profiles and use the selected profile to try one connect attempt.',
       primaryLabel: 'Open Profiles',
       primaryAction: _GuideAction.openProfiles,
       secondaryLabel: 'Open Troubleshooting',
       secondaryAction: _GuideAction.openAdvanced,
     );
   }
-
 }
 
 enum _GuideAction {
@@ -392,34 +416,21 @@ class _RuntimeSessionSummary extends StatelessWidget {
           spacing: 24,
           runSpacing: 12,
           children: <Widget>[
-            _kv('Running', session.isRunning ? 'Yes' : 'No'),
-            _kv('PID', session.pid?.toString() ?? 'N/A'),
-            _kv('Config Path', session.activeConfigPath ?? 'N/A'),
-            _kv('Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
-            _kv('Last Error', session.lastError ?? 'None'),
+            _kvWidget('Running', session.isRunning ? 'Yes' : 'No'),
+            _kvWidget('PID', session.pid?.toString() ?? 'N/A'),
+            _kvWidget('Config Path', session.activeConfigPath ?? 'N/A'),
+            _kvWidget('Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
+            _kvWidget('Last Error', session.lastError ?? 'None'),
           ],
         ),
         const SizedBox(height: 12),
-        if (session.stdoutTail.isNotEmpty) _logTail('stdout tail', session.stdoutTail),
+        if (session.stdoutTail.isNotEmpty)
+          _logTail('stdout tail', session.stdoutTail),
         if (session.stderrTail.isNotEmpty) ...<Widget>[
           const SizedBox(height: 12),
           _logTail('stderr tail', session.stderrTail),
         ],
       ],
-    );
-  }
-
-  Widget _kv(String label, String value) {
-    return SizedBox(
-      width: 220,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value),
-        ],
-      ),
     );
   }
 
