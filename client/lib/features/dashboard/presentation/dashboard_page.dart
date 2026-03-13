@@ -92,6 +92,7 @@ class DashboardPage extends StatelessWidget {
               child: _NextStepGuide(
                 profile: profile,
                 status: status,
+                lifecycle: lifecycle,
                 onOpenProfiles: onOpenProfiles,
                 onOpenAdvanced: onOpenAdvanced,
               ),
@@ -183,12 +184,14 @@ class _NextStepGuide extends StatelessWidget {
   const _NextStepGuide({
     required this.profile,
     required this.status,
+    required this.lifecycle,
     required this.onOpenProfiles,
     required this.onOpenAdvanced,
   });
 
   final ClientProfile? profile;
   final ClientConnectionStatus status;
+  final ConnectionLifecycleViewModel lifecycle;
   final VoidCallback? onOpenProfiles;
   final VoidCallback? onOpenAdvanced;
 
@@ -250,14 +253,17 @@ class _NextStepGuide extends StatelessWidget {
       );
     }
     if (status.phase == ClientConnectionPhase.error) {
-      return const _GuideModel(
-        title: 'The last test needs troubleshooting',
-        body:
-            'Your previous connection attempt failed. Open Troubleshooting if you need runtime details or a support bundle.',
-        primaryLabel: 'Open Troubleshooting',
-        primaryAction: _GuideAction.openAdvanced,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
+      return _GuideModel(
+        title: lifecycle.headline,
+        body: lifecycle.detail,
+        primaryLabel:
+            lifecycle.showRetry ? 'Retry from Profiles' : 'Open Profiles',
+        primaryAction: _GuideAction.openProfiles,
+        secondaryLabel:
+            lifecycle.showOpenTroubleshooting ? 'Open Troubleshooting' : null,
+        secondaryAction: lifecycle.showOpenTroubleshooting
+            ? _GuideAction.openAdvanced
+            : null,
       );
     }
     if (status.phase == ClientConnectionPhase.connected) {
@@ -270,10 +276,9 @@ class _NextStepGuide extends StatelessWidget {
       );
     }
     if (status.phase == ClientConnectionPhase.disconnecting) {
-      return const _GuideModel(
-        title: 'Disconnect is in progress',
-        body:
-            'Wait for the current session to close cleanly before starting another action.',
+      return _GuideModel(
+        title: lifecycle.headline,
+        body: lifecycle.detail,
         primaryLabel: 'Open Troubleshooting',
         primaryAction: _GuideAction.openAdvanced,
         secondaryLabel: 'Open Profiles',
@@ -281,10 +286,9 @@ class _NextStepGuide extends StatelessWidget {
       );
     }
     if (status.phase == ClientConnectionPhase.connecting) {
-      return const _GuideModel(
-        title: 'Connection attempt is running',
-        body:
-            'Wait for the current attempt to finish. If it stalls, open Troubleshooting for deeper details.',
+      return _GuideModel(
+        title: lifecycle.headline,
+        body: lifecycle.detail,
         primaryLabel: 'Open Troubleshooting',
         primaryAction: _GuideAction.openAdvanced,
         secondaryLabel: 'Open Profiles',
@@ -414,7 +418,7 @@ class _ConnectionHomeCard extends StatelessWidget {
                     _kvWidget('Selected Profile', profile.name),
                     _kvWidget('Active Profile',
                         lifecycle.activeProfileName ?? 'None'),
-                    _kvWidget('Controller Status', status.message),
+                    _kvWidget('Status Note', lifecycle.statusSummary),
                     _kvWidget('Secret Storage', storageSummary),
                     _kvWidget('Runtime Mode', runtimeMode),
                     _kvWidget('Controller Backend', controllerBackend),

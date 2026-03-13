@@ -48,11 +48,29 @@ void main() {
     expect(model.showOpenTroubleshooting, isTrue);
   });
 
-  test('maps error status to retry-capable model', () {
+  test('maps missing password error to profiles-first guidance', () {
     final model = ConnectionLifecycleViewModel.fromStatus(
       status: ClientConnectionStatus(
         phase: ClientConnectionPhase.error,
-        message: 'Runtime exited with code 7.',
+        message: 'MISSING_TROJAN_PASSWORD',
+        updatedAt: _fixedTime,
+        activeProfileId: 'profile-1',
+      ),
+      selectedProfile: _profile(),
+    );
+
+    expect(model.stage, ConnectionLifecycleStage.error);
+    expect(model.headline, contains('saved password'));
+    expect(model.showRetry, isFalse);
+    expect(model.showOpenTroubleshooting, isFalse);
+    expect(model.statusSummary, 'A Trojan password is still missing.');
+  });
+
+  test('maps runtime exit code error to retry-capable model', () {
+    final model = ConnectionLifecycleViewModel.fromStatus(
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Runtime session exited with code 7.',
         updatedAt: _fixedTime,
         activeProfileId: 'profile-1',
       ),
@@ -62,5 +80,6 @@ void main() {
     expect(model.stage, ConnectionLifecycleStage.error);
     expect(model.showRetry, isTrue);
     expect(model.canConnect, isTrue);
+    expect(model.statusSummary, 'Runtime exited unexpectedly (code 7).');
   });
 }

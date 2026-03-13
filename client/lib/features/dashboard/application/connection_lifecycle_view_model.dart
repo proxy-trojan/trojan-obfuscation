@@ -15,6 +15,7 @@ class ConnectionLifecycleViewModel {
     required this.label,
     required this.headline,
     required this.detail,
+    required this.statusSummary,
     required this.activeProfileName,
     required this.canConnect,
     required this.canDisconnect,
@@ -27,6 +28,7 @@ class ConnectionLifecycleViewModel {
   final String label;
   final String headline;
   final String detail;
+  final String statusSummary;
   final String? activeProfileName;
   final bool canConnect;
   final bool canDisconnect;
@@ -55,6 +57,9 @@ class ConnectionLifecycleViewModel {
           detail: profileName == null
               ? 'Create or import one profile first.'
               : 'Select Connect when you want to test $profileName.',
+          statusSummary: profileName == null
+              ? 'No profile selected yet.'
+              : 'Ready to connect.',
           activeProfileName: profileName,
           canConnect: selectedProfile != null,
           canDisconnect: false,
@@ -71,6 +76,7 @@ class ConnectionLifecycleViewModel {
               : 'Connecting to $profileName',
           detail:
               'The client is establishing the runtime session. Please wait.',
+          statusSummary: 'Connection attempt in progress.',
           activeProfileName: profileName,
           canConnect: false,
           canDisconnect: false,
@@ -87,6 +93,7 @@ class ConnectionLifecycleViewModel {
               : 'Connected with $profileName',
           detail:
               'The runtime session is active. Disconnect before switching flows.',
+          statusSummary: 'Runtime session is active.',
           activeProfileName: profileName,
           canConnect: false,
           canDisconnect: true,
@@ -103,6 +110,7 @@ class ConnectionLifecycleViewModel {
               : 'Disconnecting from $profileName',
           detail:
               'The current runtime session is shutting down. Please wait before reconnecting.',
+          statusSummary: 'Disconnect in progress.',
           activeProfileName: profileName,
           canConnect: false,
           canDisconnect: false,
@@ -111,20 +119,108 @@ class ConnectionLifecycleViewModel {
           showOpenTroubleshooting: true,
         );
       case ClientConnectionPhase.error:
+        final errorPresentation = _describeError(status.message, profileName);
         return ConnectionLifecycleViewModel(
           stage: ConnectionLifecycleStage.error,
           label: 'Needs attention',
-          headline: profileName == null
-              ? 'The last connection did not work'
-              : 'The last connection for $profileName did not work',
-          detail: status.message,
+          headline: errorPresentation.headline,
+          detail: errorPresentation.detail,
+          statusSummary: errorPresentation.statusSummary,
           activeProfileName: profileName,
-          canConnect: selectedProfile != null,
+          canConnect: errorPresentation.canRetryFromProfiles,
           canDisconnect: false,
-          showRetry: selectedProfile != null,
+          showRetry: errorPresentation.canRetryFromProfiles,
           showOpenProfiles: true,
-          showOpenTroubleshooting: true,
+          showOpenTroubleshooting: errorPresentation.showOpenTroubleshooting,
         );
     }
   }
+
+  static _ConnectionErrorPresentation _describeError(
+    String message,
+    String? profileName,
+  ) {
+    final normalized = message.trim();
+    final profileLabel = profileName ?? 'this profile';
+
+    if (normalized == 'MISSING_TROJAN_PASSWORD' ||
+        normalized.contains('no Trojan password')) {
+      return _ConnectionErrorPresentation(
+        headline: '$profileLabel still needs a saved password',
+        detail:
+            'Open Profiles, save the Trojan password, then retry the connection test.',
+        statusSummary: 'A Trojan password is still missing.',
+        canRetryFromProfiles: false,
+        showOpenTroubleshooting: false,
+      );
+    }
+
+    final exitCodeMatch = RegExp(r'code\s+(\d+)').firstMatch(normalized);
+    if (normalized.contains('Runtime session exited with code') &&
+        exitCodeMatch != null) {
+      final code = exitCodeMatch.group(1)!;
+      return _ConnectionErrorPresentation(
+        headline: 'The connection ended unexpectedly',
+        detail:
+            'The runtime stopped with exit code $code. Retry from Profiles or open Troubleshooting for recent logs.',
+        statusSummary: 'Runtime exited unexpectedly (code $code).',
+        canRetryFromProfiles: true,
+        showOpenTroubleshooting: true,
+      );
+    }
+
+    if (normalized.startsWith('Runtime session stopped with error:')) {
+      final reason = normalized
+          .replaceFirst('Runtime session stopped with error:', '')
+          .trim();
+      return _ConnectionErrorPresentation(
+        headline: 'The runtime hit a local error',
+        detail:
+            'The current session stopped before it could stay connected. Open Troubleshooting for logs${reason.isEmpty ? '' : ' — latest detail: $reason'}.',
+        statusSummary: reason.isEmpty
+            ? 'Runtime reported a local error.'
+            : 'Runtime error: $reason',
+        canRetryFromProfiles: true,
+        showOpenTroubleshooting: true,
+      );
+    }
+
+    if (normalized.contains('config') && normalized.contains('invalid')) {
+      return const _ConnectionErrorPresentation(
+        headline: 'The connection could not start',
+        detail:
+            'The client could not prepare a valid runtime configuration. Review the selected profile and try again.',
+        statusSummary: 'Configuration is not valid for launch.',
+        canRetryFromProfiles: false,
+        showOpenTroubleshooting: true,
+      );
+    }
+
+    return _ConnectionErrorPresentation(
+      headline: profileName == null
+          ? 'The last connection needs attention'
+          : 'The last connection for $profileName needs attention',
+      detail:
+          'Retry from Profiles if you want to try again, or open Troubleshooting for deeper details.',
+      statusSummary: normalized.isEmpty ? 'Connection failed.' : normalized,
+      canRetryFromProfiles: profileName != null,
+      showOpenTroubleshooting: true,
+    );
+  }
+}
+
+class _ConnectionErrorPresentation {
+  const _ConnectionErrorPresentation({
+    required this.headline,
+    required this.detail,
+    required this.statusSummary,
+    required this.canRetryFromProfiles,
+    required this.showOpenTroubleshooting,
+  });
+
+  final String headline;
+  final String detail;
+  final String statusSummary;
+  final bool canRetryFromProfiles;
+  final bool showOpenTroubleshooting;
 }
