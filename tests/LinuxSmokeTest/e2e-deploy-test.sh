@@ -94,6 +94,28 @@ wait_for_http() {
   return 1
 }
 
+wait_for_log() {
+  local log_path="$1"
+  local expected="$2"
+  local label="${3:-log line}"
+  python3 - <<'PY' "$log_path" "$expected" "$label"
+import pathlib, sys, time
+path = pathlib.Path(sys.argv[1])
+needle = sys.argv[2]
+label = sys.argv[3]
+deadline = time.time() + 10
+while time.time() < deadline:
+    text = path.read_text(encoding='utf-8', errors='replace') if path.exists() else ''
+    if needle in text:
+        sys.exit(0)
+    time.sleep(0.1)
+print(f'missing {label}: {needle}', file=sys.stderr)
+if path.exists():
+    print(path.read_text(encoding='utf-8', errors='replace'), file=sys.stderr)
+sys.exit(1)
+PY
+}
+
 # ============================================================================
 # 1. 分配动态端口
 # ============================================================================
@@ -369,14 +391,13 @@ try:
     with socket.create_connection(('127.0.0.1', port), timeout=5) as sock:
         with ctx.wrap_socket(sock, server_hostname='localhost') as tls:
             tls.sendall(payload)
-            # 服务器应将此视为认证失败，转发到 fallback
+            # 服务器应将此视为认证失败；随后可能关闭连接，也可能把原始负载交给 fallback。
             data = tls.recv(4096)
             response = data.decode('utf-8', errors='replace')
-            if 'FALLBACK_OK' in response or response == '':
-                # 认证失败被转发到 fallback 或连接关闭，均为预期行为
-                print('REJECTED_OK')
+            if 'TARGET_OK' in response:
+                print(f'UNEXPECTED_TARGET: {response[:200]}')
             else:
-                print(f'UNEXPECTED: {response[:200]}')
+                print('REJECTED_OK')
 except (ConnectionResetError, BrokenPipeError, ssl.SSLError):
     # 连接被重置也是预期行为
     print('REJECTED_OK')
@@ -385,10 +406,15 @@ except Exception as e:
 PY
 )
 
-if [[ "$WRONG_AUTH_RESULT" == "REJECTED_OK" ]]; then
-  log_pass "Test 3: 错误密码请求被正确拒绝/转发到 fallback"
+auth_fail_seen="false"
+if wait_for_log "$TMPDIR/server.log" "valid trojan request structure but authentication failed" "auth failure log"; then
+  auth_fail_seen="true"
+fi
+
+if [[ "$WRONG_AUTH_RESULT" == "REJECTED_OK" && "$auth_fail_seen" == "true" ]]; then
+  log_pass "Test 3: 错误密码请求被正确拒绝，并进入 auth-failure/fallback 路径"
 else
-  log_fail "Test 3: 错误密码处理异常 (结果: $WRONG_AUTH_RESULT)"
+  log_fail "Test 3: 错误密码处理异常 (结果: $WRONG_AUTH_RESULT, auth_fail_seen: $auth_fail_seen)"
 fi
 
 # --- Test 4: 并发连接稳定性 ---
