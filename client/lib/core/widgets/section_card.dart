@@ -23,21 +23,18 @@ class SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(title, style: theme.textTheme.titleMedium),
-                      if (subtitle != null) ...<Widget>[
-                        const SizedBox(height: 4),
-                        Text(subtitle!, style: theme.textTheme.bodySmall),
-                      ],
-                    ],
-                  ),
-                ),
-                if (trailing != null) trailing!,
+                Text(title, style: theme.textTheme.titleMedium),
+                if (subtitle != null) ...<Widget>[
+                  const SizedBox(height: 4),
+                  Text(subtitle!, style: theme.textTheme.bodySmall),
+                ],
+                if (trailing != null) ...<Widget>[
+                  const SizedBox(height: 12),
+                  trailing!,
+                ],
               ],
             ),
             const SizedBox(height: 16),

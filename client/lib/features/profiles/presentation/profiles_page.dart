@@ -25,81 +25,84 @@ class ProfilesPage extends StatelessWidget {
         final selected = services.profileStore.selectedProfile;
         final status = services.controller.status;
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              flex: 2,
-              child: SectionCard(
-                title: 'Profiles',
-                subtitle: 'Desktop-first profile management shell.',
-                trailing: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    OutlinedButton.icon(
-                      onPressed: () => _importProfileFromFile(context),
-                      icon: const Icon(Icons.folder_open),
-                      label: const Text('Import File'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _importProfile(context),
-                      icon: const Icon(Icons.file_upload),
-                      label: const Text('Import Text'),
-                    ),
-                    FilledButton.icon(
-                      onPressed: () => _createProfile(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Create'),
-                    ),
-                  ],
-                ),
-                child: profiles.isEmpty
-                    ? const Text('No profiles yet.')
-                    : Column(
-                        children: profiles
-                            .map(
-                              (profile) => ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                  services.profileStore.selectedProfileId ==
-                                          profile.id
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_off,
+        return SingleChildScrollView(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                flex: 2,
+                child: SectionCard(
+                  title: 'Profiles',
+                  subtitle: 'Desktop-first profile management shell.',
+                  trailing: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      OutlinedButton.icon(
+                        onPressed: () => _importProfileFromFile(context),
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('Import File'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _importProfile(context),
+                        icon: const Icon(Icons.file_upload),
+                        label: const Text('Import Text'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => _createProfile(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create'),
+                      ),
+                    ],
+                  ),
+                  child: profiles.isEmpty
+                      ? const Text('No profiles yet.')
+                      : Column(
+                          children: profiles
+                              .map(
+                                (profile) => ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(
+                                    services.profileStore.selectedProfileId ==
+                                            profile.id
+                                        ? Icons.radio_button_checked
+                                        : Icons.radio_button_off,
+                                  ),
+                                  title: Text(profile.name),
+                                  subtitle: Text(
+                                      '${profile.serverHost}:${profile.serverPort}'),
+                                  trailing: status.activeProfileId ==
+                                              profile.id &&
+                                          status.phase ==
+                                              ClientConnectionPhase.connected
+                                      ? const Icon(Icons.link,
+                                          color: Colors.green)
+                                      : null,
+                                  onTap: () => services.profileStore
+                                      .selectProfile(profile.id),
                                 ),
-                                title: Text(profile.name),
-                                subtitle: Text(
-                                    '${profile.serverHost}:${profile.serverPort}'),
-                                trailing:
-                                    status.activeProfileId == profile.id &&
-                                            status.phase ==
-                                                ClientConnectionPhase.connected
-                                        ? const Icon(Icons.link,
-                                            color: Colors.green)
-                                        : null,
-                                onTap: () => services.profileStore
-                                    .selectProfile(profile.id),
-                              ),
-                            )
-                            .toList(),
+                              )
+                              .toList(),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 3,
+                child: selected == null
+                    ? const SectionCard(
+                        title: 'Profile Details',
+                        child:
+                            Text('Select or create a profile to inspect it.'),
+                      )
+                    : _SelectedProfileCard(
+                        services: services,
+                        selected: selected,
+                        status: status,
                       ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              flex: 3,
-              child: selected == null
-                  ? const SectionCard(
-                      title: 'Profile Details',
-                      child: Text('Select or create a profile to inspect it.'),
-                    )
-                  : _SelectedProfileCard(
-                      services: services,
-                      selected: selected,
-                      status: status,
-                    ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -221,9 +224,60 @@ class _SelectedProfileCard extends StatelessWidget {
   final ClientProfile selected;
   final ClientConnectionStatus status;
 
+  bool get _active => status.activeProfileId == selected.id;
+
+  bool get _sessionLockedForProfileEdits =>
+      _active &&
+      (status.phase == ClientConnectionPhase.connecting ||
+          status.phase == ClientConnectionPhase.connected ||
+          status.phase == ClientConnectionPhase.disconnecting);
+
+  bool get _hasConnectedElsewhere =>
+      !_active && status.phase == ClientConnectionPhase.connected;
+
+  bool get _canToggleConnection {
+    if (!selected.hasStoredPassword) return false;
+    if (status.isBusy) return false;
+    if (_hasConnectedElsewhere) return false;
+    return true;
+  }
+
+  String get _connectActionLabel {
+    if (!selected.hasStoredPassword) return 'Set Password First';
+    if (_active && status.phase == ClientConnectionPhase.connected) {
+      return 'Disconnect';
+    }
+    if (_active && status.phase == ClientConnectionPhase.connecting) {
+      return 'Connecting...';
+    }
+    if (_active && status.phase == ClientConnectionPhase.disconnecting) {
+      return 'Disconnecting...';
+    }
+    if (_hasConnectedElsewhere) {
+      return 'Connected Elsewhere';
+    }
+    return 'Connect';
+  }
+
+  String get _statusHint {
+    if (!selected.hasStoredPassword) {
+      return 'Save the Trojan password before trying this profile.';
+    }
+    if (_hasConnectedElsewhere) {
+      return 'Another profile is already connected. Disconnect it before switching here.';
+    }
+    if (_active && status.phase == ClientConnectionPhase.connecting) {
+      return 'This profile is still establishing a runtime session.';
+    }
+    if (_active && status.phase == ClientConnectionPhase.disconnecting) {
+      return 'This profile is disconnecting now. Wait for the shutdown to finish.';
+    }
+    return status.message;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final active = status.activeProfileId == selected.id;
+    final active = _active;
 
     return SectionCard(
       title: selected.name,
@@ -241,19 +295,23 @@ class _SelectedProfileCard extends StatelessWidget {
             child: const Text('Export Text'),
           ),
           OutlinedButton(
-            onPressed: () => _edit(context),
+            onPressed:
+                _sessionLockedForProfileEdits ? null : () => _edit(context),
             child: const Text('Edit'),
           ),
           OutlinedButton(
-            onPressed: () => _setTrojanPassword(context),
+            onPressed: _sessionLockedForProfileEdits
+                ? null
+                : () => _setTrojanPassword(context),
             child: Text(selected.hasStoredPassword
                 ? 'Update Password'
                 : 'Set Password'),
           ),
           OutlinedButton(
-            onPressed: selected.hasStoredPassword
-                ? () => _rotateTrojanPassword(context)
-                : null,
+            onPressed:
+                selected.hasStoredPassword && !_sessionLockedForProfileEdits
+                    ? () => _rotateTrojanPassword(context)
+                    : null,
             child: const Text('Rotate Password'),
           ),
           OutlinedButton(
@@ -263,19 +321,21 @@ class _SelectedProfileCard extends StatelessWidget {
             child: const Text('View Password'),
           ),
           OutlinedButton(
-            onPressed: selected.hasStoredPassword
-                ? () => _clearTrojanPassword(context)
-                : null,
+            onPressed:
+                selected.hasStoredPassword && !_sessionLockedForProfileEdits
+                    ? () => _clearTrojanPassword(context)
+                    : null,
             child: const Text('Clear Password'),
           ),
           OutlinedButton(
-            onPressed: () => _removeProfile(context),
+            onPressed: _sessionLockedForProfileEdits
+                ? null
+                : () => _removeProfile(context),
             child: const Text('Remove'),
           ),
           FilledButton(
-            onPressed: status.isBusy
-                ? null
-                : () async {
+            onPressed: _canToggleConnection
+                ? () async {
                     final messenger = ScaffoldMessenger.of(context);
                     final result = active &&
                             status.phase == ClientConnectionPhase.connected
@@ -285,42 +345,39 @@ class _SelectedProfileCard extends StatelessWidget {
                     messenger.showSnackBar(
                       SnackBar(content: Text(result.summary)),
                     );
-                  },
-            child: Text(
-              active && status.phase == ClientConnectionPhase.connected
-                  ? 'Disconnect'
-                  : status.phase == ClientConnectionPhase.disconnecting
-                      ? 'Disconnecting...'
-                      : 'Connect',
-            ),
+                  }
+                : null,
+            child: Text(_connectActionLabel),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          _detail('Server', '${selected.serverHost}:${selected.serverPort}'),
-          _detail('SNI', selected.sni),
-          _detail('Local SOCKS Port', '${selected.localSocksPort}'),
-          _detail(
-              'TLS Verification', selected.verifyTls ? 'Enabled' : 'Disabled'),
-          _detail('Runtime Mode', services.controller.runtimeConfig.mode),
-          _detail('Runtime Endpoint',
-              services.controller.runtimeConfig.endpointHint),
-          _detail(
-            'Trojan Password',
-            selected.hasStoredPassword
-                ? services.profileSecrets.isSecureStorageReady
-                    ? 'Stored in secure storage'
-                    : 'Stored in temporary fallback (${services.profileSecrets.storageSummary})'
-                : 'Not stored',
-          ),
-          _detail('Secret Storage', services.profileSecrets.storageSummary),
-          _detail('Updated', selected.updatedAt.toIso8601String()),
-          if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
-          const SizedBox(height: 12),
-          Text('Controller status: ${status.message}'),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _detail('Server', '${selected.serverHost}:${selected.serverPort}'),
+            _detail('SNI', selected.sni),
+            _detail('Local SOCKS Port', '${selected.localSocksPort}'),
+            _detail('TLS Verification',
+                selected.verifyTls ? 'Enabled' : 'Disabled'),
+            _detail('Runtime Mode', services.controller.runtimeConfig.mode),
+            _detail('Runtime Endpoint',
+                services.controller.runtimeConfig.endpointHint),
+            _detail(
+              'Trojan Password',
+              selected.hasStoredPassword
+                  ? services.profileSecrets.isSecureStorageReady
+                      ? 'Stored in secure storage'
+                      : 'Stored in temporary fallback (${services.profileSecrets.storageSummary})'
+                  : 'Not stored',
+            ),
+            _detail('Secret Storage', services.profileSecrets.storageSummary),
+            _detail('Updated', selected.updatedAt.toIso8601String()),
+            if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
+            const SizedBox(height: 12),
+            Text('Controller status: $_statusHint'),
+          ],
+        ),
       ),
     );
   }
