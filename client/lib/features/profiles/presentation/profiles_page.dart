@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
@@ -16,7 +18,8 @@ class ProfilesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[services.profileStore, services.controller]),
+      animation: Listenable.merge(
+          <Listenable>[services.profileStore, services.controller]),
       builder: (BuildContext context, _) {
         final profiles = services.profileStore.profiles;
         final selected = services.profileStore.selectedProfile;
@@ -35,9 +38,14 @@ class ProfilesPage extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     OutlinedButton.icon(
+                      onPressed: () => _importProfileFromFile(context),
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Import File'),
+                    ),
+                    OutlinedButton.icon(
                       onPressed: () => _importProfile(context),
                       icon: const Icon(Icons.file_upload),
-                      label: const Text('Import'),
+                      label: const Text('Import Text'),
                     ),
                     FilledButton.icon(
                       onPressed: () => _createProfile(context),
@@ -54,17 +62,23 @@ class ProfilesPage extends StatelessWidget {
                               (profile) => ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: Icon(
-                                  services.profileStore.selectedProfileId == profile.id
+                                  services.profileStore.selectedProfileId ==
+                                          profile.id
                                       ? Icons.radio_button_checked
                                       : Icons.radio_button_off,
                                 ),
                                 title: Text(profile.name),
-                                subtitle: Text('${profile.serverHost}:${profile.serverPort}'),
-                                trailing: status.activeProfileId == profile.id &&
-                                        status.phase == ClientConnectionPhase.connected
-                                    ? const Icon(Icons.link, color: Colors.green)
-                                    : null,
-                                onTap: () => services.profileStore.selectProfile(profile.id),
+                                subtitle: Text(
+                                    '${profile.serverHost}:${profile.serverPort}'),
+                                trailing:
+                                    status.activeProfileId == profile.id &&
+                                            status.phase ==
+                                                ClientConnectionPhase.connected
+                                        ? const Icon(Icons.link,
+                                            color: Colors.green)
+                                        : null,
+                                onTap: () => services.profileStore
+                                    .selectProfile(profile.id),
                               ),
                             )
                             .toList(),
@@ -101,11 +115,39 @@ class ProfilesPage extends StatelessWidget {
     final text = await showImportTextDialog(context);
     if (text == null || text.trim().isEmpty) return;
     if (!context.mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
+    await _importProfileText(context, text.trim());
+  }
+
+  Future<void> _importProfileFromFile(BuildContext context) async {
+    final inputPath = await showPathInputDialog(
+      context,
+      title: 'Import Profile From File',
+      hintText: '/path/to/profile.json',
+      confirmLabel: 'Load',
+    );
+    if (inputPath == null || inputPath.trim().isEmpty) return;
+
+    if (!context.mounted) return;
+    try {
+      final file = File(inputPath.trim());
+      final text = await file.readAsString();
+      if (!context.mounted) return;
+      await _importProfileText(context, text);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import file failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _importProfileText(BuildContext context, String text) async {
+    if (!context.mounted) return;
     try {
       final bundle = services.profilePortability.importBundle(text);
       final profile = bundle.profile;
-      final hasStoredPassword = await services.profileSecrets.hasTrojanPassword(profile.id);
+      final hasStoredPassword =
+          await services.profileSecrets.hasTrojanPassword(profile.id);
       services.profileStore.upsertProfile(
         profile.copyWith(hasStoredPassword: hasStoredPassword),
       );
@@ -121,14 +163,17 @@ class ProfilesPage extends StatelessWidget {
                   ? 'Imported profile: ${profile.name}. Source device had a stored Trojan password — re-enter it on this device to complete handoff.'
                   : 'Imported profile: ${profile.name}. Password stays external.';
 
-      messenger.showSnackBar(SnackBar(content: Text(message)));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
 
       if (needsPasswordHandoff) {
         if (!context.mounted) return;
         final handoffPassword = await showTrojanPasswordDialog(
           context,
           title: 'Complete Password Handoff',
-          helperText: 'This imported profile needs a local Trojan password to finish handoff.',
+          helperText:
+              'This imported profile needs a local Trojan password to finish handoff.',
           submitLabel: 'Save & Complete',
         );
         if (!context.mounted) return;
@@ -140,14 +185,21 @@ class ProfilesPage extends StatelessWidget {
           services.profileStore.upsertProfile(
             profile.copyWith(hasStoredPassword: true),
           );
-          messenger.showSnackBar(
-            SnackBar(content: Text('Password handoff completed for ${profile.name}.')),
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Password handoff completed for ${profile.name}.'),
+            ),
           );
         }
       }
     } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Import failed: JSON format is invalid for this shell.')),
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Import failed: JSON format is invalid for this shell.'),
+        ),
       );
     }
   }
@@ -176,8 +228,12 @@ class _SelectedProfileCard extends StatelessWidget {
         runSpacing: 8,
         children: <Widget>[
           OutlinedButton(
+            onPressed: () => _exportToFile(context),
+            child: const Text('Export File'),
+          ),
+          OutlinedButton(
             onPressed: () => _export(context),
-            child: const Text('Export'),
+            child: const Text('Export Text'),
           ),
           OutlinedButton(
             onPressed: () => _edit(context),
@@ -185,18 +241,26 @@ class _SelectedProfileCard extends StatelessWidget {
           ),
           OutlinedButton(
             onPressed: () => _setTrojanPassword(context),
-            child: Text(selected.hasStoredPassword ? 'Update Password' : 'Set Password'),
+            child: Text(selected.hasStoredPassword
+                ? 'Update Password'
+                : 'Set Password'),
           ),
           OutlinedButton(
-            onPressed: selected.hasStoredPassword ? () => _rotateTrojanPassword(context) : null,
+            onPressed: selected.hasStoredPassword
+                ? () => _rotateTrojanPassword(context)
+                : null,
             child: const Text('Rotate Password'),
           ),
           OutlinedButton(
-            onPressed: selected.hasStoredPassword ? () => _viewTrojanPassword(context) : null,
+            onPressed: selected.hasStoredPassword
+                ? () => _viewTrojanPassword(context)
+                : null,
             child: const Text('View Password'),
           ),
           OutlinedButton(
-            onPressed: selected.hasStoredPassword ? () => _clearTrojanPassword(context) : null,
+            onPressed: selected.hasStoredPassword
+                ? () => _clearTrojanPassword(context)
+                : null,
             child: const Text('Clear Password'),
           ),
           OutlinedButton(
@@ -208,7 +272,8 @@ class _SelectedProfileCard extends StatelessWidget {
                 ? null
                 : () async {
                     final messenger = ScaffoldMessenger.of(context);
-                    final result = active && status.phase == ClientConnectionPhase.connected
+                    final result = active &&
+                            status.phase == ClientConnectionPhase.connected
                         ? await services.controller.disconnect()
                         : await services.controller.connect(selected);
                     if (!context.mounted) return;
@@ -217,7 +282,9 @@ class _SelectedProfileCard extends StatelessWidget {
                     );
                   },
             child: Text(
-              active && status.phase == ClientConnectionPhase.connected ? 'Disconnect' : 'Connect',
+              active && status.phase == ClientConnectionPhase.connected
+                  ? 'Disconnect'
+                  : 'Connect',
             ),
           ),
         ],
@@ -228,9 +295,11 @@ class _SelectedProfileCard extends StatelessWidget {
           _detail('Server', '${selected.serverHost}:${selected.serverPort}'),
           _detail('SNI', selected.sni),
           _detail('Local SOCKS Port', '${selected.localSocksPort}'),
-          _detail('TLS Verification', selected.verifyTls ? 'Enabled' : 'Disabled'),
+          _detail(
+              'TLS Verification', selected.verifyTls ? 'Enabled' : 'Disabled'),
           _detail('Runtime Mode', services.controller.runtimeConfig.mode),
-          _detail('Runtime Endpoint', services.controller.runtimeConfig.endpointHint),
+          _detail('Runtime Endpoint',
+              services.controller.runtimeConfig.endpointHint),
           _detail(
             'Trojan Password',
             selected.hasStoredPassword
@@ -259,7 +328,9 @@ class _SelectedProfileCard extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final password = await showTrojanPasswordDialog(
       context,
-      title: selected.hasStoredPassword ? 'Update Trojan Password' : 'Set Trojan Password',
+      title: selected.hasStoredPassword
+          ? 'Update Trojan Password'
+          : 'Set Trojan Password',
       submitLabel: selected.hasStoredPassword ? 'Save Update' : 'Save Password',
     );
     if (password == null || password.trim().isEmpty) return;
@@ -295,11 +366,13 @@ class _SelectedProfileCard extends StatelessWidget {
   Future<void> _viewTrojanPassword(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final password = await services.profileSecrets.readTrojanPassword(selected.id);
+      final password =
+          await services.profileSecrets.readTrojanPassword(selected.id);
       if (!context.mounted) return;
       if (password == null || password.trim().isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('No Trojan password stored for this profile.')),
+          const SnackBar(
+              content: Text('No Trojan password stored for this profile.')),
         );
         return;
       }
@@ -320,7 +393,8 @@ class _SelectedProfileCard extends StatelessWidget {
     final confirmed = await _confirmAction(
       context,
       title: 'Clear Trojan Password?',
-      body: 'This removes the stored Trojan password from local secure storage.',
+      body:
+          'This removes the stored Trojan password from local secure storage.',
       confirmLabel: 'Clear',
     );
     if (!confirmed) return;
@@ -332,7 +406,8 @@ class _SelectedProfileCard extends StatelessWidget {
         updatedAt: DateTime.now(),
       ));
       messenger.showSnackBar(
-        const SnackBar(content: Text('Trojan password removed from secure storage.')),
+        const SnackBar(
+            content: Text('Trojan password removed from secure storage.')),
       );
     } catch (error) {
       messenger.showSnackBar(
@@ -346,7 +421,8 @@ class _SelectedProfileCard extends StatelessWidget {
     final confirmed = await _confirmAction(
       context,
       title: 'Remove Profile?',
-      body: 'This removes profile metadata and clears its stored Trojan password (if present).',
+      body:
+          'This removes profile metadata and clears its stored Trojan password (if present).',
       confirmLabel: 'Remove',
     );
     if (!confirmed) return;
@@ -376,9 +452,45 @@ class _SelectedProfileCard extends StatelessWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Profile JSON exported. Trojan password is not included in this bundle.'),
+        content: Text(
+            'Profile JSON exported. Trojan password is not included in this bundle.'),
       ),
     );
+  }
+
+  Future<void> _exportToFile(BuildContext context) async {
+    final suggestedPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}${selected.id}-profile.json';
+    final outputPath = await showPathInputDialog(
+      context,
+      title: 'Export Profile To File',
+      hintText: '/path/to/exported-profile.json',
+      initialValue: suggestedPath,
+      confirmLabel: 'Save',
+    );
+    if (outputPath == null || outputPath.trim().isEmpty) return;
+
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final file = File(outputPath.trim());
+      await file.parent.create(recursive: true);
+      final text = services.profilePortability.exportProfile(selected);
+      await file.writeAsString(text, flush: true);
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Profile exported to ${file.path}. Trojan password is not included in this bundle.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Export file failed: $error')),
+      );
+    }
   }
 
   Future<bool> _confirmAction(

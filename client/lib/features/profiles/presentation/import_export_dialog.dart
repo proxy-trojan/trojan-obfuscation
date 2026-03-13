@@ -34,6 +34,44 @@ Future<String?> showImportTextDialog(BuildContext context) {
   );
 }
 
+Future<String?> showPathInputDialog(
+  BuildContext context, {
+  required String title,
+  required String hintText,
+  String? initialValue,
+  String confirmLabel = 'Confirm',
+}) {
+  final controller = TextEditingController(text: initialValue ?? '');
+  return showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 560,
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: hintText,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(confirmLabel),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 Future<void> showExportTextDialog(
   BuildContext context, {
   required String title,
