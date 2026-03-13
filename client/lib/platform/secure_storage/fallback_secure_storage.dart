@@ -37,8 +37,8 @@ class FallbackSecureStorage implements SecureStorage {
 
   @override
   Future<void> deleteSecret(String key) async {
-    await _attemptFallbackPromotion();
-    // 同时尝试从两个后端删除，确保不遗留残余密钥数据
+    // delete 不应先 promotion，否则会把准备删除的密钥重新复制回 primary。
+    // 这里直接双端删除，优先保证“删干净”而不是“先迁移再删”。
     final errors = <Object>[];
     try {
       await _primary.deleteSecret(key);
@@ -62,6 +62,7 @@ class FallbackSecureStorage implements SecureStorage {
     await _attemptFallbackPromotion();
     try {
       final keys = await _primary.listKeys();
+      await _finalizeFallbackPromotion();
       _markPrimaryHealthy();
       return keys;
     } catch (error) {
@@ -75,6 +76,7 @@ class FallbackSecureStorage implements SecureStorage {
     await _attemptFallbackPromotion();
     try {
       final value = await _primary.readSecret(key);
+      await _finalizeFallbackPromotion();
       _markPrimaryHealthy();
       return value;
     } catch (error) {
@@ -88,6 +90,7 @@ class FallbackSecureStorage implements SecureStorage {
     await _attemptFallbackPromotion();
     try {
       await _primary.writeSecret(key, value);
+      await _finalizeFallbackPromotion();
       _markPrimaryHealthy();
     } catch (error) {
       _markPrimaryFailed(error);
@@ -118,13 +121,38 @@ class FallbackSecureStorage implements SecureStorage {
         if (value == null) continue;
         await _primary.writeSecret(key, value);
       }
+      // 注意：这里先只复制，不立刻清理 fallback。
+      // 只有外层 primary 操作真正成功后，才会 finalize cleanup，
+      // 避免“promotion 成功但当前 read/list 又失败”时把 fallback 清空。
+    } catch (_) {
+      // promotion 失败不影响后续操作，外层会根据 primary 操作结果更新 status
+    } finally {
+      _promotionLock!.complete();
+      _promotionLock = null;
+    }
+  }
+
+  Future<void> _finalizeFallbackPromotion() async {
+    if (!_promotionNeeded) return;
+
+    if (_promotionLock != null) {
+      await _promotionLock!.future;
+      return;
+    }
+    _promotionLock = Completer<void>();
+
+    try {
+      final fallbackKeys = await _fallback.listKeys();
+      if (fallbackKeys.isEmpty) {
+        _promotionNeeded = false;
+        return;
+      }
       for (final key in fallbackKeys) {
         await _fallback.deleteSecret(key);
       }
       _promotionNeeded = false;
-      // promotion 成功后不在此处更新 status，由外层操作的最终结果决定
     } catch (_) {
-      // promotion 失败不影响后续操作，外层会根据 primary 操作结果更新 status
+      // cleanup 失败时保留 fallback 数据，下次成功操作再尝试清理
     } finally {
       _promotionLock!.complete();
       _promotionLock = null;

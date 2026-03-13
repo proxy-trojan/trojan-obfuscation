@@ -179,4 +179,21 @@ void main() {
     expect(storage.status.fallbackActive, isFalse);
     expect(await fallback.listKeys(), isEmpty);
   });
+
+  test('keeps fallback data when promotion copy succeeds but current primary read still fails', () async {
+    final primary = _FlakyPrimaryStorage(failWrites: true);
+    final fallback = MemorySecureStorage();
+    final storage = FallbackSecureStorage(primary: primary, fallback: fallback);
+
+    await storage.writeSecret('key-a', 'value-a');
+    expect(await fallback.readSecret('key-a'), 'value-a');
+
+    primary.failWrites = false;
+    primary.failReads = true;
+
+    final value = await storage.readSecret('key-a');
+    expect(value, 'value-a');
+    expect(await fallback.readSecret('key-a'), 'value-a');
+    expect(storage.status.fallbackActive, isTrue);
+  });
 }
