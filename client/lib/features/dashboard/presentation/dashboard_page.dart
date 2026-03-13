@@ -41,18 +41,21 @@ class DashboardPage extends StatelessWidget {
         services.settingsStore,
       ]),
       builder: (BuildContext context, _) {
-        final profile = services.profileStore.selectedProfile;
+        final selectedProfile = services.profileStore.selectedProfile;
         final status = services.controller.status;
+        final activeProfile =
+            services.profileStore.profileById(status.activeProfileId);
+        final lifecycleProfile = activeProfile ?? selectedProfile;
         final lifecycle = ConnectionLifecycleViewModel.fromStatus(
           status: status,
-          selectedProfile: profile,
+          selectedProfile: lifecycleProfile,
         );
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
 
         return ListView(
           children: <Widget>[
-            if (profile == null)
+            if (selectedProfile == null && activeProfile == null)
               _StateCalloutCard(
                 icon: Icons.playlist_add,
                 title: 'Add one profile to get started',
@@ -61,7 +64,9 @@ class DashboardPage extends StatelessWidget {
                 primaryLabel: 'Open Profiles',
                 onPrimary: onOpenProfiles,
               )
-            else if (!profile.hasStoredPassword)
+            else if (activeProfile == null &&
+                selectedProfile != null &&
+                !selectedProfile.hasStoredPassword)
               _StateCalloutCard(
                 icon: Icons.password,
                 title: 'Save the password before testing',
@@ -73,7 +78,8 @@ class DashboardPage extends StatelessWidget {
             else
               _ConnectionHomeCard(
                 lifecycle: lifecycle,
-                profile: profile,
+                selectedProfile: selectedProfile ?? lifecycleProfile!,
+                activeProfile: activeProfile,
                 status: status,
                 runtimeMode: runtimeConfig.mode,
                 controllerBackend: telemetry.backendKind,
@@ -91,7 +97,8 @@ class DashboardPage extends StatelessWidget {
                   'The app should guide the user, not make them read the system.',
               child: _NextStepGuide(
                 services: services,
-                profile: profile,
+                selectedProfile: selectedProfile,
+                activeProfile: activeProfile,
                 status: status,
                 lifecycle: lifecycle,
                 onOpenProfiles: onOpenProfiles,
@@ -99,7 +106,8 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            if (_showExperimentGuide(profile, status)) ...<Widget>[
+            if (_showExperimentGuide(
+                selectedProfile ?? activeProfile, status)) ...<Widget>[
               const SectionCard(
                 title: 'Experiment quick start',
                 subtitle:
@@ -137,9 +145,12 @@ class DashboardPage extends StatelessWidget {
                     spacing: 24,
                     runSpacing: 12,
                     children: <Widget>[
+                      _kvWidget('Profile Ready',
+                          selectedProfile == null ? 'No' : 'Yes'),
                       _kvWidget(
-                          'Profile Ready', profile == null ? 'No' : 'Yes'),
-                      _kvWidget('Password Ready', _passwordReadyLabel(profile)),
+                        'Password Ready',
+                        _passwordReadyLabel(selectedProfile ?? activeProfile),
+                      ),
                       _kvWidget('Secret Storage',
                           services.profileSecrets.storageSummary),
                       _kvWidget('App Ready', levelName),
@@ -184,7 +195,8 @@ class DashboardPage extends StatelessWidget {
 class _NextStepGuide extends StatelessWidget {
   const _NextStepGuide({
     required this.services,
-    required this.profile,
+    required this.selectedProfile,
+    required this.activeProfile,
     required this.status,
     required this.lifecycle,
     required this.onOpenProfiles,
@@ -192,7 +204,8 @@ class _NextStepGuide extends StatelessWidget {
   });
 
   final ClientServiceRegistry services;
-  final ClientProfile? profile;
+  final ClientProfile? selectedProfile;
+  final ClientProfile? activeProfile;
   final ClientConnectionStatus status;
   final ConnectionLifecycleViewModel lifecycle;
   final VoidCallback? onOpenProfiles;
@@ -240,7 +253,9 @@ class _NextStepGuide extends StatelessWidget {
         return;
       case _GuideAction.connectNow:
       case _GuideAction.retryNow:
-        final currentProfile = profile;
+        final currentProfile = action == _GuideAction.retryNow
+            ? (activeProfile ?? selectedProfile)
+            : selectedProfile;
         if (currentProfile == null) return;
         final result = await services.controller.connect(currentProfile);
         if (!context.mounted) return;
@@ -259,7 +274,7 @@ class _NextStepGuide extends StatelessWidget {
   }
 
   _GuideModel _model() {
-    if (profile == null) {
+    if (selectedProfile == null && activeProfile == null) {
       return const _GuideModel(
         title: 'Start by adding one profile',
         body:
@@ -268,7 +283,9 @@ class _NextStepGuide extends StatelessWidget {
         primaryAction: _GuideAction.openProfiles,
       );
     }
-    if (!profile!.hasStoredPassword) {
+    if (activeProfile == null &&
+        selectedProfile != null &&
+        !selectedProfile!.hasStoredPassword) {
       return const _GuideModel(
         title: 'Save the password before testing',
         body:
@@ -364,7 +381,8 @@ class _GuideModel {
 class _ConnectionHomeCard extends StatelessWidget {
   const _ConnectionHomeCard({
     required this.lifecycle,
-    required this.profile,
+    required this.selectedProfile,
+    required this.activeProfile,
     required this.status,
     required this.runtimeMode,
     required this.controllerBackend,
@@ -376,7 +394,8 @@ class _ConnectionHomeCard extends StatelessWidget {
   });
 
   final ConnectionLifecycleViewModel lifecycle;
-  final ClientProfile profile;
+  final ClientProfile selectedProfile;
+  final ClientProfile? activeProfile;
   final ClientConnectionStatus status;
   final String runtimeMode;
   final String controllerBackend;
@@ -446,9 +465,13 @@ class _ConnectionHomeCard extends StatelessWidget {
                   runSpacing: 12,
                   children: <Widget>[
                     _kvWidget('Lifecycle', lifecycle.label),
-                    _kvWidget('Selected Profile', profile.name),
-                    _kvWidget('Active Profile',
-                        lifecycle.activeProfileName ?? 'None'),
+                    _kvWidget('Selected Profile', selectedProfile.name),
+                    _kvWidget(
+                      'Active Profile',
+                      activeProfile?.name ??
+                          lifecycle.activeProfileName ??
+                          'None',
+                    ),
                     _kvWidget('Status Note', lifecycle.statusSummary),
                     _kvWidget('Secret Storage', storageSummary),
                     _kvWidget('Runtime Mode', runtimeMode),

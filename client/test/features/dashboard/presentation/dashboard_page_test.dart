@@ -161,6 +161,35 @@ void main() {
     expect(services.controller.status.phase, ClientConnectionPhase.connected);
   });
 
+  testWidgets('dashboard distinguishes selected and active profile',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    final first = services.profileStore.selectedProfile!;
+    final second = services.profileStore.profiles[1];
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: first.id,
+      password: 'secret-1',
+    );
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: second.id,
+      password: 'secret-2',
+    );
+    services.profileStore
+        .upsertProfile(first.copyWith(hasStoredPassword: true));
+    services.profileStore
+        .upsertProfile(second.copyWith(hasStoredPassword: true));
+    services.profileStore.selectProfile(first.id);
+    await tester.runAsync(() => services.controller.connect(first));
+    services.profileStore.selectProfile(second.id);
+
+    await _showDashboard(tester, services: services);
+
+    expect(find.text('Selected Profile'), findsOneWidget);
+    expect(find.text('Sample • United States'), findsWidgets);
+    expect(find.text('Sample • Hong Kong'), findsWidgets);
+    expect(find.widgetWithText(FilledButton, 'Disconnect now'), findsOneWidget);
+  });
+
   testWidgets('disconnect now CTA tears down an active connection',
       (WidgetTester tester) async {
     final services = _buildServices();

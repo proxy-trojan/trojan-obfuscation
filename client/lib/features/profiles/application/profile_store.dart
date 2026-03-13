@@ -13,7 +13,9 @@ class ProfileStore extends ChangeNotifier {
         _serialization = serialization,
         _profiles = List<ClientProfile>.from(initialProfiles ?? const []),
         _selectedProfileId =
-            initialProfiles != null && initialProfiles.isNotEmpty ? initialProfiles.first.id : null;
+            initialProfiles != null && initialProfiles.isNotEmpty
+                ? initialProfiles.first.id
+                : null;
 
   ProfileStore.withSampleProfiles({
     required LocalStateStore localStateStore,
@@ -54,7 +56,8 @@ class ProfileStore extends ChangeNotifier {
   String? _selectedProfileId;
   bool _loaded = false;
 
-  List<ClientProfile> get profiles => List<ClientProfile>.unmodifiable(_profiles);
+  List<ClientProfile> get profiles =>
+      List<ClientProfile>.unmodifiable(_profiles);
 
   String? get selectedProfileId => _selectedProfileId;
 
@@ -67,6 +70,14 @@ class ProfileStore extends ChangeNotifier {
       if (profile.id == selectedId) return profile;
     }
     return _profiles.isEmpty ? null : _profiles.first;
+  }
+
+  ClientProfile? profileById(String? id) {
+    if (id == null) return null;
+    for (final profile in _profiles) {
+      if (profile.id == id) return profile;
+    }
+    return null;
   }
 
   Future<void> load() async {
@@ -83,10 +94,12 @@ class ProfileStore extends ChangeNotifier {
   }
 
   Future<void> save() async {
-    await _localStateStore.write(_profilesKey, _serialization.encodeProfileList(_profiles));
+    await _localStateStore.write(
+        _profilesKey, _serialization.encodeProfileList(_profiles));
   }
 
-  Future<void> syncStoredPasswordFlags(Map<String, bool> flagsByProfileId) async {
+  Future<void> syncStoredPasswordFlags(
+      Map<String, bool> flagsByProfileId) async {
     var changed = false;
     for (var i = 0; i < _profiles.length; i++) {
       final profile = _profiles[i];
