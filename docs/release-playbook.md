@@ -42,6 +42,10 @@ Before tagging:
 - changelog updated
 - release notes scope understood
 - no known blocker in packaging / validation
+- release candidate checklist reviewed: `docs/v1.2.0-release-candidate-checklist.md`
+- checksum helper passes: `scripts/verify-artifact-checksums.sh artifacts`
+- desktop artifact smoke helper passes: `scripts/smoke-check-client-artifacts.sh artifacts --platforms linux,windows,macos`
+  - in headless Linux environments, a GUI start check may legitimately report `headless-skipped`
 
 ---
 

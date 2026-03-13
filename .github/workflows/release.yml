@@ -339,16 +339,8 @@ jobs:
 
       - name: Verify checksum files
         run: |
-          cd artifacts
-          shopt -s nullglob
-          files=( *.sha256 )
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No .sha256 files found" >&2
-            exit 1
-          fi
-          for f in "${files[@]}"; do
-            sha256sum -c "$f"
-          done
+          chmod +x scripts/verify-artifact-checksums.sh
+          scripts/verify-artifact-checksums.sh artifacts
 
       - name: Validate expected artifacts and publish summary
         env:
@@ -408,21 +400,11 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if check_present 'trojan-pro-client_*_amd64.deb'; then
-            DEB_FILE=$(ls -1 trojan-pro-client_*_amd64.deb | head -n1)
-            dpkg-deb -I "$DEB_FILE" >/dev/null || SANITY_OK=false
-          fi
-          if check_present 'trojan-pro-client_*_windows-x64.zip'; then
-            ZIP_FILE=$(ls -1 trojan-pro-client_*_windows-x64.zip | head -n1)
-            unzip -l "$ZIP_FILE" | grep -E '\.exe$' >/dev/null || SANITY_OK=false
-          fi
-          if check_present 'trojan-pro-client_*_macos-app.zip'; then
-            APP_ZIP=$(ls -1 trojan-pro-client_*_macos-app.zip | head -n1)
-            unzip -l "$APP_ZIP" | grep -E '\.app/' >/dev/null || SANITY_OK=false
-          fi
-          if [ "$EXPECT_ANDROID" = "true" ] && check_present 'trojan-pro-client_*_android-release.apk'; then
-            APK_FILE=$(ls -1 trojan-pro-client_*_android-release.apk | head -n1)
-            unzip -l "$APK_FILE" | grep -E 'AndroidManifest\.xml' >/dev/null || SANITY_OK=false
+          chmod +x ../scripts/smoke-check-client-artifacts.sh
+          if ../scripts/smoke-check-client-artifacts.sh . --platforms linux,windows,macos $( [ "$EXPECT_ANDROID" = "true" ] && echo --expect-android || echo --no-expect-android ); then
+            SANITY_OK=true
+          else
+            SANITY_OK=false
           fi
 
           {
