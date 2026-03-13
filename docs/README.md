@@ -19,6 +19,7 @@ This directory only keeps the current, useful project documentation.
 - `product-roadmap.md` — staged roadmap for formal product development
 - `v1.2.0-backlog.md` — focused backlog for the client MVP usability milestone
 - `v1.3.0-backlog.md` — backlog for the desktop beta quality milestone
+- `v1.3.0-sprint-1-plan.md` — execution plan for the first connection lifecycle UX sprint
 - `../CHANGELOG.md` — versioned release history
 
 ## Decisions
