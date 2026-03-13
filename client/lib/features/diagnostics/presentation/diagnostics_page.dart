@@ -22,7 +22,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   Widget build(BuildContext context) {
     return SectionCard(
       title: 'Problem Report',
-      subtitle: 'Create a support-ready snapshot when something goes wrong. Use this only when you need to share or inspect a failure. Export backend: ${widget.services.diagnosticsFileExporter.backendName}',
+      subtitle:
+          'Create a support-ready snapshot when something goes wrong. Use this when you need to inspect a failure or share a support bundle. Export backend: ${widget.services.diagnosticsFileExporter.backendName}',
       trailing: Wrap(
         spacing: 8,
         children: <Widget>[
@@ -37,7 +38,9 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             child: const Text('Open full JSON'),
           ),
           OutlinedButton.icon(
-            onPressed: _preview.startsWith('Press “Generate') || _busy ? null : _export,
+            onPressed: _preview.startsWith('Press “Generate') || _busy
+                ? null
+                : _export,
             icon: const Icon(Icons.save_alt),
             label: const Text('Export bundle'),
           ),
@@ -48,17 +51,38 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          if (_lastExportTarget != null) ...<Widget>[
-            Text('Last export target: $_lastExportTarget'),
-            const SizedBox(height: 12),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _SupportBundleSummaryCard(
+              exportBackend:
+                  widget.services.diagnosticsFileExporter.backendName,
+            ),
+            const SizedBox(height: 16),
+            if (_lastExportTarget != null) ...<Widget>[
+              Text('Last export target: $_lastExportTarget'),
+              const SizedBox(height: 12),
+            ],
+            Text(
+              'Preview excerpt',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(_previewExcerpt(_preview)),
           ],
-          SelectableText(_preview),
-        ],
+        ),
       ),
     );
+  }
+
+  String _previewExcerpt(String text) {
+    const limit = 1200;
+    if (text.length <= limit) return text;
+    return '${text.substring(0, limit)}\n\n… truncated preview — use “Open full JSON” for the complete support bundle payload.';
   }
 
   Future<void> _generate() async {
@@ -72,7 +96,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate diagnostics preview: $error')),
+        SnackBar(
+            content: Text('Failed to generate diagnostics preview: $error')),
       );
     } finally {
       if (mounted) {
@@ -100,5 +125,55 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         setState(() => _busy = false);
       }
     }
+  }
+}
+
+class _SupportBundleSummaryCard extends StatelessWidget {
+  const _SupportBundleSummaryCard({required this.exportBackend});
+
+  final String exportBackend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Before you export a support bundle',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Use this when a connection test fails, the runtime exits unexpectedly, or you want to share a support-ready snapshot.',
+          ),
+          const SizedBox(height: 12),
+          const Text('Includes'),
+          const SizedBox(height: 4),
+          const Text(
+            '• selected profile summary\n• controller status, session, and recent events\n• settings and packaging/update metadata\n• secure-storage backend summary and key counts',
+          ),
+          const SizedBox(height: 12),
+          const Text('Does not include'),
+          const SizedBox(height: 4),
+          const Text(
+            '• your raw Trojan password\n• arbitrary local files outside the exported JSON bundle',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Export target uses the current diagnostics backend: $exportBackend',
+          ),
+        ],
+      ),
+    );
   }
 }

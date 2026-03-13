@@ -503,6 +503,11 @@ class _ConnectionHomeCard extends StatelessWidget {
                         icon: const Icon(Icons.build_circle_outlined),
                         label: const Text('Open Troubleshooting'),
                       ),
+                    OutlinedButton.icon(
+                      onPressed: onOpenAdvanced,
+                      icon: const Icon(Icons.assignment_outlined),
+                      label: const Text('Problem Report'),
+                    ),
                   ],
                 ),
               ],

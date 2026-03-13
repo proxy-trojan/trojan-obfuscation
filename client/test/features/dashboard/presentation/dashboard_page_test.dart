@@ -214,6 +214,7 @@ void main() {
     expect(find.text('Connection Home'), findsOneWidget);
     expect(find.text('Open Troubleshooting'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
+    expect(find.text('Problem Report'), findsWidgets);
   });
 
   testWidgets('connect now CTA triggers a connection attempt',
