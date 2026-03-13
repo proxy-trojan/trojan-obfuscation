@@ -70,6 +70,7 @@ class DashboardPage extends StatelessWidget {
                     _kv('Connection Status', _statusLabel(status)),
                     _kv('Selected Profile', profile.name),
                     _kv('Password Ready', _passwordReadyLabel(profile)),
+                    _kv('Secret Storage', services.profileSecrets.storageSummary),
                     _kv('Runtime Mode', runtimeConfig.mode),
                     _kv('Update Channel', services.settingsStore.settings.updateChannel.name),
                   ],
@@ -122,6 +123,7 @@ class DashboardPage extends StatelessWidget {
                     children: <Widget>[
                       _kv('Profile Ready', profile == null ? 'No' : 'Yes'),
                       _kv('Password Ready', _passwordReadyLabel(profile)),
+                      _kv('Secret Storage', services.profileSecrets.storageSummary),
                       _kv('App Ready', levelName),
                       _kv('Status Note', summary),
                       _kv('Runtime Path', runtimeConfig.endpointHint),

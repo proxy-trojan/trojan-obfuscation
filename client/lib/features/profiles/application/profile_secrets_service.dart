@@ -17,6 +17,13 @@ class ProfileSecretsService {
 
   final SecureStorage _secureStorage;
 
+  SecureStorageStatus get storageStatus => _secureStorage.status;
+
+  bool get isSecureStorageReady =>
+      storageStatus.isSecure && storageStatus.isPersistent && !storageStatus.fallbackActive;
+
+  String get storageSummary => storageStatus.userFacingSummary;
+
   Future<void> saveTrojanPassword({
     required String profileId,
     required String password,

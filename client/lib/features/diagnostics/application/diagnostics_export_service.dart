@@ -43,6 +43,7 @@ class DiagnosticsExportService {
     final controllerHealth = await controller.checkHealth();
     final releaseManifest = packagingStore.buildReleaseManifest();
     final updateMetadata = packagingStore.buildUpdateMetadataSnapshot();
+    final storageStatus = secureStorage.status;
 
     final payload = <String, Object?>{
       'generatedAt': DateTime.now().toIso8601String(),
@@ -101,6 +102,16 @@ class DiagnosticsExportService {
       },
       'secureStorage': {
         'backend': secureStorage.backendName,
+        'activeBackend': storageStatus.activeBackendName,
+        'mode': storageStatus.storageModeLabel,
+        'summary': storageStatus.userFacingSummary,
+        'isSecure': storageStatus.isSecure,
+        'isPersistent': storageStatus.isPersistent,
+        'fallbackEnabled': storageStatus.fallbackEnabled,
+        'fallbackActive': storageStatus.fallbackActive,
+        'primaryBackend': storageStatus.primaryBackendName,
+        'fallbackBackend': storageStatus.fallbackBackendName,
+        'lastPrimaryError': storageStatus.lastPrimaryError,
         'storedKeyCount': keys.length,
         'keys': keys,
       },

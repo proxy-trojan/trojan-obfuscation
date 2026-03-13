@@ -231,7 +231,15 @@ class _SelectedProfileCard extends StatelessWidget {
           _detail('TLS Verification', selected.verifyTls ? 'Enabled' : 'Disabled'),
           _detail('Runtime Mode', services.controller.runtimeConfig.mode),
           _detail('Runtime Endpoint', services.controller.runtimeConfig.endpointHint),
-          _detail('Trojan Password', selected.hasStoredPassword ? 'Stored in secure storage' : 'Not stored'),
+          _detail(
+            'Trojan Password',
+            selected.hasStoredPassword
+                ? services.profileSecrets.isSecureStorageReady
+                    ? 'Stored in secure storage'
+                    : 'Stored in temporary fallback (${services.profileSecrets.storageSummary})'
+                : 'Not stored',
+          ),
+          _detail('Secret Storage', services.profileSecrets.storageSummary),
           _detail('Updated', selected.updatedAt.toIso8601String()),
           if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
           const SizedBox(height: 12),
@@ -265,7 +273,13 @@ class _SelectedProfileCard extends StatelessWidget {
         updatedAt: DateTime.now(),
       ));
       messenger.showSnackBar(
-        const SnackBar(content: Text('Trojan password stored in secure storage.')),
+        SnackBar(
+          content: Text(
+            services.profileSecrets.isSecureStorageReady
+                ? 'Trojan password stored in secure storage.'
+                : 'Trojan password stored, but only in temporary fallback storage for this session.',
+          ),
+        ),
       );
     } catch (error) {
       messenger.showSnackBar(
