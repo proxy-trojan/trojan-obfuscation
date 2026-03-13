@@ -23,7 +23,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
   })  : _runtimePlanner = runtimePlanner ??
             RealShellRuntimePlanner(
               binaryLocator: TrojanBinaryLocator(
-                overrideBinaryPath: binaryPathHint == 'UNCONFIGURED' || binaryPathHint == 'ENV_UNSET'
+                overrideBinaryPath: binaryPathHint == 'UNCONFIGURED' ||
+                        binaryPathHint == 'ENV_UNSET'
                     ? null
                     : binaryPathHint,
               ),
@@ -87,7 +88,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
     if (runningProcess != null) {
       return ControllerRuntimeHealth(
         level: ControllerRuntimeHealthLevel.healthy,
-        summary: 'Trojan client process is running. pid=${runningProcess.pid} config=${_activeConfigPath ?? 'unknown'}',
+        summary:
+            'Trojan client process is running. pid=${runningProcess.pid} config=${_activeConfigPath ?? 'unknown'}',
         updatedAt: now,
       );
     }
@@ -111,7 +113,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
             )
           : ControllerRuntimeHealth(
               level: ControllerRuntimeHealthLevel.degraded,
-              summary: 'Trojan binary probe exited with code ${result.exitCode} via ${plan.binaryPath}.',
+              summary:
+                  'Trojan binary probe exited with code ${result.exitCode} via ${plan.binaryPath}.',
               updatedAt: DateTime.now(),
             );
       _lastProbeAt = DateTime.now();
@@ -142,7 +145,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
           commandId: command.id,
           accepted: false,
           completedAt: DateTime.now(),
-          summary: 'Command kind ${command.kind.name} is not wired in the real shell adapter yet.',
+          summary:
+              'Command kind ${command.kind.name} is not wired in the real shell adapter yet.',
           error: 'NOT_IMPLEMENTED',
         );
     }
@@ -155,7 +159,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
         commandId: command.id,
         accepted: false,
         completedAt: DateTime.now(),
-        summary: 'No running trojan client process is attached to the real shell adapter.',
+        summary:
+            'No running trojan client process is attached to the real shell adapter.',
         error: 'NO_RUNNING_PROCESS',
       );
     }
@@ -188,14 +193,16 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
     );
   }
 
-  Future<ControllerCommandResult> _planConnect(ControllerCommand command) async {
+  Future<ControllerCommandResult> _planConnect(
+      ControllerCommand command) async {
     final input = _connectPlanner.parse(command);
     if (input == null) {
       return ControllerCommandResult(
         commandId: command.id,
         accepted: false,
         completedAt: DateTime.now(),
-        summary: 'Missing required connect inputs for real shell controller planning.',
+        summary:
+            'Missing required connect inputs for real shell controller planning.',
         error: 'MISSING_CONNECT_INPUTS',
       );
     }
@@ -205,7 +212,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
         commandId: command.id,
         accepted: false,
         completedAt: DateTime.now(),
-        summary: 'A trojan client process is already running under this adapter.',
+        summary:
+            'A trojan client process is already running under this adapter.',
         error: 'PROCESS_ALREADY_RUNNING',
         details: <String, Object?>{
           'pid': _runningProcess!.pid,
@@ -233,9 +241,12 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       await configFile.writeAsString(configPreview, flush: true);
 
       final process = await Process.start(plan.binaryPath, plan.arguments);
+      _runningProcess = process;
+      _activeConfigPath = input.configPath;
       _lastError = null;
       _lastExitCode = null;
       _markSessionUpdated();
+
       process.stdout
           .transform(const SystemEncoding().decoder)
           .listen((chunk) => _appendLogLines(_stdoutTail, chunk));
@@ -253,15 +264,13 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
           await _cleanupConfigFile(configPath);
         }
       });
-      _runningProcess = process;
-      _activeConfigPath = input.configPath;
-      _markSessionUpdated();
 
       return ControllerCommandResult(
         commandId: command.id,
         accepted: true,
         completedAt: DateTime.now(),
-        summary: 'Started trojan client process pid=${process.pid} using ${plan.binaryPath}.',
+        summary:
+            'Started trojan client process pid=${process.pid} using ${plan.binaryPath}.',
         details: <String, Object?>{
           'pid': process.pid,
           'launchPlan': plan.toJson(),
@@ -272,6 +281,7 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
     } catch (error) {
       _lastError = error.toString();
       _markSessionUpdated();
+      await _cleanupConfigFile(input.configPath);
       return ControllerCommandResult(
         commandId: command.id,
         accepted: false,
