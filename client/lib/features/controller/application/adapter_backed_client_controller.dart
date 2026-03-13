@@ -44,6 +44,7 @@ class AdapterBackedClientController extends ClientControllerApi {
   late final Timer _sessionWatcher;
   DateTime? _lastSessionUpdatedAt;
   int _operationCounter = 0;
+  int _eventCounter = 0;
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
     ClientControllerEvent(
@@ -259,7 +260,7 @@ class AdapterBackedClientController extends ClientControllerApi {
     final lastExitCode = session.lastExitCode;
     if (lastError != null && lastError.isNotEmpty) {
       final summary = 'Runtime session stopped with error: $lastError';
-      _status = _status.copyWith(
+      _status = ClientConnectionStatus(
         phase: ClientConnectionPhase.error,
         message: summary,
         updatedAt: DateTime.now(),
@@ -277,7 +278,7 @@ class AdapterBackedClientController extends ClientControllerApi {
 
     if (lastExitCode != null && lastExitCode != 0) {
       final summary = 'Runtime session exited with code $lastExitCode.';
-      _status = _status.copyWith(
+      _status = ClientConnectionStatus(
         phase: ClientConnectionPhase.error,
         message: summary,
         updatedAt: DateTime.now(),
@@ -322,7 +323,7 @@ class AdapterBackedClientController extends ClientControllerApi {
     int? step,
   }) {
     final event = ClientControllerEvent(
-      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
+      id: 'event-${++_eventCounter}',
       timestamp: DateTime.now(),
       title: title,
       message: message,

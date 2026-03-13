@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_portability_service.dart';
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
@@ -33,9 +35,11 @@ void main() {
       _profile(hasStoredPassword: true),
     );
 
-    expect(exported, contains('"kind": "trojan-pro-client-profile"'));
-    expect(exported, contains('"trojanPasswordIncluded": false'));
-    expect(exported, contains('"sourceDeviceHadStoredPassword": true'));
+    final map = jsonDecode(exported) as Map<String, dynamic>;
+    expect(map['kind'], 'trojan-pro-client-profile');
+    final secrets = map['secrets'] as Map<String, dynamic>;
+    expect(secrets['trojanPasswordIncluded'], false);
+    expect(secrets['sourceDeviceHadStoredPassword'], true);
     expect(exported, isNot(contains('trojan-password')));
     expect(exported, isNot(contains('super-secret')));
   });

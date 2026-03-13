@@ -240,6 +240,11 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       await configFile.parent.create(recursive: true);
       await configFile.writeAsString(configPreview, flush: true);
 
+      // 设置配置文件权限为仅所有者可读写，防止明文密码泄露
+      if (!Platform.isWindows) {
+        await Process.run('chmod', <String>['600', input.configPath]);
+      }
+
       final process = await Process.start(plan.binaryPath, plan.arguments);
       _runningProcess = process;
       _activeConfigPath = input.configPath;

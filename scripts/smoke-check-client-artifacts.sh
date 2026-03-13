@@ -44,11 +44,8 @@ need_cmd find
 need_cmd sort
 need_cmd head
 need_cmd grep
-need_cmd tar
 need_cmd unzip
-need_cmd timeout
 need_cmd mktemp
-need_cmd dpkg-deb
 
 find_one() {
   local pattern="$1"
@@ -92,9 +89,9 @@ launch_linux_smoke() {
   return 125
 }
 
-TMPDIR="$(mktemp -d)"
+SMOKE_TMPDIR="$(mktemp -d)"
 cleanup() {
-  rm -rf "$TMPDIR"
+  rm -rf "$SMOKE_TMPDIR"
 }
 trap cleanup EXIT
 
@@ -105,6 +102,9 @@ macos_ok="skipped"
 android_ok="skipped"
 
 if contains_platform linux; then
+  need_cmd tar
+  need_cmd timeout
+  need_cmd dpkg-deb
   deb_file="$(find_one 'trojan-pro-client_*_amd64.deb')"
   tar_file="$(find_one 'trojan-pro-client_*_linux-x64-bundle.tar.gz')"
 
@@ -115,9 +115,9 @@ if contains_platform linux; then
 
   echo "==> linux install smoke: $deb_file"
   dpkg-deb -I "$deb_file" >/dev/null
-  dpkg-deb -x "$deb_file" "$TMPDIR/linux-deb"
+  dpkg-deb -x "$deb_file" "$SMOKE_TMPDIR/linux-deb"
 
-  deb_executable="$TMPDIR/linux-deb/opt/trojan-pro-client/trojan_pro_client"
+  deb_executable="$SMOKE_TMPDIR/linux-deb/opt/trojan-pro-client/trojan_pro_client"
   if [[ ! -f "$deb_executable" ]]; then
     echo "expected executable missing after deb extraction: $deb_executable" >&2
     exit 1
@@ -125,15 +125,15 @@ if contains_platform linux; then
   linux_install_ok="passed"
 
   echo "==> linux bundle smoke: $tar_file"
-  mkdir -p "$TMPDIR/linux-bundle"
-  tar -C "$TMPDIR/linux-bundle" -xzf "$tar_file"
-  bundle_executable="$(find "$TMPDIR/linux-bundle" -type f -name 'trojan_pro_client' | head -n 1)"
+  mkdir -p "$SMOKE_TMPDIR/linux-bundle"
+  tar -C "$SMOKE_TMPDIR/linux-bundle" -xzf "$tar_file"
+  bundle_executable="$(find "$SMOKE_TMPDIR/linux-bundle" -type f -name 'trojan_pro_client' | head -n 1)"
   if [[ -z "$bundle_executable" ]]; then
     echo "expected bundle executable missing after tar extraction" >&2
     exit 1
   fi
 
-  log_path="$TMPDIR/linux-bundle-start.log"
+  log_path="$SMOKE_TMPDIR/linux-bundle-start.log"
   if launch_linux_smoke "$bundle_executable" "$log_path"; then
     linux_start_ok="passed"
   else

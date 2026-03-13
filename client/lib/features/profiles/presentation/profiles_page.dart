@@ -193,13 +193,18 @@ class ProfilesPage extends StatelessWidget {
           );
         }
       }
-    } catch (_) {
+    } on FormatException {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content:
               Text('Import failed: JSON format is invalid for this shell.'),
         ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $error')),
       );
     }
   }

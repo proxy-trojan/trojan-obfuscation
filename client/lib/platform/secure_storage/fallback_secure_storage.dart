@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'secure_storage.dart';
 
 class FallbackSecureStorage implements SecureStorage {
@@ -21,6 +23,12 @@ class FallbackSecureStorage implements SecureStorage {
   final SecureStorage _fallback;
   SecureStorageStatus _status;
 
+  /// 防止并发 promotion 的互斥锁
+  Completer<void>? _promotionLock;
+
+  /// 仅在 primary 失败后设为 true，避免每次操作都触发全量迁移
+  bool _promotionNeeded = false;
+
   @override
   String get backendName => '${_primary.backendName}|fallback:${_fallback.backendName}';
 
@@ -30,12 +38,22 @@ class FallbackSecureStorage implements SecureStorage {
   @override
   Future<void> deleteSecret(String key) async {
     await _attemptFallbackPromotion();
+    // 同时尝试从两个后端删除，确保不遗留残余密钥数据
+    final errors = <Object>[];
     try {
       await _primary.deleteSecret(key);
-      _markPrimaryHealthy();
     } catch (error) {
-      _markPrimaryFailed(error);
+      errors.add(error);
+    }
+    try {
       await _fallback.deleteSecret(key);
+    } catch (_) {
+      // fallback 删除失败可忽略（可能本来就不存在）
+    }
+    if (errors.isNotEmpty) {
+      _markPrimaryFailed(errors.first);
+    } else {
+      _markPrimaryHealthy();
     }
   }
 
@@ -78,10 +96,23 @@ class FallbackSecureStorage implements SecureStorage {
   }
 
   Future<void> _attemptFallbackPromotion() async {
-    final fallbackKeys = await _fallback.listKeys();
-    if (fallbackKeys.isEmpty) return;
+    // 仅在 primary 曾经失败后才尝试 promotion
+    if (!_promotionNeeded) return;
+
+    // 通过 Completer 互斥，避免并发 promotion
+    if (_promotionLock != null) {
+      await _promotionLock!.future;
+      return;
+    }
+    _promotionLock = Completer<void>();
 
     try {
+      final fallbackKeys = await _fallback.listKeys();
+      if (fallbackKeys.isEmpty) {
+        _promotionNeeded = false;
+        return;
+      }
+
       for (final key in fallbackKeys) {
         final value = await _fallback.readSecret(key);
         if (value == null) continue;
@@ -90,9 +121,13 @@ class FallbackSecureStorage implements SecureStorage {
       for (final key in fallbackKeys) {
         await _fallback.deleteSecret(key);
       }
-      _markPrimaryHealthy();
-    } catch (error) {
-      _markPrimaryFailed(error);
+      _promotionNeeded = false;
+      // promotion 成功后不在此处更新 status，由外层操作的最终结果决定
+    } catch (_) {
+      // promotion 失败不影响后续操作，外层会根据 primary 操作结果更新 status
+    } finally {
+      _promotionLock!.complete();
+      _promotionLock = null;
     }
   }
 
@@ -110,6 +145,7 @@ class FallbackSecureStorage implements SecureStorage {
   }
 
   void _markPrimaryFailed(Object error) {
+    _promotionNeeded = true;
     _status = SecureStorageStatus(
       backendName: '${_primary.backendName}|fallback:${_fallback.backendName}',
       activeBackendName: _fallback.status.activeBackendName,

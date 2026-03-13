@@ -42,6 +42,40 @@ class SecureStorageStatus {
     }
     return 'Storage available';
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SecureStorageStatus &&
+          runtimeType == other.runtimeType &&
+          backendName == other.backendName &&
+          activeBackendName == other.activeBackendName &&
+          isSecure == other.isSecure &&
+          isPersistent == other.isPersistent &&
+          fallbackEnabled == other.fallbackEnabled &&
+          fallbackActive == other.fallbackActive &&
+          primaryBackendName == other.primaryBackendName &&
+          fallbackBackendName == other.fallbackBackendName &&
+          lastPrimaryError == other.lastPrimaryError;
+
+  @override
+  int get hashCode => Object.hash(
+        backendName,
+        activeBackendName,
+        isSecure,
+        isPersistent,
+        fallbackEnabled,
+        fallbackActive,
+        primaryBackendName,
+        fallbackBackendName,
+        lastPrimaryError,
+      );
+
+  @override
+  String toString() =>
+      'SecureStorageStatus(backend=$backendName, active=$activeBackendName, '
+      'secure=$isSecure, persistent=$isPersistent, '
+      'fallbackEnabled=$fallbackEnabled, fallbackActive=$fallbackActive)';
 }
 
 abstract class SecureStorage {

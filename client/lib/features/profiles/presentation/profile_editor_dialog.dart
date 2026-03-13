@@ -152,6 +152,8 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       validationError = 'Profile name is required.';
     } else if (serverHost.isEmpty) {
       validationError = 'Server host is required.';
+    } else if (RegExp(r'[\s]').hasMatch(serverHost)) {
+      validationError = 'Server host must not contain whitespace.';
     } else if (serverPort == null || serverPort < 1 || serverPort > 65535) {
       validationError = 'Server port must be between 1 and 65535.';
     } else if (localSocksPort == null ||

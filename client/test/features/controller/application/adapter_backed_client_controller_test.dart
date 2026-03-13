@@ -12,6 +12,8 @@ import 'package:trojan_pro_client/features/profiles/application/profile_secrets_
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
 
+final _fixedTime = DateTime.parse('2026-03-13T00:00:00.000Z');
+
 class _ControllableShellControllerAdapter implements ShellControllerAdapter {
   _ControllableShellControllerAdapter({
     required this.runtimeConfig,
@@ -34,7 +36,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
         backendKind: 'controllable-test-adapter',
         backendVersion: 'test',
         capabilities: const <String>['connect', 'disconnect', 'healthCheck'],
-        lastUpdatedAt: DateTime.now(),
+        lastUpdatedAt: _fixedTime,
       );
 
   @override
@@ -49,7 +51,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
     return ControllerRuntimeHealth(
       level: ControllerRuntimeHealthLevel.healthy,
       summary: 'test adapter healthy',
-      updatedAt: DateTime.now(),
+      updatedAt: _fixedTime,
     );
   }
 
@@ -58,7 +60,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
     return ControllerCommandResult(
       commandId: command.id,
       accepted: commandAccepted,
-      completedAt: DateTime.now(),
+      completedAt: _fixedTime,
       summary: commandSummary,
       error: null,
       details: commandDetails,
@@ -75,7 +77,7 @@ ClientProfile _demoProfile() {
     sni: 'example.com',
     localSocksPort: 1080,
     verifyTls: true,
-    updatedAt: DateTime.now(),
+    updatedAt: _fixedTime,
   );
 }
 
@@ -92,6 +94,21 @@ ControllerRuntimeSession _session({
     lastExitCode: lastExitCode,
     lastError: lastError,
   );
+}
+
+/// 条件轮询，避免固定延迟导致的 flaky test
+Future<void> _waitFor(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 3),
+  Duration step = const Duration(milliseconds: 25),
+  required String description,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    if (condition()) return;
+    await Future<void>.delayed(step);
+  }
+  fail('Timed out waiting for: $description');
 }
 
 void main() {
@@ -124,7 +141,10 @@ void main() {
     expect(controller.status.phase, ClientConnectionPhase.connecting);
 
     adapter.setSession(_session(isRunning: true, pid: 4321));
-    await Future<void>.delayed(const Duration(milliseconds: 90));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected',
+    );
 
     expect(controller.status.phase, ClientConnectionPhase.connected);
     expect(controller.status.message, contains('Runtime session is active'));
@@ -161,11 +181,16 @@ void main() {
 
     await controller.connect(_demoProfile());
     adapter.setSession(_session(isRunning: true, pid: 4321));
-    await Future<void>.delayed(const Duration(milliseconds: 90));
-    expect(controller.status.phase, ClientConnectionPhase.connected);
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected',
+    );
 
     adapter.setSession(_session(isRunning: false, lastExitCode: 7));
-    await Future<void>.delayed(const Duration(milliseconds: 90));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.error,
+      description: 'status transitions to error after non-zero exit',
+    );
 
     expect(controller.status.phase, ClientConnectionPhase.error);
     expect(controller.status.message, contains('code 7'));
@@ -197,11 +222,16 @@ void main() {
 
     await controller.connect(_demoProfile());
     adapter.setSession(_session(isRunning: true, pid: 4321));
-    await Future<void>.delayed(const Duration(milliseconds: 90));
-    expect(controller.status.phase, ClientConnectionPhase.connected);
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected',
+    );
 
     adapter.setSession(_session(isRunning: false, lastExitCode: 0));
-    await Future<void>.delayed(const Duration(milliseconds: 90));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.disconnected,
+      description: 'status transitions to disconnected after clean exit',
+    );
 
     expect(controller.status.phase, ClientConnectionPhase.disconnected);
     expect(controller.status.message, contains('cleanly'));

@@ -22,7 +22,10 @@ checksum_cmd() {
 }
 
 VERIFY_TOOL="$(checksum_cmd)"
-mapfile -t CHECKSUM_FILES < <(find "$ARTIFACT_ROOT" -type f -name '*.sha256' | sort)
+CHECKSUM_FILES=()
+while IFS= read -r f; do
+  CHECKSUM_FILES+=("$f")
+done < <(find "$ARTIFACT_ROOT" -type f -name '*.sha256' | sort)
 
 if [[ ${#CHECKSUM_FILES[@]} -eq 0 ]]; then
   echo "no .sha256 files found under: $ARTIFACT_ROOT" >&2

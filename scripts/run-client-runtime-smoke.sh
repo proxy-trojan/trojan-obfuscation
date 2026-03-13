@@ -80,9 +80,20 @@ launch_gui_smoke() {
   return 0
 }
 
+check_port_listening() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn | grep -q ":${port}\b"
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN -P -n >/dev/null 2>&1
+  else
+    echo "no port-check tool available (need ss or lsof)" >&2
+    return 1
+  fi
+}
+
 need_cmd flutter
 need_cmd python3
-need_cmd ss
 need_cmd timeout
 
 TROJAN_BINARY="$(detect_trojan_binary)"
@@ -167,7 +178,7 @@ if ! kill -0 "$TROJAN_PID" 2>/dev/null; then
   exit 1
 fi
 
-if ! ss -ltn | grep -q ":$PORT\b"; then
+if ! check_port_listening "$PORT"; then
   echo "trojan client did not open expected local port: $PORT" >&2
   echo "--- trojan stdout ---" >&2
   sed -n '1,120p' "$TROJAN_STDOUT_LOG" >&2 || true

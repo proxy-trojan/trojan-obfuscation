@@ -5,6 +5,20 @@ import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../profiles/domain/client_profile.dart';
 
+Widget _kvWidget(String label, String value) {
+  return SizedBox(
+    width: 220,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(value),
+      ],
+    ),
+  );
+}
+
 class DashboardPage extends StatelessWidget {
   const DashboardPage({
     super.key,
@@ -72,15 +86,15 @@ class DashboardPage extends StatelessWidget {
                   spacing: 24,
                   runSpacing: 12,
                   children: <Widget>[
-                    _kv('Connection Status', _statusLabel(status)),
-                    _kv('Selected Profile', profile.name),
-                    _kv('Password Ready', _passwordReadyLabel(profile)),
-                    _kv('Secret Storage',
+                    _kvWidget('Connection Status', _statusLabel(status)),
+                    _kvWidget('Selected Profile', profile.name),
+                    _kvWidget('Password Ready', _passwordReadyLabel(profile)),
+                    _kvWidget('Secret Storage',
                         services.profileSecrets.storageSummary),
-                    _kv('Runtime Mode', runtimeConfig.mode),
-                    _kv('Controller Backend', telemetry.backendKind),
-                    _kv('Backend Version', telemetry.backendVersion),
-                    _kv('Update Channel',
+                    _kvWidget('Runtime Mode', runtimeConfig.mode),
+                    _kvWidget('Controller Backend', telemetry.backendKind),
+                    _kvWidget('Backend Version', telemetry.backendVersion),
+                    _kvWidget('Update Channel',
                         services.settingsStore.settings.updateChannel.name),
                   ],
                 ),
@@ -136,13 +150,13 @@ class DashboardPage extends StatelessWidget {
                     spacing: 24,
                     runSpacing: 12,
                     children: <Widget>[
-                      _kv('Profile Ready', profile == null ? 'No' : 'Yes'),
-                      _kv('Password Ready', _passwordReadyLabel(profile)),
-                      _kv('Secret Storage',
+                      _kvWidget('Profile Ready', profile == null ? 'No' : 'Yes'),
+                      _kvWidget('Password Ready', _passwordReadyLabel(profile)),
+                      _kvWidget('Secret Storage',
                           services.profileSecrets.storageSummary),
-                      _kv('App Ready', levelName),
-                      _kv('Status Note', summary),
-                      _kv('Runtime Path', runtimeConfig.endpointHint),
+                      _kvWidget('App Ready', levelName),
+                      _kvWidget('Status Note', summary),
+                      _kvWidget('Runtime Path', runtimeConfig.endpointHint),
                     ],
                   );
                 },
@@ -184,20 +198,6 @@ class DashboardPage extends StatelessWidget {
     if (profile == null) return true;
     if (!profile.hasStoredPassword) return true;
     return status.phase != ClientConnectionPhase.connected;
-  }
-
-  Widget _kv(String label, String value) {
-    return SizedBox(
-      width: 220,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value),
-        ],
-      ),
-    );
   }
 }
 
@@ -416,11 +416,11 @@ class _RuntimeSessionSummary extends StatelessWidget {
           spacing: 24,
           runSpacing: 12,
           children: <Widget>[
-            _kv('Running', session.isRunning ? 'Yes' : 'No'),
-            _kv('PID', session.pid?.toString() ?? 'N/A'),
-            _kv('Config Path', session.activeConfigPath ?? 'N/A'),
-            _kv('Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
-            _kv('Last Error', session.lastError ?? 'None'),
+            _kvWidget('Running', session.isRunning ? 'Yes' : 'No'),
+            _kvWidget('PID', session.pid?.toString() ?? 'N/A'),
+            _kvWidget('Config Path', session.activeConfigPath ?? 'N/A'),
+            _kvWidget('Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
+            _kvWidget('Last Error', session.lastError ?? 'None'),
           ],
         ),
         const SizedBox(height: 12),
@@ -431,20 +431,6 @@ class _RuntimeSessionSummary extends StatelessWidget {
           _logTail('stderr tail', session.stderrTail),
         ],
       ],
-    );
-  }
-
-  Widget _kv(String label, String value) {
-    return SizedBox(
-      width: 220,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value),
-        ],
-      ),
     );
   }
 
