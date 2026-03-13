@@ -90,6 +90,7 @@ class DashboardPage extends StatelessWidget {
               subtitle:
                   'The app should guide the user, not make them read the system.',
               child: _NextStepGuide(
+                services: services,
                 profile: profile,
                 status: status,
                 lifecycle: lifecycle,
@@ -182,6 +183,7 @@ class DashboardPage extends StatelessWidget {
 
 class _NextStepGuide extends StatelessWidget {
   const _NextStepGuide({
+    required this.services,
     required this.profile,
     required this.status,
     required this.lifecycle,
@@ -189,6 +191,7 @@ class _NextStepGuide extends StatelessWidget {
     required this.onOpenAdvanced,
   });
 
+  final ClientServiceRegistry services;
   final ClientProfile? profile;
   final ClientConnectionStatus status;
   final ConnectionLifecycleViewModel lifecycle;
@@ -211,26 +214,48 @@ class _NextStepGuide extends StatelessWidget {
           runSpacing: 8,
           children: <Widget>[
             FilledButton(
-              onPressed: model.primaryAction == _GuideAction.openProfiles
-                  ? onOpenProfiles
-                  : model.primaryAction == _GuideAction.openAdvanced
-                      ? onOpenAdvanced
-                      : null,
+              onPressed: () => _runAction(context, model.primaryAction),
               child: Text(model.primaryLabel),
             ),
             if (model.secondaryLabel != null)
               OutlinedButton(
-                onPressed: model.secondaryAction == _GuideAction.openProfiles
-                    ? onOpenProfiles
-                    : model.secondaryAction == _GuideAction.openAdvanced
-                        ? onOpenAdvanced
-                        : null,
+                onPressed: () => _runAction(context, model.secondaryAction),
                 child: Text(model.secondaryLabel!),
               ),
           ],
         ),
       ],
     );
+  }
+
+  Future<void> _runAction(BuildContext context, _GuideAction? action) async {
+    if (action == null) return;
+
+    switch (action) {
+      case _GuideAction.openProfiles:
+        onOpenProfiles?.call();
+        return;
+      case _GuideAction.openAdvanced:
+        onOpenAdvanced?.call();
+        return;
+      case _GuideAction.connectNow:
+      case _GuideAction.retryNow:
+        final currentProfile = profile;
+        if (currentProfile == null) return;
+        final result = await services.controller.connect(currentProfile);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.summary)),
+        );
+        return;
+      case _GuideAction.disconnectNow:
+        final result = await services.controller.disconnect();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.summary)),
+        );
+        return;
+    }
   }
 
   _GuideModel _model() {
@@ -256,9 +281,10 @@ class _NextStepGuide extends StatelessWidget {
       return _GuideModel(
         title: lifecycle.headline,
         body: lifecycle.detail,
-        primaryLabel:
-            lifecycle.showRetry ? 'Retry from Profiles' : 'Open Profiles',
-        primaryAction: _GuideAction.openProfiles,
+        primaryLabel: lifecycle.showRetry ? 'Retry now' : 'Open Profiles',
+        primaryAction: lifecycle.showRetry
+            ? _GuideAction.retryNow
+            : _GuideAction.openProfiles,
         secondaryLabel:
             lifecycle.showOpenTroubleshooting ? 'Open Troubleshooting' : null,
         secondaryAction: lifecycle.showOpenTroubleshooting
@@ -270,9 +296,11 @@ class _NextStepGuide extends StatelessWidget {
       return const _GuideModel(
         title: 'Connection is active',
         body:
-            'You are already connected. If you want to switch profiles or disconnect, go back to Profiles.',
-        primaryLabel: 'Open Profiles',
-        primaryAction: _GuideAction.openProfiles,
+            'You are already connected. Disconnect here if you want to end the current session, or open Profiles to switch context.',
+        primaryLabel: 'Disconnect now',
+        primaryAction: _GuideAction.disconnectNow,
+        secondaryLabel: 'Open Profiles',
+        secondaryAction: _GuideAction.openProfiles,
       );
     }
     if (status.phase == ClientConnectionPhase.disconnecting) {
@@ -298,11 +326,11 @@ class _NextStepGuide extends StatelessWidget {
     return const _GuideModel(
       title: 'You are ready for a quick test',
       body:
-          'Open Profiles and use the selected profile to try one connect attempt.',
-      primaryLabel: 'Open Profiles',
-      primaryAction: _GuideAction.openProfiles,
-      secondaryLabel: 'Open Troubleshooting',
-      secondaryAction: _GuideAction.openAdvanced,
+          'Use one clear Connect action here, or open Profiles if you want to review the selected profile first.',
+      primaryLabel: 'Connect now',
+      primaryAction: _GuideAction.connectNow,
+      secondaryLabel: 'Open Profiles',
+      secondaryAction: _GuideAction.openProfiles,
     );
   }
 }
@@ -310,6 +338,9 @@ class _NextStepGuide extends StatelessWidget {
 enum _GuideAction {
   openProfiles,
   openAdvanced,
+  connectNow,
+  retryNow,
+  disconnectNow,
 }
 
 class _GuideModel {
