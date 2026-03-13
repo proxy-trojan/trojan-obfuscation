@@ -272,6 +272,7 @@ void main() {
     final disconnectFuture = controller.disconnect();
     await Future<void>.delayed(const Duration(milliseconds: 5));
     expect(controller.status.phase, ClientConnectionPhase.disconnecting);
+    expect(controller.status.activeProfileId, 'profile-demo');
 
     await disconnectFuture;
     expect(
@@ -281,5 +282,96 @@ void main() {
         equals(ClientConnectionPhase.disconnected),
       ),
     );
+  });
+
+  test('allows retry after missing password once password is saved', () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final firstResult = await controller.connect(_demoProfile());
+    expect(firstResult.accepted, isFalse);
+    expect(controller.status.phase, ClientConnectionPhase.error);
+    expect(controller.status.message, 'MISSING_TROJAN_PASSWORD');
+
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final retryResult = await controller.connect(_demoProfile());
+    expect(retryResult.accepted, isTrue);
+    expect(controller.status.phase, ClientConnectionPhase.connecting);
+
+    adapter.setSession(_session(isRunning: true, pid: 4321));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected after retry succeeds',
+    );
+
+    expect(controller.status.phase, ClientConnectionPhase.connected);
+    expect(controller.status.activeProfileId, 'profile-demo');
+  });
+
+  test('reaches disconnected state after disconnecting session fully stops',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Disconnect requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: true, pid: 9001),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.connect(_demoProfile());
+    adapter.setSession(_session(isRunning: true, pid: 4321));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected before full disconnect',
+    );
+
+    await controller.disconnect();
+    expect(controller.status.phase, ClientConnectionPhase.disconnecting);
+
+    adapter.setSession(_session(isRunning: false, lastExitCode: 0));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.disconnected,
+      description: 'status transitions to disconnected after session stops',
+    );
+
+    expect(controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(controller.status.activeProfileId, isNull);
   });
 }

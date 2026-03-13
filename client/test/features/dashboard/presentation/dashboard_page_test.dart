@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
 import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
+import 'package:trojan_pro_client/features/controller/domain/client_controller_event.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_command_result.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_config.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_session.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
 import 'package:trojan_pro_client/features/dashboard/presentation/dashboard_page.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
@@ -10,12 +17,90 @@ import 'package:trojan_pro_client/features/profiles/application/profile_portabil
 import 'package:trojan_pro_client/features/profiles/application/profile_secrets_service.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_serialization.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_store.dart';
+import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
 import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/service_registry.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
+
+class _TestLifecycleController extends ClientControllerApi {
+  ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
+  String? lastConnectedProfileId;
+
+  @override
+  ClientConnectionStatus get status => _status;
+
+  set statusForTest(ClientConnectionStatus value) {
+    _status = value;
+    notifyListeners();
+  }
+
+  @override
+  List<ClientControllerEvent> get recentEvents =>
+      const <ClientControllerEvent>[];
+
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'test-controller',
+        backendVersion: 'test',
+        capabilities: const <String>['connect', 'disconnect'],
+        lastUpdatedAt: DateTime.parse('2026-03-13T00:00:00.000Z'),
+      );
+
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'stubbed-local-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      );
+
+  @override
+  ControllerRuntimeSession get session => ControllerRuntimeSession(
+        isRunning: _status.phase == ClientConnectionPhase.connected,
+        updatedAt: DateTime.now(),
+      );
+
+  @override
+  Future<ControllerRuntimeHealth> checkHealth() async {
+    return ControllerRuntimeHealth(
+      level: ControllerRuntimeHealthLevel.healthy,
+      summary: 'test controller healthy',
+      updatedAt: DateTime.parse('2026-03-13T00:00:00.000Z'),
+    );
+  }
+
+  @override
+  Future<ControllerCommandResult> connect(ClientProfile profile) async {
+    lastConnectedProfileId = profile.id;
+    _status = ClientConnectionStatus(
+      phase: ClientConnectionPhase.connected,
+      message: 'Connected for ${profile.name}.',
+      updatedAt: DateTime.now(),
+      activeProfileId: profile.id,
+    );
+    notifyListeners();
+    return ControllerCommandResult(
+      commandId: 'test-connect',
+      accepted: true,
+      completedAt: DateTime.now(),
+      summary: 'Connected for ${profile.name}.',
+    );
+  }
+
+  @override
+  Future<ControllerCommandResult> disconnect() async {
+    _status = ClientConnectionStatus.disconnected();
+    notifyListeners();
+    return ControllerCommandResult(
+      commandId: 'test-disconnect',
+      accepted: true,
+      completedAt: DateTime.now(),
+      summary: 'Disconnected.',
+    );
+  }
+}
 
 Future<void> _setDesktopSurface(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(1600, 1400));
@@ -50,7 +135,7 @@ Future<void> _pumpUntilPhase(
   }
 }
 
-ClientServiceRegistry _buildServices() {
+ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
@@ -65,7 +150,7 @@ ClientServiceRegistry _buildServices() {
     localStateStore: localState,
     serialization: SettingsSerialization(),
   );
-  final controller = FakeClientController();
+  final resolvedController = controller ?? FakeClientController();
 
   final packagingExport = PackagingExportService(
     packagingStore: packagingStore,
@@ -76,7 +161,7 @@ ClientServiceRegistry _buildServices() {
     profilePortability: profilePortability,
     settingsStore: settingsStore,
     packagingStore: packagingStore,
-    controller: controller,
+    controller: resolvedController,
     secureStorage: secureStorage,
     fileExporter: diagnosticsExporter,
   );
@@ -91,7 +176,7 @@ ClientServiceRegistry _buildServices() {
     packagingStore: packagingStore,
     packagingExport: packagingExport,
     settingsStore: settingsStore,
-    controller: controller,
+    controller: resolvedController,
     diagnostics: diagnostics,
   );
 }
@@ -188,6 +273,35 @@ void main() {
     expect(find.text('Sample • United States'), findsWidgets);
     expect(find.text('Sample • Hong Kong'), findsWidgets);
     expect(find.widgetWithText(FilledButton, 'Disconnect now'), findsOneWidget);
+  });
+
+  testWidgets('retry now uses the active profile even when selection changed',
+      (WidgetTester tester) async {
+    final controller = _TestLifecycleController();
+    final services = _buildServices(controller: controller);
+    final first = services.profileStore.selectedProfile!;
+    final second = services.profileStore.profiles[1];
+    services.profileStore.selectProfile(second.id);
+    controller.statusForTest = ClientConnectionStatus(
+      phase: ClientConnectionPhase.error,
+      message: 'Runtime session exited with code 7.',
+      updatedAt: DateTime.now(),
+      activeProfileId: first.id,
+    );
+
+    await _showDashboard(tester, services: services);
+
+    final retryFinder = find.widgetWithText(FilledButton, 'Retry now');
+    expect(retryFinder, findsOneWidget);
+    await tester.ensureVisible(retryFinder);
+    await tester.pump();
+
+    await tester.tap(retryFinder);
+    await tester.pump();
+
+    expect(controller.lastConnectedProfileId, first.id);
+    expect(controller.status.activeProfileId, first.id);
+    expect(controller.status.phase, ClientConnectionPhase.connected);
   });
 
   testWidgets('disconnect now CTA tears down an active connection',
