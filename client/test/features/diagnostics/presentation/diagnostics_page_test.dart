@@ -11,6 +11,7 @@ import 'package:trojan_pro_client/features/profiles/application/profile_serializ
 import 'package:trojan_pro_client/features/profiles/application/profile_store.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
+import 'package:trojan_pro_client/platform/services/diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/service_registry.dart';
@@ -23,10 +24,23 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
-ClientServiceRegistry _buildServices() {
+class _FailingDiagnosticsFileExporter implements DiagnosticsFileExporter {
+  @override
+  String get backendName => 'failing-test-exporter';
+
+  @override
+  Future<String> exportJson({
+    required String suggestedFileName,
+    required String jsonContent,
+  }) async {
+    throw StateError('permission denied for diagnostics export');
+  }
+}
+
+ClientServiceRegistry _buildServices({DiagnosticsFileExporter? exporter}) {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
-  final diagnosticsExporter = MemoryDiagnosticsFileExporter();
+  final diagnosticsExporter = exporter ?? MemoryDiagnosticsFileExporter();
   final profileStore = ProfileStore.withSampleProfiles(
     localStateStore: localState,
     serialization: ProfileSerialization(),
@@ -117,5 +131,32 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Export bundle'),
     );
     expect(exportButtonAfter.onPressed, isNotNull);
+  });
+
+  testWidgets('shows categorized export error guidance when export fails',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services =
+        _buildServices(exporter: _FailingDiagnosticsFileExporter());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DiagnosticsPage(services: services),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Generate preview'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Export bundle'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('Export / OS:'), findsOneWidget);
+    expect(find.textContaining('permission denied'), findsOneWidget);
   });
 }

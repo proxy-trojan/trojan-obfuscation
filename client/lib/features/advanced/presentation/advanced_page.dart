@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../diagnostics/application/support_issue_descriptor.dart';
 import '../../diagnostics/presentation/diagnostics_page.dart';
 import '../../packaging/presentation/packaging_page.dart';
 
@@ -77,6 +78,7 @@ class AdvancedPage extends StatelessWidget {
 class _SupportOverviewCard extends StatelessWidget {
   const _SupportOverviewCard({
     required this.status,
+    required this.issue,
     required this.runtimeMode,
     required this.endpointHint,
     required this.backendKind,
@@ -85,6 +87,7 @@ class _SupportOverviewCard extends StatelessWidget {
   });
 
   final ClientConnectionStatus status;
+  final SupportIssueDescriptor issue;
   final String runtimeMode;
   final String endpointHint;
   final String backendKind;
@@ -133,6 +136,8 @@ class _SupportOverviewCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(_nextStep),
           const SizedBox(height: 16),
+          _IssueCategoryBanner(issue: issue),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 24,
             runSpacing: 12,
@@ -144,8 +149,56 @@ class _SupportOverviewCard extends StatelessWidget {
               _kv('Backend', backendKind),
               _kv('Backend version', backendVersion),
               _kv('Diagnostics export', diagnosticsBackend),
+              _kv('Issue category', issue.label),
+              _kv('Support summary', issue.summary),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IssueCategoryBanner extends StatelessWidget {
+  const _IssueCategoryBanner({required this.issue});
+
+  final SupportIssueDescriptor issue;
+
+  Color _accent(BuildContext context) {
+    return switch (issue.category) {
+      SupportIssueCategory.userInput => Colors.blue,
+      SupportIssueCategory.configuration => Colors.orange,
+      SupportIssueCategory.runtime => Colors.red,
+      SupportIssueCategory.osOrExport => Colors.deepPurple,
+      SupportIssueCategory.none => Theme.of(context).colorScheme.primary,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _accent(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Issue category: ${issue.label}',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(issue.headline),
+          const SizedBox(height: 8),
+          Text(issue.guidance),
         ],
       ),
     );

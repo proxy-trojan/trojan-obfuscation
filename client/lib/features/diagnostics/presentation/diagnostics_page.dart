@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
+import '../application/support_issue_descriptor.dart';
 import '../../profiles/presentation/import_export_dialog.dart';
 
 class DiagnosticsPage extends StatefulWidget {
