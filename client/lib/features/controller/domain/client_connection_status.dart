@@ -2,6 +2,7 @@ enum ClientConnectionPhase {
   disconnected,
   connecting,
   connected,
+  disconnecting,
   error,
 }
 
@@ -19,7 +20,9 @@ class ClientConnectionStatus {
   final String? activeProfileId;
 
   bool get isConnected => phase == ClientConnectionPhase.connected;
-  bool get isBusy => phase == ClientConnectionPhase.connecting;
+  bool get isBusy =>
+      phase == ClientConnectionPhase.connecting ||
+      phase == ClientConnectionPhase.disconnecting;
 
   ClientConnectionStatus copyWith({
     ClientConnectionPhase? phase,

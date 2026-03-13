@@ -289,7 +289,9 @@ class _SelectedProfileCard extends StatelessWidget {
             child: Text(
               active && status.phase == ClientConnectionPhase.connected
                   ? 'Disconnect'
-                  : 'Connect',
+                  : status.phase == ClientConnectionPhase.disconnecting
+                      ? 'Disconnecting...'
+                      : 'Connect',
             ),
           ),
         ],

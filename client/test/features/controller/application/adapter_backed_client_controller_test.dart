@@ -236,4 +236,50 @@ void main() {
     expect(controller.status.phase, ClientConnectionPhase.disconnected);
     expect(controller.status.message, contains('cleanly'));
   });
+
+  test('enters disconnecting phase before disconnect completes', () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Disconnect requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: true, pid: 9001),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.connect(_demoProfile());
+    adapter.setSession(_session(isRunning: true, pid: 4321));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected before disconnect',
+    );
+
+    final disconnectFuture = controller.disconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    expect(controller.status.phase, ClientConnectionPhase.disconnecting);
+
+    await disconnectFuture;
+    expect(
+      controller.status.phase,
+      anyOf(
+        equals(ClientConnectionPhase.disconnecting),
+        equals(ClientConnectionPhase.disconnected),
+      ),
+    );
+  });
 }

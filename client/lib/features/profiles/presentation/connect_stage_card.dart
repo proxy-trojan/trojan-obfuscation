@@ -28,6 +28,7 @@ class ConnectStageCard extends StatelessWidget {
       ClientConnectionPhase.disconnected => 'Disconnected',
       ClientConnectionPhase.connecting => 'Connecting',
       ClientConnectionPhase.connected => 'Connected',
+      ClientConnectionPhase.disconnecting => 'Disconnecting',
       ClientConnectionPhase.error => 'Needs attention',
     };
 
@@ -37,7 +38,9 @@ class ConnectStageCard extends StatelessWidget {
             ? 'Check before retry'
             : status.phase == ClientConnectionPhase.connected
                 ? 'Connected'
-                : 'Ready to test';
+                : status.phase == ClientConnectionPhase.disconnecting
+                    ? 'Disconnect in progress'
+                    : 'Ready to test';
 
     final readinessColor = !profile.hasStoredPassword
         ? Colors.orange
@@ -45,7 +48,9 @@ class ConnectStageCard extends StatelessWidget {
             ? Colors.red
             : status.phase == ClientConnectionPhase.connected
                 ? Colors.green
-                : Colors.blue;
+                : status.phase == ClientConnectionPhase.disconnecting
+                    ? Colors.orange
+                    : Colors.blue;
 
     final hint = !profile.hasStoredPassword
         ? 'Save the password first so this profile is ready for one clean test.'
@@ -53,9 +58,11 @@ class ConnectStageCard extends StatelessWidget {
             ? 'You are already connected with this profile.'
             : status.phase == ClientConnectionPhase.connecting
                 ? 'A connection attempt is already running.'
-                : status.phase == ClientConnectionPhase.error
-                    ? 'Something went wrong last time. You can retry or open Troubleshooting.'
-                    : 'This profile is ready. Use one clear Connect button when you want to test it.';
+                : status.phase == ClientConnectionPhase.disconnecting
+                    ? 'The current session is shutting down. Please wait.'
+                    : status.phase == ClientConnectionPhase.error
+                        ? 'Something went wrong last time. You can retry or open Troubleshooting.'
+                        : 'This profile is ready. Use one clear Connect button when you want to test it.';
 
     return SectionCard(
       title: profile.name,
@@ -83,8 +90,15 @@ class ConnectStageCard extends StatelessWidget {
                         runSpacing: 12,
                         children: <Widget>[
                           _kv('Ready', readiness),
-                          _kv('Connection', active && status.phase == ClientConnectionPhase.connected ? 'Connected' : connectionLabel),
-                          _kv('Password', profile.hasStoredPassword ? 'Ready' : 'Missing'),
+                          _kv(
+                              'Connection',
+                              active &&
+                                      status.phase ==
+                                          ClientConnectionPhase.connected
+                                  ? 'Connected'
+                                  : connectionLabel),
+                          _kv('Password',
+                              profile.hasStoredPassword ? 'Ready' : 'Missing'),
                           _kv('SOCKS', '127.0.0.1:${profile.localSocksPort}'),
                         ],
                       ),
@@ -105,15 +119,22 @@ class ConnectStageCard extends StatelessWidget {
                       child: FilledButton(
                         onPressed: onConnectToggle,
                         child: Text(
-                          active && status.phase == ClientConnectionPhase.connected
+                          active &&
+                                  status.phase ==
+                                      ClientConnectionPhase.connected
                               ? 'Disconnect'
-                              : 'Connect Now',
+                              : status.phase ==
+                                      ClientConnectionPhase.disconnecting
+                                  ? 'Disconnecting...'
+                                  : 'Connect Now',
                         ),
                       ),
                     ),
                     OutlinedButton(
                       onPressed: onManagePassword,
-                      child: Text(profile.hasStoredPassword ? 'Manage Password' : 'Set Password'),
+                      child: Text(profile.hasStoredPassword
+                          ? 'Manage Password'
+                          : 'Set Password'),
                     ),
                   ],
                 ),

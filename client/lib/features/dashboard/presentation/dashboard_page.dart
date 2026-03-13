@@ -4,6 +4,7 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../profiles/domain/client_profile.dart';
+import '../application/connection_lifecycle_view_model.dart';
 
 Widget _kvWidget(String label, String value) {
   return SizedBox(
@@ -42,6 +43,10 @@ class DashboardPage extends StatelessWidget {
       builder: (BuildContext context, _) {
         final profile = services.profileStore.selectedProfile;
         final status = services.controller.status;
+        final lifecycle = ConnectionLifecycleViewModel.fromStatus(
+          status: status,
+          selectedProfile: profile,
+        );
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
 
@@ -65,39 +70,19 @@ class DashboardPage extends StatelessWidget {
                 primaryLabel: 'Open Profiles',
                 onPrimary: onOpenProfiles,
               )
-            else if (status.phase == ClientConnectionPhase.error)
-              _StateCalloutCard(
-                icon: Icons.error_outline,
-                title: 'The last connection did not work',
-                body:
-                    'Open Troubleshooting if you want a clear report. Go back to Profiles if you want to try again.',
-                primaryLabel: 'Open Troubleshooting',
-                onPrimary: onOpenAdvanced,
-                secondaryLabel: 'Open Profiles',
-                onSecondary: onOpenProfiles,
-                isWarning: true,
-              )
             else
-              SectionCard(
-                title: 'Connection Home',
-                subtitle:
-                    'The primary path should be obvious: profile → password → connect.',
-                child: Wrap(
-                  spacing: 24,
-                  runSpacing: 12,
-                  children: <Widget>[
-                    _kvWidget('Connection Status', _statusLabel(status)),
-                    _kvWidget('Selected Profile', profile.name),
-                    _kvWidget('Password Ready', _passwordReadyLabel(profile)),
-                    _kvWidget('Secret Storage',
-                        services.profileSecrets.storageSummary),
-                    _kvWidget('Runtime Mode', runtimeConfig.mode),
-                    _kvWidget('Controller Backend', telemetry.backendKind),
-                    _kvWidget('Backend Version', telemetry.backendVersion),
-                    _kvWidget('Update Channel',
-                        services.settingsStore.settings.updateChannel.name),
-                  ],
-                ),
+              _ConnectionHomeCard(
+                lifecycle: lifecycle,
+                profile: profile,
+                status: status,
+                runtimeMode: runtimeConfig.mode,
+                controllerBackend: telemetry.backendKind,
+                controllerVersion: telemetry.backendVersion,
+                updateChannel:
+                    services.settingsStore.settings.updateChannel.name,
+                storageSummary: services.profileSecrets.storageSummary,
+                onOpenProfiles: onOpenProfiles,
+                onOpenAdvanced: onOpenAdvanced,
               ),
             const SizedBox(height: 16),
             SectionCard(
@@ -150,7 +135,8 @@ class DashboardPage extends StatelessWidget {
                     spacing: 24,
                     runSpacing: 12,
                     children: <Widget>[
-                      _kvWidget('Profile Ready', profile == null ? 'No' : 'Yes'),
+                      _kvWidget(
+                          'Profile Ready', profile == null ? 'No' : 'Yes'),
                       _kvWidget('Password Ready', _passwordReadyLabel(profile)),
                       _kvWidget('Secret Storage',
                           services.profileSecrets.storageSummary),
@@ -179,15 +165,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  String _statusLabel(ClientConnectionStatus status) {
-    return switch (status.phase) {
-      ClientConnectionPhase.disconnected => 'Disconnected',
-      ClientConnectionPhase.connecting => 'Connecting',
-      ClientConnectionPhase.connected => 'Connected',
-      ClientConnectionPhase.error => 'Needs attention',
-    };
-  }
-
   String _passwordReadyLabel(ClientProfile? profile) {
     if (profile == null) return 'N/A';
     return profile.hasStoredPassword ? 'Yes' : 'No';
@@ -197,7 +174,8 @@ class DashboardPage extends StatelessWidget {
       ClientProfile? profile, ClientConnectionStatus status) {
     if (profile == null) return true;
     if (!profile.hasStoredPassword) return true;
-    return status.phase != ClientConnectionPhase.connected;
+    return status.phase != ClientConnectionPhase.connected &&
+        status.phase != ClientConnectionPhase.disconnecting;
   }
 }
 
@@ -291,6 +269,17 @@ class _NextStepGuide extends StatelessWidget {
         primaryAction: _GuideAction.openProfiles,
       );
     }
+    if (status.phase == ClientConnectionPhase.disconnecting) {
+      return const _GuideModel(
+        title: 'Disconnect is in progress',
+        body:
+            'Wait for the current session to close cleanly before starting another action.',
+        primaryLabel: 'Open Troubleshooting',
+        primaryAction: _GuideAction.openAdvanced,
+        secondaryLabel: 'Open Profiles',
+        secondaryAction: _GuideAction.openProfiles,
+      );
+    }
     if (status.phase == ClientConnectionPhase.connecting) {
       return const _GuideModel(
         title: 'Connection attempt is running',
@@ -337,6 +326,162 @@ class _GuideModel {
   final _GuideAction? secondaryAction;
 }
 
+class _ConnectionHomeCard extends StatelessWidget {
+  const _ConnectionHomeCard({
+    required this.lifecycle,
+    required this.profile,
+    required this.status,
+    required this.runtimeMode,
+    required this.controllerBackend,
+    required this.controllerVersion,
+    required this.updateChannel,
+    required this.storageSummary,
+    required this.onOpenProfiles,
+    required this.onOpenAdvanced,
+  });
+
+  final ConnectionLifecycleViewModel lifecycle;
+  final ClientProfile profile;
+  final ClientConnectionStatus status;
+  final String runtimeMode;
+  final String controllerBackend;
+  final String controllerVersion;
+  final String updateChannel;
+  final String storageSummary;
+  final VoidCallback? onOpenProfiles;
+  final VoidCallback? onOpenAdvanced;
+
+  Color get _accentColor => switch (lifecycle.stage) {
+        ConnectionLifecycleStage.idle => Colors.blue,
+        ConnectionLifecycleStage.connecting => Colors.orange,
+        ConnectionLifecycleStage.connected => Colors.green,
+        ConnectionLifecycleStage.disconnecting => Colors.orange,
+        ConnectionLifecycleStage.error => Colors.red,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'Connection Home',
+      subtitle:
+          'The primary path should be obvious: profile → password → connect.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _accentColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _accentColor.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            lifecycle.headline,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(lifecycle.detail),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _LifecyclePill(
+                      label: lifecycle.label,
+                      color: _accentColor,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: <Widget>[
+                    _kvWidget('Lifecycle', lifecycle.label),
+                    _kvWidget('Selected Profile', profile.name),
+                    _kvWidget('Active Profile',
+                        lifecycle.activeProfileName ?? 'None'),
+                    _kvWidget('Controller Status', status.message),
+                    _kvWidget('Secret Storage', storageSummary),
+                    _kvWidget('Runtime Mode', runtimeMode),
+                    _kvWidget('Controller Backend', controllerBackend),
+                    _kvWidget('Backend Version', controllerVersion),
+                    _kvWidget('Update Channel', updateChannel),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    if (lifecycle.showRetry)
+                      FilledButton.icon(
+                        onPressed: lifecycle.canConnect ? onOpenProfiles : null,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry from Profiles'),
+                      ),
+                    if (lifecycle.showOpenProfiles)
+                      OutlinedButton.icon(
+                        onPressed: onOpenProfiles,
+                        icon: const Icon(Icons.list_alt),
+                        label: const Text('Open Profiles'),
+                      ),
+                    if (lifecycle.showOpenTroubleshooting)
+                      OutlinedButton.icon(
+                        onPressed: onOpenAdvanced,
+                        icon: const Icon(Icons.build_circle_outlined),
+                        label: const Text('Open Troubleshooting'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LifecyclePill extends StatelessWidget {
+  const _LifecyclePill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class _StateCalloutCard extends StatelessWidget {
   const _StateCalloutCard({
     required this.icon,
@@ -344,9 +489,6 @@ class _StateCalloutCard extends StatelessWidget {
     required this.body,
     required this.primaryLabel,
     this.onPrimary,
-    this.secondaryLabel,
-    this.onSecondary,
-    this.isWarning = false,
   });
 
   final IconData icon;
@@ -354,13 +496,10 @@ class _StateCalloutCard extends StatelessWidget {
   final String body;
   final String primaryLabel;
   final VoidCallback? onPrimary;
-  final String? secondaryLabel;
-  final VoidCallback? onSecondary;
-  final bool isWarning;
 
   @override
   Widget build(BuildContext context) {
-    final color = isWarning ? Colors.orange : Colors.blue;
+    const color = Colors.blue;
 
     return SectionCard(
       title: title,
@@ -376,20 +515,9 @@ class _StateCalloutCard extends StatelessWidget {
               children: <Widget>[
                 Text(body),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    FilledButton(
-                      onPressed: onPrimary,
-                      child: Text(primaryLabel),
-                    ),
-                    if (secondaryLabel != null)
-                      OutlinedButton(
-                        onPressed: onSecondary,
-                        child: Text(secondaryLabel!),
-                      ),
-                  ],
+                FilledButton(
+                  onPressed: onPrimary,
+                  child: Text(primaryLabel),
                 ),
               ],
             ),
@@ -419,7 +547,8 @@ class _RuntimeSessionSummary extends StatelessWidget {
             _kvWidget('Running', session.isRunning ? 'Yes' : 'No'),
             _kvWidget('PID', session.pid?.toString() ?? 'N/A'),
             _kvWidget('Config Path', session.activeConfigPath ?? 'N/A'),
-            _kvWidget('Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
+            _kvWidget(
+                'Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
             _kvWidget('Last Error', session.lastError ?? 'None'),
           ],
         ),

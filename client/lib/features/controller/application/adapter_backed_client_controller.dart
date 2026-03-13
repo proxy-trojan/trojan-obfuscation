@@ -175,6 +175,15 @@ class AdapterBackedClientController extends ClientControllerApi {
   Future<ControllerCommandResult> disconnect() async {
     final operationId = 'disconnect-${++_operationCounter}';
     final activeProfileId = _status.activeProfileId;
+
+    _status = ClientConnectionStatus(
+      phase: ClientConnectionPhase.disconnecting,
+      message: 'Disconnecting current session...',
+      updatedAt: DateTime.now(),
+      activeProfileId: activeProfileId,
+    );
+    notifyListeners();
+
     final commandResult = await _adapter.execute(
       ControllerCommand(
         id: operationId,
@@ -184,33 +193,56 @@ class AdapterBackedClientController extends ClientControllerApi {
       ),
     );
 
+    if (!commandResult.accepted) {
+      _recordEvent(
+        title: 'Disconnect requested',
+        message: commandResult.summary,
+        phase: ClientConnectionPhase.error,
+        profileId: activeProfileId,
+        kind: ClientControllerEventKind.result,
+        operationId: operationId,
+        step: 1,
+        level: ClientControllerEventLevel.error,
+      );
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: commandResult.error ?? commandResult.summary,
+        updatedAt: DateTime.now(),
+        activeProfileId: activeProfileId,
+      );
+      notifyListeners();
+      return commandResult;
+    }
+
+    final runningAfterRequest = _adapter.session.isRunning;
+    final nextPhase = runningAfterRequest
+        ? ClientConnectionPhase.disconnecting
+        : ClientConnectionPhase.disconnected;
+
     _recordEvent(
       title: 'Disconnect requested',
       message: commandResult.summary,
-      phase: commandResult.accepted
-          ? ClientConnectionPhase.disconnected
-          : ClientConnectionPhase.error,
+      phase: nextPhase,
       profileId: activeProfileId,
       kind: ClientControllerEventKind.result,
       operationId: operationId,
       step: 1,
-      level: commandResult.accepted
-          ? ClientControllerEventLevel.info
-          : ClientControllerEventLevel.error,
+      level: ClientControllerEventLevel.info,
     );
 
-    _status = commandResult.accepted
+    _status = nextPhase == ClientConnectionPhase.disconnected
         ? ClientConnectionStatus(
             phase: ClientConnectionPhase.disconnected,
             message: commandResult.summary,
             updatedAt: DateTime.now(),
           )
         : ClientConnectionStatus(
-            phase: ClientConnectionPhase.error,
-            message: commandResult.error ?? commandResult.summary,
+            phase: ClientConnectionPhase.disconnecting,
+            message: commandResult.summary,
             updatedAt: DateTime.now(),
             activeProfileId: activeProfileId,
           );
+
     notifyListeners();
     return commandResult;
   }
@@ -252,7 +284,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     }
 
     if (_status.phase != ClientConnectionPhase.connected &&
-        _status.phase != ClientConnectionPhase.connecting) {
+        _status.phase != ClientConnectionPhase.connecting &&
+        _status.phase != ClientConnectionPhase.disconnecting) {
       return;
     }
 

@@ -21,7 +21,8 @@ class FakeClientController extends ClientControllerApi {
       id: 'boot',
       timestamp: DateTime.now(),
       title: 'Client shell ready',
-      message: 'Fake controller boundary initialized for product-layer validation.',
+      message:
+          'Fake controller boundary initialized for product-layer validation.',
       phase: ClientConnectionPhase.disconnected,
       kind: ClientControllerEventKind.lifecycle,
     ),
@@ -63,7 +64,8 @@ class FakeClientController extends ClientControllerApi {
     );
     _recordEvent(
       title: 'Connect requested',
-      message: 'User requested a connection using ${profile.name}. ${commandResult.summary}',
+      message:
+          'User requested a connection using ${profile.name}. ${commandResult.summary}',
       phase: ClientConnectionPhase.connecting,
       profileId: profile.id,
       kind: ClientControllerEventKind.action,
@@ -82,7 +84,8 @@ class FakeClientController extends ClientControllerApi {
 
     _recordEvent(
       title: 'DNS resolution completed',
-      message: 'Resolved ${profile.serverHost}; preparing secure session bootstrap.',
+      message:
+          'Resolved ${profile.serverHost}; preparing secure session bootstrap.',
       phase: ClientConnectionPhase.connecting,
       profileId: profile.id,
       kind: ClientControllerEventKind.progress,
@@ -137,12 +140,32 @@ class FakeClientController extends ClientControllerApi {
     );
     _recordEvent(
       title: 'Disconnect requested',
-      message: 'Connection torn down from the shell action. ${commandResult.summary}',
-      phase: ClientConnectionPhase.disconnected,
+      message:
+          'Connection torn down from the shell action. ${commandResult.summary}',
+      phase: ClientConnectionPhase.disconnecting,
       profileId: activeProfileId,
       kind: ClientControllerEventKind.result,
       operationId: operationId,
       step: 1,
+    );
+    _status = ClientConnectionStatus(
+      phase: ClientConnectionPhase.disconnecting,
+      message: 'Disconnecting current session...',
+      updatedAt: DateTime.now(),
+      activeProfileId: activeProfileId,
+    );
+    notifyListeners();
+
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+
+    _recordEvent(
+      title: 'Connection closed',
+      message: 'Fake controller reported a clean disconnect.',
+      phase: ClientConnectionPhase.disconnected,
+      profileId: activeProfileId,
+      kind: ClientControllerEventKind.result,
+      operationId: operationId,
+      step: 2,
     );
     _status = ClientConnectionStatus.disconnected();
     notifyListeners();
