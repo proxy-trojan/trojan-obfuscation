@@ -30,10 +30,12 @@ class ClientBootstrap {
     final filesystemLayout = ClientFilesystemLayout.maybeForCurrentPlatform();
     final localStateStore = filesystemLayout == null
         ? MemoryLocalStateStore()
-        : FileBackedLocalStateStore(directoryPath: filesystemLayout.stateDirectoryPath);
+        : FileBackedLocalStateStore(
+            directoryPath: filesystemLayout.stateDirectoryPath);
     final diagnosticsFileExporter = filesystemLayout == null
         ? MemoryDiagnosticsFileExporter()
-        : FileDiagnosticsFileExporter(directoryPath: filesystemLayout.diagnosticsDirectoryPath);
+        : FileDiagnosticsFileExporter(
+            directoryPath: filesystemLayout.diagnosticsDirectoryPath);
     final profileSerialization = ProfileSerialization();
     final settingsSerialization = SettingsSerialization();
     final profileStore = ProfileStore.withSampleProfiles(
@@ -60,7 +62,8 @@ class ClientBootstrap {
     await profileStore.load();
     await settingsStore.load();
 
-    final secretSnapshots = await profileSecrets.snapshotForProfiles(profileStore.profiles);
+    final secretSnapshots =
+        await profileSecrets.snapshotForProfiles(profileStore.profiles);
     await profileStore.syncStoredPasswordFlags(<String, bool>{
       for (final snapshot in secretSnapshots)
         snapshot.profileId: snapshot.hasTrojanPassword,
@@ -105,9 +108,12 @@ class ClientBootstrap {
 
   static ShellControllerAdapter _createShellControllerAdapter() {
     final env = Platform.environment;
-    final enableRealAdapter =
-        (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '').trim().toLowerCase() == '1' ||
-        (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '').trim().toLowerCase() == 'true';
+    final enableRealAdapter = (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '')
+                .trim()
+                .toLowerCase() ==
+            '1' ||
+        (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '').trim().toLowerCase() ==
+            'true';
     final binaryOverride = (env['TROJAN_CLIENT_BINARY'] ?? '').trim();
 
     if (enableRealAdapter) {

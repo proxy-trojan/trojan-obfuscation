@@ -9,6 +9,7 @@ import 'package:trojan_pro_client/features/controller/domain/controller_runtime_
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_session.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
+import 'package:trojan_pro_client/features/controller/domain/last_runtime_failure_summary.dart';
 import 'package:trojan_pro_client/features/dashboard/presentation/dashboard_page.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
@@ -61,6 +62,9 @@ class _TestLifecycleController extends ClientControllerApi {
         isRunning: _status.phase == ClientConnectionPhase.connected,
         updatedAt: DateTime.now(),
       );
+
+  @override
+  LastRuntimeFailureSummary? get lastRuntimeFailure => null;
 
   @override
   Future<ControllerRuntimeHealth> checkHealth() async {

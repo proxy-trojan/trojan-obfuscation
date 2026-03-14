@@ -19,6 +19,7 @@ abstract class ClientControllerApi extends ChangeNotifier {
   ControllerRuntimeConfig get runtimeConfig;
 
   ControllerRuntimeSession get session;
+  LastRuntimeFailureSummary? get lastRuntimeFailure;
 
   Future<ControllerRuntimeHealth> checkHealth();
 

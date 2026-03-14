@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/last_runtime_failure_summary.dart';
 import '../../diagnostics/application/support_issue_descriptor.dart';
 import '../../diagnostics/presentation/diagnostics_page.dart';
 import '../../packaging/presentation/packaging_page.dart';
@@ -84,6 +85,7 @@ class _SupportOverviewCard extends StatelessWidget {
     required this.backendKind,
     required this.backendVersion,
     required this.diagnosticsBackend,
+    required this.lastRuntimeFailure,
   });
 
   final ClientConnectionStatus status;
@@ -93,6 +95,7 @@ class _SupportOverviewCard extends StatelessWidget {
   final String backendKind;
   final String backendVersion;
   final String diagnosticsBackend;
+  final LastRuntimeFailureSummary? lastRuntimeFailure;
 
   String get _headline {
     return switch (status.phase) {
@@ -137,6 +140,10 @@ class _SupportOverviewCard extends StatelessWidget {
           Text(_nextStep),
           const SizedBox(height: 16),
           _IssueCategoryBanner(issue: issue),
+          if (lastRuntimeFailure != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _LastRuntimeFailureBanner(summary: lastRuntimeFailure!),
+          ],
           const SizedBox(height: 16),
           Wrap(
             spacing: 24,
@@ -153,6 +160,44 @@ class _SupportOverviewCard extends StatelessWidget {
               _kv('Support summary', issue.summary),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LastRuntimeFailureBanner extends StatelessWidget {
+  const _LastRuntimeFailureBanner({required this.summary});
+
+  final LastRuntimeFailureSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Last recorded runtime failure',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700, color: Colors.red),
+          ),
+          const SizedBox(height: 8),
+          Text(summary.headline),
+          const SizedBox(height: 6),
+          Text(summary.detail),
+          const SizedBox(height: 6),
+          Text('Phase: ${summary.phase}'),
+          Text('Recorded at: ${summary.recordedAt.toIso8601String()}'),
         ],
       ),
     );

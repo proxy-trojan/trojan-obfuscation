@@ -11,6 +11,7 @@ import 'package:trojan_pro_client/features/controller/domain/controller_telemetr
 import 'package:trojan_pro_client/features/profiles/application/profile_secrets_service.dart';
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
+import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 
 final _fixedTime = DateTime.parse('2026-03-13T00:00:00.000Z');
 
@@ -327,6 +328,46 @@ void main() {
 
     expect(controller.status.phase, ClientConnectionPhase.connected);
     expect(controller.status.activeProfileId, 'profile-demo');
+  });
+
+  test('persists last runtime failure summary to local state store', () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: false,
+      commandSummary: 'Launch request rejected by runtime boundary.',
+      commandError: 'config invalid for runtime launch',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final localState = MemoryLocalStateStore();
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      localStateStore: localState,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final result = await controller.connect(_demoProfile());
+    expect(result.accepted, isFalse);
+    expect(controller.lastRuntimeFailure, isNotNull);
+    expect(controller.lastRuntimeFailure!.phase, 'launch');
+
+    final persisted =
+        await localState.read('controller.lastRuntimeFailureSummary');
+    expect(persisted, isA<Map<String, Object?>>());
+    expect((persisted as Map<String, Object?>)['phase'], 'launch');
+    expect((persisted)['profileId'], 'profile-demo');
   });
 
   test('reaches disconnected state after disconnecting session fully stops',

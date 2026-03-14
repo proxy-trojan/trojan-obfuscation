@@ -157,6 +157,12 @@ class AdapterBackedClientController extends ClientControllerApi {
         updatedAt: DateTime.now(),
         activeProfileId: profile.id,
       );
+      _recordLastRuntimeFailure(
+        profileId: profile.id,
+        phase: 'launch',
+        headline: 'The connection could not start',
+        detail: commandResult.error ?? commandResult.summary,
+      );
       notifyListeners();
       return commandResult;
     }
@@ -209,6 +215,12 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: commandResult.error ?? commandResult.summary,
         updatedAt: DateTime.now(),
         activeProfileId: activeProfileId,
+      );
+      _recordLastRuntimeFailure(
+        profileId: activeProfileId,
+        phase: 'disconnect',
+        headline: 'The session could not be disconnected cleanly',
+        detail: commandResult.error ?? commandResult.summary,
       );
       notifyListeners();
       return commandResult;

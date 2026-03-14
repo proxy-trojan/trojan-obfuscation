@@ -7,6 +7,7 @@ import '../domain/controller_runtime_config.dart';
 import '../domain/controller_runtime_health.dart';
 import '../domain/controller_runtime_session.dart';
 import '../domain/controller_telemetry_snapshot.dart';
+import '../domain/last_runtime_failure_summary.dart';
 import 'client_controller_api.dart';
 import 'fake_shell_controller_adapter.dart';
 
