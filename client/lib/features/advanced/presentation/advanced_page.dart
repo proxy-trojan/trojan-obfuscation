@@ -18,6 +18,8 @@ class AdvancedPage extends StatelessWidget {
     final status = services.controller.status;
     final runtimeConfig = services.controller.runtimeConfig;
     final telemetry = services.controller.telemetry;
+    final issue = SupportIssueDescriptor.fromConnectionStatus(status);
+    final lastRuntimeFailure = services.controller.lastRuntimeFailure;
 
     return DefaultTabController(
       length: 2,
@@ -34,12 +36,14 @@ class AdvancedPage extends StatelessWidget {
               const SizedBox(height: 12),
               _SupportOverviewCard(
                 status: status,
+                issue: issue,
                 runtimeMode: runtimeConfig.mode,
                 endpointHint: runtimeConfig.endpointHint,
                 backendKind: telemetry.backendKind,
                 backendVersion: telemetry.backendVersion,
                 diagnosticsBackend:
                     services.diagnosticsFileExporter.backendName,
+                lastRuntimeFailure: lastRuntimeFailure,
               ),
               const SizedBox(height: 16),
               _SupportActionsCard(

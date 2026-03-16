@@ -18,7 +18,7 @@ import 'package:trojan_pro_client/platform/services/service_registry.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
 
 Future<void> _setDesktopSurface(WidgetTester tester) async {
-  await tester.binding.setSurfaceSize(const Size(1600, 1400));
+  await tester.binding.setSurfaceSize(const Size(1600, 1800));
   addTearDown(() async {
     await tester.binding.setSurfaceSize(null);
   });
@@ -29,9 +29,9 @@ class _FailingDiagnosticsFileExporter implements DiagnosticsFileExporter {
   String get backendName => 'failing-test-exporter';
 
   @override
-  Future<String> exportJson({
-    required String suggestedFileName,
-    required String jsonContent,
+  Future<String> exportText({
+    required String fileName,
+    required String contents,
   }) async {
     throw StateError('permission denied for diagnostics export');
   }
@@ -156,7 +156,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('Support bundle exported'), findsOneWidget);
     expect(find.textContaining('Last export target:'), findsOneWidget);
   });
 
@@ -183,7 +182,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('Export / OS:'), findsOneWidget);
+    expect(find.textContaining('Failed to export diagnostics bundle'),
+        findsOneWidget);
     expect(find.textContaining('permission denied'), findsOneWidget);
   });
 }

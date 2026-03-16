@@ -8,6 +8,7 @@ import '../domain/controller_runtime_config.dart';
 import '../domain/controller_runtime_health.dart';
 import '../domain/controller_runtime_session.dart';
 import '../domain/controller_telemetry_snapshot.dart';
+import '../domain/last_runtime_failure_summary.dart';
 
 abstract class ClientControllerApi extends ChangeNotifier {
   ClientConnectionStatus get status;

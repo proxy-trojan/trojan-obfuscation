@@ -41,6 +41,7 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
 
   Process? _runningProcess;
   String? _activeConfigPath;
+  bool _disconnectRequested = false;
   int? _lastExitCode;
   String? _lastError;
   DateTime _sessionUpdatedAt = DateTime.now();
@@ -165,13 +166,11 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       );
     }
 
+    final configPath = _activeConfigPath;
     final killed = process.kill();
     if (killed) {
-      _runningProcess = null;
-      final configPath = _activeConfigPath;
-      _activeConfigPath = null;
+      _disconnectRequested = true;
       _markSessionUpdated();
-      await _cleanupConfigFile(configPath);
       return ControllerCommandResult(
         commandId: command.id,
         accepted: true,
@@ -222,6 +221,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       );
     }
 
+    _prepareFreshSessionForConnect();
+
     final plan = _runtimePlanner.buildConnectPlan(
       profile: input.profile,
       configPath: input.configPath,
@@ -259,14 +260,22 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
           .transform(const SystemEncoding().decoder)
           .listen((chunk) => _appendLogLines(_stderrTail, chunk));
       process.exitCode.then((exitCode) async {
+        final disconnectRequested = _disconnectRequested;
         _lastExitCode = exitCode;
+        if (disconnectRequested) {
+          // disconnect path should be treated as user-requested teardown,
+          // not as runtime failure noise.
+          _lastError = null;
+        }
         _markSessionUpdated();
         if (identical(_runningProcess, process)) {
           final configPath = _activeConfigPath;
           _runningProcess = null;
           _activeConfigPath = null;
+          _disconnectRequested = false;
           _markSessionUpdated();
           await _cleanupConfigFile(configPath);
+          await _cleanupRuntimeDirectoryIfEmpty(configPath);
         }
       });
 
@@ -287,6 +296,7 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       _lastError = error.toString();
       _markSessionUpdated();
       await _cleanupConfigFile(input.configPath);
+      await _cleanupRuntimeDirectoryIfEmpty(input.configPath);
       return ControllerCommandResult(
         commandId: command.id,
         accepted: false,
@@ -302,11 +312,39 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
     }
   }
 
+  void _prepareFreshSessionForConnect() {
+    _disconnectRequested = false;
+    _lastError = null;
+    _lastExitCode = null;
+    _stdoutTail.clear();
+    _stderrTail.clear();
+    _markSessionUpdated();
+  }
+
   Future<void> _cleanupConfigFile(String? configPath) async {
     if (configPath == null || configPath.trim().isEmpty) return;
     final file = File(configPath);
-    if (await file.exists()) {
-      await file.delete();
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (error) {
+      _lastError = 'CONFIG_CLEANUP_FAILED: $error';
+      _markSessionUpdated();
+    }
+  }
+
+  Future<void> _cleanupRuntimeDirectoryIfEmpty(String? configPath) async {
+    if (configPath == null || configPath.trim().isEmpty) return;
+    try {
+      final directory = File(configPath).parent;
+      if (!await directory.exists()) return;
+      final entries = await directory.list().toList();
+      if (entries.isEmpty) {
+        await directory.delete();
+      }
+    } catch (_) {
+      // keep best-effort cleanup non-blocking
     }
   }
 

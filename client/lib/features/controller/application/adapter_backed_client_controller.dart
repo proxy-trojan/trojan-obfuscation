@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import '../../../platform/services/client_filesystem_layout.dart';
+import '../../../platform/services/local_state_store.dart';
 import '../../profiles/application/profile_secrets_service.dart';
 import '../../profiles/domain/client_profile.dart';
-import '../../../platform/services/client_filesystem_layout.dart';
 import '../domain/client_connection_status.dart';
 import '../domain/client_controller_event.dart';
 import '../domain/controller_command.dart';
@@ -12,6 +14,7 @@ import '../domain/controller_runtime_config.dart';
 import '../domain/controller_runtime_health.dart';
 import '../domain/controller_runtime_session.dart';
 import '../domain/controller_telemetry_snapshot.dart';
+import '../domain/last_runtime_failure_summary.dart';
 import 'client_controller_api.dart';
 import 'shell_controller_adapter.dart';
 
@@ -19,10 +22,12 @@ class AdapterBackedClientController extends ClientControllerApi {
   AdapterBackedClientController({
     required ShellControllerAdapter adapter,
     required ProfileSecretsService profileSecrets,
+    LocalStateStore? localStateStore,
     ClientFilesystemLayout? filesystemLayout,
     Duration sessionPollInterval = const Duration(milliseconds: 600),
   })  : _adapter = adapter,
         _profileSecrets = profileSecrets,
+        _localStateStore = localStateStore,
         _filesystemLayout = filesystemLayout {
     _lastSessionUpdatedAt = _adapter.session.updatedAt;
     _sessionWatcher = Timer.periodic(sessionPollInterval, (_) {
@@ -31,21 +36,27 @@ class AdapterBackedClientController extends ClientControllerApi {
       if (_lastSessionUpdatedAt != updatedAt) {
         _lastSessionUpdatedAt = updatedAt;
         _reconcileStatusWithSession(session);
-        notifyListeners();
+        _notifyIfActive();
       }
     });
   }
 
   static const int _maxEvents = 12;
+  static const String _lastRuntimeFailureKey =
+      'controller.lastRuntimeFailureSummary';
+  static const String _runtimeSnapshotKey = 'controller.runtimeSessionSnapshot';
 
   final ShellControllerAdapter _adapter;
   final ProfileSecretsService _profileSecrets;
+  final LocalStateStore? _localStateStore;
   final ClientFilesystemLayout? _filesystemLayout;
   late final Timer _sessionWatcher;
   DateTime? _lastSessionUpdatedAt;
   int _operationCounter = 0;
   int _eventCounter = 0;
+  bool _disposed = false;
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
+  LastRuntimeFailureSummary? _lastRuntimeFailure;
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
     ClientControllerEvent(
       id: 'boot',
@@ -72,6 +83,54 @@ class AdapterBackedClientController extends ClientControllerApi {
 
   @override
   ControllerRuntimeSession get session => _adapter.session;
+
+  @override
+  LastRuntimeFailureSummary? get lastRuntimeFailure => _lastRuntimeFailure;
+
+  Future<void> restorePersistedState() async {
+    final store = _localStateStore;
+    if (store == null) return;
+
+    var changed = false;
+    final restoredFailure = await _readLastRuntimeFailure(store);
+    if (restoredFailure != null) {
+      _lastRuntimeFailure = restoredFailure;
+      changed = true;
+    }
+
+    final snapshot = await _readRuntimeSnapshot(store);
+    if (snapshot != null &&
+        _shouldRecoverFromSnapshot(snapshot, _adapter.session)) {
+      await _cleanupRecoveredRuntimeArtifacts(snapshot);
+      final recoveryMessage = _buildRecoveryMessage(snapshot.activeProfileId);
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: recoveryMessage,
+        updatedAt: DateTime.now(),
+        activeProfileId: snapshot.activeProfileId,
+      );
+      _recordEvent(
+        title: 'Recovered interrupted session state',
+        message: recoveryMessage,
+        phase: ClientConnectionPhase.error,
+        profileId: snapshot.activeProfileId,
+        kind: ClientControllerEventKind.lifecycle,
+        level: ClientControllerEventLevel.warning,
+      );
+      await _recordLastRuntimeFailure(
+        profileId: snapshot.activeProfileId,
+        phase: 'recovery',
+        headline: 'Recovered from interrupted runtime state',
+        detail: recoveryMessage,
+      );
+      await _persistRuntimeSnapshot();
+      changed = true;
+    }
+
+    if (changed) {
+      _notifyIfActive();
+    }
+  }
 
   @override
   Future<ControllerRuntimeHealth> checkHealth() => _adapter.checkHealth();
@@ -105,7 +164,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         updatedAt: DateTime.now(),
         activeProfileId: profile.id,
       );
-      notifyListeners();
+      await _persistRuntimeSnapshot();
+      _notifyIfActive();
       return result;
     }
 
@@ -157,13 +217,14 @@ class AdapterBackedClientController extends ClientControllerApi {
         updatedAt: DateTime.now(),
         activeProfileId: profile.id,
       );
-      _recordLastRuntimeFailure(
+      await _recordLastRuntimeFailure(
         profileId: profile.id,
         phase: 'launch',
         headline: 'The connection could not start',
         detail: commandResult.error ?? commandResult.summary,
       );
-      notifyListeners();
+      await _persistRuntimeSnapshot();
+      _notifyIfActive();
       return commandResult;
     }
 
@@ -173,7 +234,9 @@ class AdapterBackedClientController extends ClientControllerApi {
       updatedAt: DateTime.now(),
       activeProfileId: profile.id,
     );
-    notifyListeners();
+    await _clearLastRuntimeFailure();
+    await _persistRuntimeSnapshot();
+    _notifyIfActive();
     return commandResult;
   }
 
@@ -188,7 +251,8 @@ class AdapterBackedClientController extends ClientControllerApi {
       updatedAt: DateTime.now(),
       activeProfileId: activeProfileId,
     );
-    notifyListeners();
+    await _persistRuntimeSnapshot();
+    _notifyIfActive();
 
     final commandResult = await _adapter.execute(
       ControllerCommand(
@@ -216,13 +280,14 @@ class AdapterBackedClientController extends ClientControllerApi {
         updatedAt: DateTime.now(),
         activeProfileId: activeProfileId,
       );
-      _recordLastRuntimeFailure(
+      await _recordLastRuntimeFailure(
         profileId: activeProfileId,
         phase: 'disconnect',
         headline: 'The session could not be disconnected cleanly',
         detail: commandResult.error ?? commandResult.summary,
       );
-      notifyListeners();
+      await _persistRuntimeSnapshot();
+      _notifyIfActive();
       return commandResult;
     }
 
@@ -255,24 +320,29 @@ class AdapterBackedClientController extends ClientControllerApi {
             activeProfileId: activeProfileId,
           );
 
-    notifyListeners();
+    if (nextPhase == ClientConnectionPhase.disconnected) {
+      await _clearLastRuntimeFailure();
+    }
+    await _persistRuntimeSnapshot();
+    _notifyIfActive();
     return commandResult;
   }
 
   String _configPathFor(String profileId) {
-    final baseDirectory =
-        _filesystemLayout?.stateDirectoryPath ?? Directory.systemTemp.path;
     final safeProfileId = profileId.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    return '$baseDirectory${Platform.pathSeparator}runtime${Platform.pathSeparator}runtime-profile-$safeProfileId.json';
+    return '$_managedRuntimeDirectoryPath${Platform.pathSeparator}runtime-profile-$safeProfileId.json';
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _sessionWatcher.cancel();
     super.dispose();
   }
 
   void _reconcileStatusWithSession(ControllerRuntimeSession session) {
+    final activeProfileId = _status.activeProfileId;
+
     if (session.isRunning) {
       if (_status.phase == ClientConnectionPhase.connecting) {
         final summary = session.pid == null
@@ -291,6 +361,8 @@ class AdapterBackedClientController extends ClientControllerApi {
           kind: ClientControllerEventKind.progress,
           level: ClientControllerEventLevel.info,
         );
+        _clearLastRuntimeFailureSoon();
+        _persistRuntimeSnapshotSoon();
       }
       return;
     }
@@ -303,21 +375,60 @@ class AdapterBackedClientController extends ClientControllerApi {
 
     final lastError = session.lastError?.trim();
     final lastExitCode = session.lastExitCode;
+
+    if (_status.phase == ClientConnectionPhase.disconnecting) {
+      final hadAbnormalExit = (lastError != null && lastError.isNotEmpty) ||
+          (lastExitCode != null && lastExitCode != 0);
+      final summary = lastError != null && lastError.isNotEmpty
+          ? 'Runtime session ended after disconnect request (last runtime detail: $lastError).'
+          : (lastExitCode != null && lastExitCode != 0)
+              ? 'Runtime session ended after disconnect request (exit code $lastExitCode).'
+              : (lastExitCode == 0
+                  ? 'Runtime session ended cleanly.'
+                  : 'Runtime session is no longer running.');
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.disconnected,
+        message: summary,
+        updatedAt: DateTime.now(),
+      );
+      _recordEvent(
+        title: 'Disconnect completed',
+        message: summary,
+        phase: ClientConnectionPhase.disconnected,
+        profileId: null,
+        kind: ClientControllerEventKind.result,
+        level: hadAbnormalExit
+            ? ClientControllerEventLevel.warning
+            : ClientControllerEventLevel.info,
+      );
+      _clearLastRuntimeFailureSoon();
+      _persistRuntimeSnapshotSoon();
+      return;
+    }
+
     if (lastError != null && lastError.isNotEmpty) {
       final summary = 'Runtime session stopped with error: $lastError';
       _status = ClientConnectionStatus(
         phase: ClientConnectionPhase.error,
         message: summary,
         updatedAt: DateTime.now(),
+        activeProfileId: activeProfileId,
       );
       _recordEvent(
         title: 'Runtime session ended',
         message: summary,
         phase: ClientConnectionPhase.error,
-        profileId: _status.activeProfileId,
+        profileId: activeProfileId,
         kind: ClientControllerEventKind.result,
         level: ClientControllerEventLevel.error,
       );
+      _recordLastRuntimeFailureSoon(
+        profileId: activeProfileId,
+        phase: 'runtime',
+        headline: 'The runtime session stopped unexpectedly',
+        detail: lastError,
+      );
+      _persistRuntimeSnapshotSoon();
       return;
     }
 
@@ -327,15 +438,23 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: ClientConnectionPhase.error,
         message: summary,
         updatedAt: DateTime.now(),
+        activeProfileId: activeProfileId,
       );
       _recordEvent(
         title: 'Runtime session ended',
         message: summary,
         phase: ClientConnectionPhase.error,
-        profileId: _status.activeProfileId,
+        profileId: activeProfileId,
         kind: ClientControllerEventKind.result,
         level: ClientControllerEventLevel.error,
       );
+      _recordLastRuntimeFailureSoon(
+        profileId: activeProfileId,
+        phase: 'runtime',
+        headline: 'The runtime session exited unexpectedly',
+        detail: 'Exit code $lastExitCode',
+      );
+      _persistRuntimeSnapshotSoon();
       return;
     }
 
@@ -355,6 +474,207 @@ class AdapterBackedClientController extends ClientControllerApi {
       kind: ClientControllerEventKind.result,
       level: ClientControllerEventLevel.warning,
     );
+    _clearLastRuntimeFailureSoon();
+    _persistRuntimeSnapshotSoon();
+  }
+
+  Future<void> _recordLastRuntimeFailure({
+    required String? profileId,
+    required String phase,
+    required String headline,
+    required String detail,
+  }) async {
+    _lastRuntimeFailure = LastRuntimeFailureSummary(
+      profileId: profileId,
+      phase: phase,
+      headline: headline,
+      detail: detail,
+      recordedAt: DateTime.now(),
+    );
+    await _persistLastRuntimeFailure();
+  }
+
+  void _recordLastRuntimeFailureSoon({
+    required String? profileId,
+    required String phase,
+    required String headline,
+    required String detail,
+  }) {
+    unawaited(
+      _recordLastRuntimeFailure(
+        profileId: profileId,
+        phase: phase,
+        headline: headline,
+        detail: detail,
+      ).then((_) => _notifyIfActive()),
+    );
+  }
+
+  Future<void> _clearLastRuntimeFailure() async {
+    if (_lastRuntimeFailure == null) return;
+    _lastRuntimeFailure = null;
+    await _persistLastRuntimeFailure();
+  }
+
+  void _clearLastRuntimeFailureSoon() {
+    unawaited(_clearLastRuntimeFailure().then((_) => _notifyIfActive()));
+  }
+
+  Future<void> _persistLastRuntimeFailure() async {
+    final store = _localStateStore;
+    if (store == null) return;
+    try {
+      final failure = _lastRuntimeFailure;
+      if (failure == null) {
+        await store.delete(_lastRuntimeFailureKey);
+      } else {
+        await store.write(_lastRuntimeFailureKey, jsonEncode(failure.toJson()));
+      }
+    } catch (_) {
+      // best-effort persistence: keep runtime flow non-blocking on storage failures
+    }
+  }
+
+  Future<void> _persistRuntimeSnapshot() async {
+    final store = _localStateStore;
+    if (store == null) return;
+    final currentSession = _adapter.session;
+    final snapshot = _PersistedRuntimeSnapshot(
+      statusPhase: _status.phase.name,
+      statusMessage: _status.message,
+      activeProfileId: _status.activeProfileId,
+      statusUpdatedAt: _status.updatedAt,
+      sessionIsRunning: currentSession.isRunning,
+      sessionPid: currentSession.pid,
+      sessionActiveConfigPath: currentSession.activeConfigPath,
+      sessionLastExitCode: currentSession.lastExitCode,
+      sessionLastError: currentSession.lastError,
+      sessionUpdatedAt: currentSession.updatedAt,
+    );
+    try {
+      await store.write(_runtimeSnapshotKey, jsonEncode(snapshot.toJson()));
+    } catch (_) {
+      // best-effort persistence: keep runtime flow non-blocking on storage failures
+    }
+  }
+
+  void _persistRuntimeSnapshotSoon() {
+    unawaited(_persistRuntimeSnapshot());
+  }
+
+  Future<LastRuntimeFailureSummary?> _readLastRuntimeFailure(
+    LocalStateStore store,
+  ) async {
+    final raw = await store.read(_lastRuntimeFailureKey);
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return LastRuntimeFailureSummary.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<_PersistedRuntimeSnapshot?> _readRuntimeSnapshot(
+    LocalStateStore store,
+  ) async {
+    final raw = await store.read(_runtimeSnapshotKey);
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return _PersistedRuntimeSnapshot.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _cleanupRecoveredRuntimeArtifacts(
+    _PersistedRuntimeSnapshot snapshot,
+  ) async {
+    final configPath = snapshot.sessionActiveConfigPath;
+    if (configPath == null || configPath.trim().isEmpty) return;
+    if (!_isWithinManagedRuntimeDirectory(configPath)) return;
+
+    try {
+      final file = File(configPath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      await _cleanupRuntimeDirectoryIfEmpty();
+    } catch (_) {
+      // best-effort cleanup: recovery must not fail hard because of file ops
+    }
+  }
+
+  Future<void> _cleanupRuntimeDirectoryIfEmpty() async {
+    final runtimeDirectoryPath = _managedRuntimeDirectoryPath;
+    final directory = Directory(runtimeDirectoryPath);
+    if (!await directory.exists()) return;
+
+    try {
+      final entries = await directory.list().toList();
+      if (entries.isEmpty) {
+        await directory.delete();
+      }
+    } catch (_) {
+      // ignore cleanup failures: stale empty folder is acceptable
+    }
+  }
+
+  String get _managedRuntimeDirectoryPath {
+    final baseDirectory =
+        _filesystemLayout?.stateDirectoryPath ?? Directory.systemTemp.path;
+    return '$baseDirectory${Platform.pathSeparator}runtime';
+  }
+
+  bool _isWithinManagedRuntimeDirectory(String candidatePath) {
+    final runtimeRoot = _normalizePathForCompare(
+        Directory(_managedRuntimeDirectoryPath).absolute.path);
+    final candidate =
+        _normalizePathForCompare(File(candidatePath).absolute.path);
+    final prefix = runtimeRoot.endsWith('/') ? runtimeRoot : '$runtimeRoot/';
+    return candidate.startsWith(prefix);
+  }
+
+  String _normalizePathForCompare(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    if (Platform.isWindows) {
+      return normalized.toLowerCase();
+    }
+    return normalized;
+  }
+
+  bool _shouldRecoverFromSnapshot(
+    _PersistedRuntimeSnapshot snapshot,
+    ControllerRuntimeSession liveSession,
+  ) {
+    if (liveSession.isRunning) return false;
+    final snapshotPhase = _phaseFromName(snapshot.statusPhase);
+    if (snapshotPhase == null) return false;
+
+    final snapshotSuggestsActiveSession = snapshot.sessionIsRunning ||
+        snapshotPhase == ClientConnectionPhase.connecting ||
+        snapshotPhase == ClientConnectionPhase.connected ||
+        snapshotPhase == ClientConnectionPhase.disconnecting;
+
+    return snapshotSuggestsActiveSession;
+  }
+
+  ClientConnectionPhase? _phaseFromName(String name) {
+    for (final phase in ClientConnectionPhase.values) {
+      if (phase.name == name) return phase;
+    }
+    return null;
+  }
+
+  String _buildRecoveryMessage(String? profileId) {
+    if (profileId == null || profileId.trim().isEmpty) {
+      return 'Recovered from an interrupted runtime session. The app restored a safe state and you can retry from Profiles.';
+    }
+    return 'Recovered from an interrupted runtime session for $profileId. The app restored a safe state and you can retry from Profiles.';
+  }
+
+  void _notifyIfActive() {
+    if (_disposed) return;
+    notifyListeners();
   }
 
   void _recordEvent({
@@ -383,5 +703,89 @@ class AdapterBackedClientController extends ClientControllerApi {
     if (_events.length > _maxEvents) {
       _events.removeRange(_maxEvents, _events.length);
     }
+  }
+}
+
+class _PersistedRuntimeSnapshot {
+  const _PersistedRuntimeSnapshot({
+    required this.statusPhase,
+    required this.statusMessage,
+    required this.activeProfileId,
+    required this.statusUpdatedAt,
+    required this.sessionIsRunning,
+    required this.sessionPid,
+    required this.sessionActiveConfigPath,
+    required this.sessionLastExitCode,
+    required this.sessionLastError,
+    required this.sessionUpdatedAt,
+  });
+
+  final String statusPhase;
+  final String statusMessage;
+  final String? activeProfileId;
+  final DateTime statusUpdatedAt;
+  final bool sessionIsRunning;
+  final int? sessionPid;
+  final String? sessionActiveConfigPath;
+  final int? sessionLastExitCode;
+  final String? sessionLastError;
+  final DateTime sessionUpdatedAt;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'statusPhase': statusPhase,
+      'statusMessage': statusMessage,
+      'activeProfileId': activeProfileId,
+      'statusUpdatedAt': statusUpdatedAt.toIso8601String(),
+      'sessionIsRunning': sessionIsRunning,
+      'sessionPid': sessionPid,
+      'sessionActiveConfigPath': sessionActiveConfigPath,
+      'sessionLastExitCode': sessionLastExitCode,
+      'sessionLastError': sessionLastError,
+      'sessionUpdatedAt': sessionUpdatedAt.toIso8601String(),
+    };
+  }
+
+  static _PersistedRuntimeSnapshot? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final statusPhase = value['statusPhase'];
+    final statusMessage = value['statusMessage'];
+    final activeProfileId = value['activeProfileId'];
+    final statusUpdatedAt = value['statusUpdatedAt'];
+    final sessionIsRunning = value['sessionIsRunning'];
+    final sessionPid = value['sessionPid'];
+    final sessionActiveConfigPath = value['sessionActiveConfigPath'];
+    final sessionLastExitCode = value['sessionLastExitCode'];
+    final sessionLastError = value['sessionLastError'];
+    final sessionUpdatedAt = value['sessionUpdatedAt'];
+
+    if (statusPhase is! String ||
+        statusMessage is! String ||
+        statusUpdatedAt is! String ||
+        sessionIsRunning is! bool ||
+        sessionUpdatedAt is! String) {
+      return null;
+    }
+
+    final parsedStatusUpdatedAt = DateTime.tryParse(statusUpdatedAt);
+    final parsedSessionUpdatedAt = DateTime.tryParse(sessionUpdatedAt);
+    if (parsedStatusUpdatedAt == null || parsedSessionUpdatedAt == null) {
+      return null;
+    }
+
+    return _PersistedRuntimeSnapshot(
+      statusPhase: statusPhase,
+      statusMessage: statusMessage,
+      activeProfileId: activeProfileId is String ? activeProfileId : null,
+      statusUpdatedAt: parsedStatusUpdatedAt,
+      sessionIsRunning: sessionIsRunning,
+      sessionPid: sessionPid is int ? sessionPid : null,
+      sessionActiveConfigPath:
+          sessionActiveConfigPath is String ? sessionActiveConfigPath : null,
+      sessionLastExitCode:
+          sessionLastExitCode is int ? sessionLastExitCode : null,
+      sessionLastError: sessionLastError is String ? sessionLastError : null,
+      sessionUpdatedAt: parsedSessionUpdatedAt,
+    );
   }
 }

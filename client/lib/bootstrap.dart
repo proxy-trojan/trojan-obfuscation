@@ -56,6 +56,7 @@ class ClientBootstrap {
     final controller = AdapterBackedClientController(
       adapter: _createShellControllerAdapter(),
       profileSecrets: profileSecrets,
+      localStateStore: localStateStore,
       filesystemLayout: filesystemLayout,
     );
 
@@ -72,6 +73,7 @@ class ClientBootstrap {
       channel: settingsStore.settings.updateChannel,
       autoCheckForUpdates: settingsStore.settings.autoCheckForUpdates,
     );
+    await controller.restorePersistedState();
     packagingStore.markInstallerSkeletonReady();
 
     final diagnostics = DiagnosticsExportService(

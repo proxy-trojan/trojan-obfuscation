@@ -46,6 +46,9 @@ class FakeClientController extends ClientControllerApi {
   ControllerRuntimeSession get session => _adapter.session;
 
   @override
+  LastRuntimeFailureSummary? get lastRuntimeFailure => null;
+
+  @override
   Future<ControllerRuntimeHealth> checkHealth() => _adapter.checkHealth();
 
   @override
