@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'features/controller/application/adapter_backed_client_controller.dart';
 import 'features/controller/application/client_controller_api.dart';
 import 'features/controller/application/fake_shell_controller_adapter.dart';
@@ -86,9 +88,43 @@ class ClientBootstrap {
 
     final desktopLifecycle = _createDesktopLifecycleService(
       controller: controller,
+      profileStore: profileStore,
+      policy: _desktopPolicyFromSettings(settingsStore),
       singleInstancePrimary: singleInstancePrimary,
     );
     await desktopLifecycle.initialize();
+
+    Future<void> syncDesktopQuickActions() async {
+      final selected = profileStore.selectedProfile;
+      final phase = controller.status.phase;
+      final canConnect = selected != null &&
+          (phase == ClientConnectionPhase.disconnected ||
+              phase == ClientConnectionPhase.error);
+      final canDisconnect = phase == ClientConnectionPhase.connected ||
+          phase == ClientConnectionPhase.connecting ||
+          phase == ClientConnectionPhase.disconnecting;
+      await desktopLifecycle.updateQuickActions(
+        DesktopQuickActionsState(
+          hasSelectedProfile: selected != null,
+          selectedProfileName: selected?.name,
+          canConnect: canConnect,
+          canDisconnect: canDisconnect,
+        ),
+      );
+    }
+
+    await syncDesktopQuickActions();
+    profileStore.addListener(() {
+      unawaited(syncDesktopQuickActions());
+    });
+    controller.addListener(() {
+      unawaited(syncDesktopQuickActions());
+    });
+    settingsStore.addListener(() {
+      unawaited(
+        desktopLifecycle.applyPolicy(_desktopPolicyFromSettings(settingsStore)),
+      );
+    });
 
     final diagnostics = DiagnosticsExportService(
       profileStore: profileStore,
@@ -123,17 +159,35 @@ class ClientBootstrap {
     );
   }
 
+  static DesktopLifecyclePolicy _desktopPolicyFromSettings(
+    SettingsStore settingsStore,
+  ) {
+    return DesktopLifecyclePolicy.desktopDefault.copyWith(
+      closeBehavior: settingsStore.settings.desktopCloseBehavior,
+    );
+  }
+
   static DesktopLifecycleService _createDesktopLifecycleService({
     required ClientControllerApi controller,
+    required ProfileStore profileStore,
+    required DesktopLifecyclePolicy policy,
     required bool singleInstancePrimary,
   }) {
     if (!isDesktopPlatform()) {
-      return NoopDesktopLifecycleService();
+      return NoopDesktopLifecycleService(policy: policy);
     }
 
     return PluginDesktopLifecycleService(
-      policy: DesktopLifecyclePolicy.desktopDefault,
+      policy: policy,
       singleInstancePrimary: singleInstancePrimary,
+      onConnectRequested: () async {
+        final selected = profileStore.selectedProfile;
+        if (selected == null) return;
+        await controller.connect(selected);
+      },
+      onDisconnectRequested: () async {
+        await controller.disconnect();
+      },
       onQuitRequested: () async {
         final phase = controller.status.phase;
         if (phase == ClientConnectionPhase.connected ||

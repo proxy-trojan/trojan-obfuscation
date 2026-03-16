@@ -22,6 +22,20 @@ class DesktopLifecyclePolicy {
   final DuplicateLaunchMitigation duplicateLaunchMitigation;
   final bool enableTrayQuickActions;
 
+  DesktopLifecyclePolicy copyWith({
+    DesktopCloseBehavior? closeBehavior,
+    DuplicateLaunchMitigation? duplicateLaunchMitigation,
+    bool? enableTrayQuickActions,
+  }) {
+    return DesktopLifecyclePolicy(
+      closeBehavior: closeBehavior ?? this.closeBehavior,
+      duplicateLaunchMitigation:
+          duplicateLaunchMitigation ?? this.duplicateLaunchMitigation,
+      enableTrayQuickActions:
+          enableTrayQuickActions ?? this.enableTrayQuickActions,
+    );
+  }
+
   static const DesktopLifecyclePolicy desktopDefault = DesktopLifecyclePolicy(
     closeBehavior: DesktopCloseBehavior.hideToTray,
     duplicateLaunchMitigation: DuplicateLaunchMitigation.fileLockSingleInstance,

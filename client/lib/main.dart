@@ -20,5 +20,10 @@ Future<void> main() async {
   final services = await ClientBootstrap.createServices(
     singleInstancePrimary: primaryInstance,
   );
+
+  DesktopInstanceGuard.setFocusRequestHandler(() async {
+    await services.desktopLifecycle.showMainWindow();
+  });
+
   runApp(TrojanClientApp(services: services));
 }

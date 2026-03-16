@@ -6,7 +6,7 @@ class NoopDesktopLifecycleService extends DesktopLifecycleService {
       : _policy = policy ?? DesktopLifecyclePolicy.fallback,
         _status = DesktopLifecycleStatus.unsupported();
 
-  final DesktopLifecyclePolicy _policy;
+  DesktopLifecyclePolicy _policy;
   DesktopLifecycleStatus _status;
 
   @override
@@ -20,6 +20,18 @@ class NoopDesktopLifecycleService extends DesktopLifecycleService {
     _status = DesktopLifecycleStatus.unsupported();
     notifyListeners();
   }
+
+  @override
+  Future<void> applyPolicy(DesktopLifecyclePolicy policy) async {
+    _policy = policy;
+    _status = _status.copyWith(
+      summary: policy.closeSemanticsSummary(trayReady: false),
+    );
+    notifyListeners();
+  }
+
+  @override
+  Future<void> updateQuickActions(DesktopQuickActionsState state) async {}
 
   @override
   Future<void> minimizeMainWindow() async {}

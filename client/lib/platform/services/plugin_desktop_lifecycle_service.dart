@@ -14,21 +14,28 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     required DesktopLifecyclePolicy policy,
     required DesktopQuitHandler onQuitRequested,
     required bool singleInstancePrimary,
+    DesktopConnectHandler? onConnectRequested,
+    DesktopDisconnectHandler? onDisconnectRequested,
     this.trayToolTip = 'Trojan Pro Client',
     this.trayPngAssetPath = 'assets/tray/tray_icon.png',
     this.trayIcoAssetPath = 'assets/tray/tray_icon.ico',
   })  : _policy = policy,
         _onQuitRequested = onQuitRequested,
-        _singleInstancePrimary = singleInstancePrimary;
+        _singleInstancePrimary = singleInstancePrimary,
+        _onConnectRequested = onConnectRequested,
+        _onDisconnectRequested = onDisconnectRequested;
 
-  final DesktopLifecyclePolicy _policy;
+  DesktopLifecyclePolicy _policy;
   final DesktopQuitHandler _onQuitRequested;
   final bool _singleInstancePrimary;
+  final DesktopConnectHandler? _onConnectRequested;
+  final DesktopDisconnectHandler? _onDisconnectRequested;
   final String trayToolTip;
   final String trayPngAssetPath;
   final String trayIcoAssetPath;
 
   DesktopLifecycleStatus _status = DesktopLifecycleStatus.initializing();
+  DesktopQuickActionsState _quickActions = DesktopQuickActionsState.initial;
   bool _trayReady = false;
   bool _closeInterceptEnabled = false;
   bool _initialized = false;
@@ -61,7 +68,7 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     windowManager.addListener(this);
 
     await _applyCloseInterceptionPolicy();
-    await _setupTrayFirstCut();
+    await _setupTrayIfEnabled();
 
     _initialized = true;
     _status = DesktopLifecycleStatus(
@@ -72,6 +79,46 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
       closeInterceptEnabled: _closeInterceptEnabled,
       summary: _composeSummary(),
     );
+    _notifyIfActive();
+  }
+
+  @override
+  Future<void> applyPolicy(DesktopLifecyclePolicy policy) async {
+    _policy = policy;
+
+    if (!_initialized || !isDesktopPlatform()) {
+      _status = _status.copyWith(summary: _composeSummary());
+      _notifyIfActive();
+      return;
+    }
+
+    await _applyCloseInterceptionPolicy();
+    if (_policy.enableTrayQuickActions) {
+      if (!_trayReady) {
+        await _setupTrayIfEnabled();
+      } else {
+        await _refreshTrayMenu();
+      }
+    } else {
+      await _teardownTray();
+    }
+
+    _status = _status.copyWith(
+      trayReady: _trayReady,
+      closeInterceptEnabled: _closeInterceptEnabled,
+      summary: _composeSummary(),
+    );
+    _notifyIfActive();
+  }
+
+  @override
+  Future<void> updateQuickActions(DesktopQuickActionsState state) async {
+    _quickActions = state;
+    if (_trayReady) {
+      await _refreshTrayMenu();
+    }
+
+    _status = _status.copyWith(summary: _composeSummary());
     _notifyIfActive();
   }
 
@@ -100,13 +147,7 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
       debugPrint('DesktopLifecycleService: quit preflight failed: $error');
     }
 
-    if (_trayReady) {
-      try {
-        await trayManager.destroy();
-      } catch (_) {
-        // best-effort tray cleanup
-      }
-    }
+    await _teardownTray();
 
     if (_closeInterceptEnabled) {
       try {
@@ -124,14 +165,7 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     if (_disposed) return;
     _disposed = true;
 
-    if (_trayReady) {
-      trayManager.removeListener(this);
-      try {
-        await trayManager.destroy();
-      } catch (_) {
-        // best-effort tray cleanup
-      }
-    }
+    await _teardownTray();
 
     if (isDesktopPlatform()) {
       windowManager.removeListener(this);
@@ -172,11 +206,41 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
       case 'open_window':
         unawaited(showMainWindow());
         return;
+      case 'connect_selected':
+        if (_quickActions.canConnect) {
+          unawaited(_handleConnectRequested());
+        }
+        return;
+      case 'disconnect_active':
+        if (_quickActions.canDisconnect) {
+          unawaited(_handleDisconnectRequested());
+        }
+        return;
       case 'quit_app':
         unawaited(requestQuit());
         return;
       default:
         return;
+    }
+  }
+
+  Future<void> _handleConnectRequested() async {
+    final callback = _onConnectRequested;
+    if (callback == null) return;
+    try {
+      await callback();
+    } catch (error) {
+      debugPrint('DesktopLifecycleService: tray connect failed: $error');
+    }
+  }
+
+  Future<void> _handleDisconnectRequested() async {
+    final callback = _onDisconnectRequested;
+    if (callback == null) return;
+    try {
+      await callback();
+    } catch (error) {
+      debugPrint('DesktopLifecycleService: tray disconnect failed: $error');
     }
   }
 
@@ -186,7 +250,7 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     await windowManager.setPreventClose(_closeInterceptEnabled);
   }
 
-  Future<void> _setupTrayFirstCut() async {
+  Future<void> _setupTrayIfEnabled() async {
     if (!_policy.enableTrayQuickActions) {
       _trayReady = false;
       return;
@@ -195,27 +259,67 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     try {
       await trayManager.setIcon(_resolveTrayIconPath());
       await trayManager.setToolTip(trayToolTip);
-      await trayManager.setContextMenu(
-        Menu(
-          items: [
-            MenuItem(
-              key: 'open_window',
-              label: 'Open',
-            ),
-            MenuItem.separator(),
-            MenuItem(
-              key: 'quit_app',
-              label: 'Quit',
-            ),
-          ],
-        ),
-      );
+      await _refreshTrayMenu();
       trayManager.addListener(this);
       _trayReady = true;
     } catch (error) {
       _trayReady = false;
       debugPrint('DesktopLifecycleService: tray init failed: $error');
     }
+  }
+
+  Future<void> _refreshTrayMenu() async {
+    final selectedProfileName = _quickActions.selectedProfileName;
+    final connectLabel =
+        selectedProfileName == null || selectedProfileName.isEmpty
+            ? 'Connect'
+            : 'Connect (${_truncateLabel(selectedProfileName)})';
+
+    await trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(
+            key: 'open_window',
+            label: 'Open',
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            key: 'connect_selected',
+            label: connectLabel,
+            disabled: !_quickActions.canConnect,
+          ),
+          MenuItem(
+            key: 'disconnect_active',
+            label: 'Disconnect',
+            disabled: !_quickActions.canDisconnect,
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            key: 'quit_app',
+            label: 'Quit',
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _truncateLabel(String input) {
+    const maxLength = 26;
+    if (input.length <= maxLength) {
+      return input;
+    }
+    return '${input.substring(0, maxLength - 1)}…';
+  }
+
+  Future<void> _teardownTray() async {
+    if (!_trayReady) return;
+    trayManager.removeListener(this);
+    try {
+      await trayManager.destroy();
+    } catch (_) {
+      // best-effort tray cleanup
+    }
+    _trayReady = false;
   }
 
   String _resolveTrayIconPath() {
@@ -230,7 +334,12 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     final duplicateSummary = _singleInstancePrimary
         ? 'Single-instance lock is active for this process.'
         : 'Secondary instance detected; this process should exit early.';
-    return '$closeSummary $duplicateSummary';
+    final quickActionSummary = _quickActions.canDisconnect
+        ? 'Tray quick action is ready to disconnect active runtime.'
+        : (_quickActions.canConnect
+            ? 'Tray quick action is ready to connect selected profile.'
+            : 'Tray quick actions are waiting for a ready profile/session state.');
+    return '$closeSummary $duplicateSummary $quickActionSummary';
   }
 
   void _notifyIfActive() {

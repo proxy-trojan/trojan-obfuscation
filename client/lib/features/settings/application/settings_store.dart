@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/local_state_store.dart';
 import '../domain/app_settings.dart';
 import 'settings_serialization.dart';
@@ -32,7 +33,8 @@ class SettingsStore extends ChangeNotifier {
   }
 
   Future<void> save() async {
-    await _localStateStore.write(_settingsKey, _serialization.encode(_settings));
+    await _localStateStore.write(
+        _settingsKey, _serialization.encode(_settings));
   }
 
   void setThemeMode(ThemeMode value) {
@@ -55,6 +57,12 @@ class SettingsStore extends ChangeNotifier {
 
   void setLaunchOnLogin(bool value) {
     _settings = _settings.copyWith(launchOnLogin: value);
+    save();
+    notifyListeners();
+  }
+
+  void setDesktopCloseBehavior(DesktopCloseBehavior value) {
+    _settings = _settings.copyWith(desktopCloseBehavior: value);
     save();
     notifyListeners();
   }

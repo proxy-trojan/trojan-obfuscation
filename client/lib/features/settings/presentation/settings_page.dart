@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
+import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../domain/app_settings.dart';
 
@@ -80,6 +81,25 @@ class SettingsPage extends StatelessWidget {
                 onChanged: services.settingsStore.setLaunchOnLogin,
                 title: const Text('Open on login'),
               ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<DesktopCloseBehavior>(
+                initialValue: settings.desktopCloseBehavior,
+                decoration:
+                    const InputDecoration(labelText: 'Window close behavior'),
+                items: DesktopCloseBehavior.values
+                    .map(
+                      (behavior) => DropdownMenuItem<DesktopCloseBehavior>(
+                        value: behavior,
+                        child: Text(_closeBehaviorLabel(behavior)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (DesktopCloseBehavior? value) {
+                  if (value != null) {
+                    services.settingsStore.setDesktopCloseBehavior(value);
+                  }
+                },
+              ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: settings.collectDiagnostics,
@@ -145,5 +165,16 @@ class SettingsPage extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _closeBehaviorLabel(DesktopCloseBehavior behavior) {
+    switch (behavior) {
+      case DesktopCloseBehavior.hideToTray:
+        return 'Hide to tray';
+      case DesktopCloseBehavior.minimizeWindow:
+        return 'Minimize window';
+      case DesktopCloseBehavior.quitApplication:
+        return 'Quit application';
+    }
   }
 }

@@ -87,6 +87,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Desktop lifecycle policy'), findsOneWidget);
+    expect(find.text('Window close behavior'), findsOneWidget);
     expect(find.textContaining('Close:'), findsOneWidget);
     expect(find.textContaining('Minimize:'), findsOneWidget);
     expect(find.textContaining('Quit:'), findsOneWidget);

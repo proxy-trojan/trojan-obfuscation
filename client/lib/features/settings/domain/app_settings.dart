@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../platform/services/desktop_lifecycle_models.dart';
+
 enum UpdateChannel {
   stable,
   beta,
@@ -12,6 +14,7 @@ class AppSettings {
     required this.updateChannel,
     required this.autoCheckForUpdates,
     required this.launchOnLogin,
+    required this.desktopCloseBehavior,
     required this.collectDiagnostics,
     required this.diagnosticsRetentionDays,
   });
@@ -20,6 +23,7 @@ class AppSettings {
   final UpdateChannel updateChannel;
   final bool autoCheckForUpdates;
   final bool launchOnLogin;
+  final DesktopCloseBehavior desktopCloseBehavior;
   final bool collectDiagnostics;
   final int diagnosticsRetentionDays;
 
@@ -28,6 +32,7 @@ class AppSettings {
     UpdateChannel? updateChannel,
     bool? autoCheckForUpdates,
     bool? launchOnLogin,
+    DesktopCloseBehavior? desktopCloseBehavior,
     bool? collectDiagnostics,
     int? diagnosticsRetentionDays,
   }) {
@@ -36,6 +41,7 @@ class AppSettings {
       updateChannel: updateChannel ?? this.updateChannel,
       autoCheckForUpdates: autoCheckForUpdates ?? this.autoCheckForUpdates,
       launchOnLogin: launchOnLogin ?? this.launchOnLogin,
+      desktopCloseBehavior: desktopCloseBehavior ?? this.desktopCloseBehavior,
       collectDiagnostics: collectDiagnostics ?? this.collectDiagnostics,
       diagnosticsRetentionDays:
           diagnosticsRetentionDays ?? this.diagnosticsRetentionDays,
@@ -47,6 +53,7 @@ class AppSettings {
     updateChannel: UpdateChannel.stable,
     autoCheckForUpdates: true,
     launchOnLogin: false,
+    desktopCloseBehavior: DesktopCloseBehavior.hideToTray,
     collectDiagnostics: true,
     diagnosticsRetentionDays: 7,
   );

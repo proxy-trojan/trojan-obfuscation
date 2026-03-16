@@ -23,6 +23,7 @@ This directory only keeps the current, useful project documentation.
 - `v1.3.0-sprint-2-plan.md` — execution plan for the diagnostics and support UX sprint
 - `v1.3.0-sprint-3-plan.md` — execution plan for the crash handling and recovery polish sprint
 - `v1.3.0-sprint-4-plan.md` — execution plan for the desktop lifecycle polish sprint
+- `desktop-lifecycle-behavior.md` — current desktop lifecycle semantics and limitations
 - `../CHANGELOG.md` — versioned release history
 
 ## Decisions
