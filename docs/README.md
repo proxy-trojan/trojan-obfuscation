@@ -28,6 +28,8 @@ This directory only keeps the current, useful project documentation.
 - `v1.3.0-beta-validation-checklist.md` — release checklist for desktop beta candidate validation
 - `desktop-validation-matrix.md` — manual three-platform validation matrix
 - `v1.3.0-known-limitations-template.md` — starting template for beta release notes / limitations
+- `v1.3.0-beta-handoff-notes-2026-03-16.md` — current handoff posture and tester-facing caveats for the desktop beta candidate
+- `v1.3.0-staging-release-checklist-2026-03-16.md` — current staging/commit/release checklist for the desktop beta candidate
 - `v1.3.0-linux-runtime-smoke-report-2026-03-16.md` — latest Linux runtime smoke result and blocker note
 - `../CHANGELOG.md` — versioned release history
 

@@ -36,7 +36,12 @@ Tray labels include the selected profile name when available.
 - A **file-lock guard** enforces single-instance startup
 - If a secondary instance is launched:
   - it sends a focus signal to the primary instance (loopback IPC)
-  - then exits immediately
+  - the primary instance records that external activation in desktop lifecycle state
+  - then the secondary instance exits immediately
+- Settings now surfaces the latest observed external activation for the current app session
+- Dashboard now shows a user-facing “recent desktop activation” callout when the existing window was focused by a secondary launch
+- External activation now nudges the shell back to the Home tab so the user can actually see the callout
+- The dashboard callout can be dismissed manually and also auto-hides after a short freshness window to avoid stale noise
 
 ## Known limitations
 
