@@ -12,9 +12,12 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: services.settingsStore,
+      animation: Listenable.merge(
+          <Listenable>[services.settingsStore, services.desktopLifecycle]),
       builder: (BuildContext context, _) {
         final settings = services.settingsStore.settings;
+        final lifecyclePolicy = services.desktopLifecycle.policy;
+        final lifecycleStatus = services.desktopLifecycle.status;
         return SectionCard(
           title: 'Settings',
           subtitle: 'Product-layer settings, not runtime internals.',
@@ -52,7 +55,8 @@ class SettingsPage extends StatelessWidget {
                     services.settingsStore.setUpdateChannel(value);
                     services.packagingStore.syncUpdatePreferences(
                       channel: value,
-                      autoCheckForUpdates: services.settingsStore.settings.autoCheckForUpdates,
+                      autoCheckForUpdates:
+                          services.settingsStore.settings.autoCheckForUpdates,
                     );
                   }
                 },
@@ -96,11 +100,45 @@ class SettingsPage extends StatelessWidget {
                         .toList(),
                     onChanged: (int? value) {
                       if (value != null) {
-                        services.settingsStore.setDiagnosticsRetentionDays(value);
+                        services.settingsStore
+                            .setDiagnosticsRetentionDays(value);
                       }
                     },
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Desktop lifecycle policy',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Close: ${lifecyclePolicy.closeSemanticsSummary(trayReady: lifecycleStatus.trayReady)}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                    'Minimize: ${lifecyclePolicy.minimizeSemanticsSummary()}'),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Quit: ${lifecyclePolicy.quitSemanticsSummary()}'),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Lifecycle status: ${lifecycleStatus.summary}'),
               ),
             ],
           ),

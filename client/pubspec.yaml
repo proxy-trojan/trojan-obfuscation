@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_secure_storage: ^10.0.0
+  window_manager: ^0.5.1
+  tray_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -18,3 +20,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/tray/tray_icon.png
+    - assets/tray/tray_icon.ico

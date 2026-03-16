@@ -1,5 +1,7 @@
 import 'features/controller/application/adapter_backed_client_controller.dart';
+import 'features/controller/application/client_controller_api.dart';
 import 'features/controller/application/fake_shell_controller_adapter.dart';
+import 'features/controller/domain/client_connection_status.dart';
 import 'features/controller/application/real_shell_controller_adapter.dart';
 import 'features/controller/application/shell_controller_adapter.dart';
 import 'features/diagnostics/application/diagnostics_export_service.dart';
@@ -16,16 +18,22 @@ import 'platform/secure_storage/flutter_secure_storage_adapter.dart';
 import 'platform/secure_storage/memory_secure_storage.dart';
 import 'platform/secure_storage/secure_storage.dart';
 import 'platform/services/client_filesystem_layout.dart';
+import 'platform/services/desktop_lifecycle_models.dart';
+import 'platform/services/desktop_lifecycle_service.dart';
 import 'platform/services/file_backed_local_state_store.dart';
 import 'platform/services/file_diagnostics_file_exporter.dart';
 import 'platform/services/memory_diagnostics_file_exporter.dart';
 import 'platform/services/memory_local_state_store.dart';
+import 'platform/services/noop_desktop_lifecycle_service.dart';
+import 'platform/services/plugin_desktop_lifecycle_service.dart';
 import 'platform/services/service_registry.dart';
 
 import 'dart:io';
 
 class ClientBootstrap {
-  static Future<ClientServiceRegistry> createServices() async {
+  static Future<ClientServiceRegistry> createServices({
+    bool singleInstancePrimary = true,
+  }) async {
     final secureStorage = _createSecureStorage();
     final filesystemLayout = ClientFilesystemLayout.maybeForCurrentPlatform();
     final localStateStore = filesystemLayout == null
@@ -76,6 +84,12 @@ class ClientBootstrap {
     await controller.restorePersistedState();
     packagingStore.markInstallerSkeletonReady();
 
+    final desktopLifecycle = _createDesktopLifecycleService(
+      controller: controller,
+      singleInstancePrimary: singleInstancePrimary,
+    );
+    await desktopLifecycle.initialize();
+
     final diagnostics = DiagnosticsExportService(
       profileStore: profileStore,
       profilePortability: profilePortability,
@@ -98,6 +112,7 @@ class ClientBootstrap {
       settingsStore: settingsStore,
       controller: controller,
       diagnostics: diagnostics,
+      desktopLifecycle: desktopLifecycle,
     );
   }
 
@@ -105,6 +120,28 @@ class ClientBootstrap {
     return FallbackSecureStorage(
       primary: FlutterSecureStorageAdapter(),
       fallback: MemorySecureStorage(),
+    );
+  }
+
+  static DesktopLifecycleService _createDesktopLifecycleService({
+    required ClientControllerApi controller,
+    required bool singleInstancePrimary,
+  }) {
+    if (!isDesktopPlatform()) {
+      return NoopDesktopLifecycleService();
+    }
+
+    return PluginDesktopLifecycleService(
+      policy: DesktopLifecyclePolicy.desktopDefault,
+      singleInstancePrimary: singleInstancePrimary,
+      onQuitRequested: () async {
+        final phase = controller.status.phase;
+        if (phase == ClientConnectionPhase.connected ||
+            phase == ClientConnectionPhase.connecting ||
+            phase == ClientConnectionPhase.disconnecting) {
+          await controller.disconnect();
+        }
+      },
     );
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/advanced/presentation/advanced_page.dart';
@@ -17,6 +19,18 @@ class TrojanClientAppShell extends StatefulWidget {
 
 class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.services.desktopLifecycle.initialize());
+  }
+
+  @override
+  void dispose() {
+    unawaited(widget.services.desktopLifecycle.disposeService());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
