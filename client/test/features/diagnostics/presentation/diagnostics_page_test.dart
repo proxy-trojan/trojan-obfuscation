@@ -184,6 +184,11 @@ void main() {
 
     expect(find.textContaining('Failed to export diagnostics bundle'),
         findsOneWidget);
-    expect(find.textContaining('permission denied'), findsOneWidget);
+    expect(
+      find.text('Detail: Bad state: permission denied for diagnostics export'),
+      findsOneWidget,
+    );
+    expect(find.text('The support bundle could not be written'), findsOneWidget);
+    expect(find.textContaining('Check the export target path'), findsOneWidget);
   });
 }

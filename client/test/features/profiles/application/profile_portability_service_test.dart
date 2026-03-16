@@ -102,4 +102,27 @@ void main() {
     expect(bundle.trojanPasswordIncluded, isFalse);
     expect(bundle.sourceDeviceHadStoredPassword, isFalse);
   });
+
+  test('exportProfiles builds profile bundle payload without raw secrets', () {
+    final service = ProfilePortabilityService();
+
+    final exported = service.exportProfiles(<ClientProfile>[
+      _profile(id: 'profile-hk', name: 'Hong Kong', hasStoredPassword: true),
+      _profile(id: 'profile-us', name: 'United States'),
+    ]);
+
+    final map = jsonDecode(exported) as Map<String, dynamic>;
+    expect(map['kind'], 'trojan-pro-client-profile-bundle');
+
+    final profiles = map['profiles'] as List<dynamic>;
+    expect(profiles, hasLength(2));
+
+    final first = profiles.first as Map<String, dynamic>;
+    final firstSecrets = first['secrets'] as Map<String, dynamic>;
+    expect(firstSecrets['trojanPasswordIncluded'], false);
+    expect(firstSecrets['sourceDeviceHadStoredPassword'], true);
+
+    expect(exported, isNot(contains('super-secret')));
+    expect(exported, isNot(contains('trojan-password')));
+  });
 }

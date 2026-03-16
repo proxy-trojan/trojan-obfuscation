@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
+import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../controller/domain/last_runtime_failure_summary.dart';
@@ -20,6 +21,7 @@ class AdvancedPage extends StatelessWidget {
     final telemetry = services.controller.telemetry;
     final issue = SupportIssueDescriptor.fromConnectionStatus(status);
     final lastRuntimeFailure = services.controller.lastRuntimeFailure;
+    final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
 
     return DefaultTabController(
       length: 2,
@@ -44,6 +46,7 @@ class AdvancedPage extends StatelessWidget {
                 diagnosticsBackend:
                     services.diagnosticsFileExporter.backendName,
                 lastRuntimeFailure: lastRuntimeFailure,
+                appUnhandledError: appUnhandledError,
               ),
               const SizedBox(height: 16),
               _SupportActionsCard(
@@ -90,6 +93,7 @@ class _SupportOverviewCard extends StatelessWidget {
     required this.backendVersion,
     required this.diagnosticsBackend,
     required this.lastRuntimeFailure,
+    required this.appUnhandledError,
   });
 
   final ClientConnectionStatus status;
@@ -100,6 +104,7 @@ class _SupportOverviewCard extends StatelessWidget {
   final String backendVersion;
   final String diagnosticsBackend;
   final LastRuntimeFailureSummary? lastRuntimeFailure;
+  final AppUnhandledErrorSummary? appUnhandledError;
 
   String get _headline {
     return switch (status.phase) {
@@ -147,6 +152,10 @@ class _SupportOverviewCard extends StatelessWidget {
           if (lastRuntimeFailure != null) ...<Widget>[
             const SizedBox(height: 12),
             _LastRuntimeFailureBanner(summary: lastRuntimeFailure!),
+          ],
+          if (appUnhandledError != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _AppUnhandledErrorBanner(summary: appUnhandledError!),
           ],
           const SizedBox(height: 16),
           Wrap(
@@ -201,6 +210,45 @@ class _LastRuntimeFailureBanner extends StatelessWidget {
           Text(summary.detail),
           const SizedBox(height: 6),
           Text('Phase: ${summary.phase}'),
+          Text('Recorded at: ${summary.recordedAt.toIso8601String()}'),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppUnhandledErrorBanner extends StatelessWidget {
+  const _AppUnhandledErrorBanner({required this.summary});
+
+  final AppUnhandledErrorSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Last uncaught app error',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.deepPurple,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(summary.message),
+          const SizedBox(height: 6),
+          Text('Source: ${summary.source}'),
+          const SizedBox(height: 6),
+          Text(summary.stackPreview),
+          const SizedBox(height: 6),
           Text('Recorded at: ${summary.recordedAt.toIso8601String()}'),
         ],
       ),

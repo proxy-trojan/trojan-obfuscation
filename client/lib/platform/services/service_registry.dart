@@ -7,6 +7,7 @@ import '../../features/profiles/application/profile_secrets_service.dart';
 import '../../features/profiles/application/profile_store.dart';
 import '../../features/settings/application/settings_store.dart';
 import '../secure_storage/secure_storage.dart';
+import 'app_runtime_error_store.dart';
 import 'desktop_lifecycle_service.dart';
 import 'diagnostics_file_exporter.dart';
 import 'local_state_store.dart';
@@ -26,7 +27,9 @@ class ClientServiceRegistry {
     required this.controller,
     required this.diagnostics,
     DesktopLifecycleService? desktopLifecycle,
-  }) : desktopLifecycle = desktopLifecycle ?? NoopDesktopLifecycleService();
+    AppRuntimeErrorStore? appRuntimeErrors,
+  })  : desktopLifecycle = desktopLifecycle ?? NoopDesktopLifecycleService(),
+        appRuntimeErrors = appRuntimeErrors ?? AppRuntimeErrorStore();
 
   final SecureStorage secureStorage;
   final LocalStateStore localStateStore;
@@ -40,6 +43,7 @@ class ClientServiceRegistry {
   final ClientControllerApi controller;
   final DiagnosticsExportService diagnostics;
   final DesktopLifecycleService desktopLifecycle;
+  final AppRuntimeErrorStore appRuntimeErrors;
 
   SecureStorageStatus get secureStorageStatus => secureStorage.status;
 }

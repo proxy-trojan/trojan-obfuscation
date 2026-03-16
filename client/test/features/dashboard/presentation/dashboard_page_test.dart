@@ -116,12 +116,16 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
 Future<void> _showDashboard(
   WidgetTester tester, {
   required ClientServiceRegistry services,
+  VoidCallback? onOpenSettings,
 }) async {
   await _setDesktopSurface(tester);
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: DashboardPage(services: services),
+        body: DashboardPage(
+          services: services,
+          onOpenSettings: onOpenSettings,
+        ),
       ),
     ),
   );
@@ -342,5 +346,69 @@ void main() {
       services.controller.status.phase,
       ClientConnectionPhase.disconnected,
     );
+  });
+
+  testWidgets('shows recent desktop activation when duplicate launch focuses window',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    await services.desktopLifecycle.recordExternalActivation(
+      source: 'secondary-launch-focus-ipc',
+    );
+
+    await _showDashboard(
+      tester,
+      services: services,
+      onOpenSettings: () {},
+    );
+
+    expect(find.text('Recent desktop activation'), findsOneWidget);
+    expect(
+      find.text('Another launch focused this existing window'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Single-instance mitigation is working'),
+      findsOneWidget,
+    );
+    expect(find.text('Single-instance guard active'), findsOneWidget);
+    expect(find.text('Review desktop behavior'), findsOneWidget);
+  });
+
+  testWidgets('recent desktop activation can be dismissed',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    await services.desktopLifecycle.recordExternalActivation(
+      source: 'secondary-launch-focus-ipc',
+    );
+
+    await _showDashboard(tester, services: services);
+    expect(find.text('Recent desktop activation'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
+    await tester.pump();
+
+    expect(find.text('Recent desktop activation'), findsNothing);
+  });
+
+  testWidgets('recent desktop activation can route user to desktop settings',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    var openedSettings = false;
+    await services.desktopLifecycle.recordExternalActivation(
+      source: 'secondary-launch-focus-ipc',
+    );
+
+    await _showDashboard(
+      tester,
+      services: services,
+      onOpenSettings: () {
+        openedSettings = true;
+      },
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Review desktop behavior'));
+    await tester.pump();
+
+    expect(openedSettings, isTrue);
   });
 }

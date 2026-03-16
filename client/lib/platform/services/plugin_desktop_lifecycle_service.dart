@@ -49,6 +49,9 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
   DesktopLifecycleStatus get status => _status;
 
   @override
+  DesktopQuickActionsState get quickActions => _quickActions;
+
+  @override
   Future<void> initialize() async {
     if (_initialized || _disposed) return;
 
@@ -119,6 +122,25 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     }
 
     _status = _status.copyWith(summary: _composeSummary());
+    _notifyIfActive();
+  }
+
+  @override
+  Future<void> recordExternalActivation({required String source}) async {
+    _status = _status.copyWith(
+      lastExternalActivationAt: DateTime.now(),
+      lastExternalActivationSource: source,
+      summary: _composeSummary(),
+    );
+    _notifyIfActive();
+  }
+
+  @override
+  Future<void> clearExternalActivation() async {
+    _status = _status.copyWith(
+      clearLastExternalActivation: true,
+      summary: _composeSummary(),
+    );
     _notifyIfActive();
   }
 
@@ -331,14 +353,12 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
 
   String _composeSummary() {
     final closeSummary = _policy.closeSemanticsSummary(trayReady: _trayReady);
-    final duplicateSummary = _singleInstancePrimary
-        ? 'Single-instance lock is active for this process.'
-        : 'Secondary instance detected; this process should exit early.';
-    final quickActionSummary = _quickActions.canDisconnect
-        ? 'Tray quick action is ready to disconnect active runtime.'
-        : (_quickActions.canConnect
-            ? 'Tray quick action is ready to connect selected profile.'
-            : 'Tray quick actions are waiting for a ready profile/session state.');
+    final duplicateSummary = _policy.duplicateLaunchSummary(
+      singleInstancePrimary: _singleInstancePrimary,
+    );
+    final quickActionSummary = _quickActions.readinessSummary(
+      trayReady: _trayReady,
+    );
     return '$closeSummary $duplicateSummary $quickActionSummary';
   }
 

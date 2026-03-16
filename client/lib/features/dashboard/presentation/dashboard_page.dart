@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
+import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../profiles/domain/client_profile.dart';
@@ -26,11 +27,13 @@ class DashboardPage extends StatelessWidget {
     required this.services,
     this.onOpenProfiles,
     this.onOpenAdvanced,
+    this.onOpenSettings,
   });
 
   final ClientServiceRegistry services;
   final VoidCallback? onOpenProfiles;
   final VoidCallback? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +42,7 @@ class DashboardPage extends StatelessWidget {
         services.profileStore,
         services.controller,
         services.settingsStore,
+        services.desktopLifecycle,
       ]),
       builder: (BuildContext context, _) {
         final selectedProfile = services.profileStore.selectedProfile;
@@ -52,9 +56,20 @@ class DashboardPage extends StatelessWidget {
         );
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
+        final desktopLifecycleStatus = services.desktopLifecycle.status;
 
         return ListView(
           children: <Widget>[
+            if (desktopLifecycleStatus.isRecentExternalActivation()) ...<Widget>[
+              _ExternalActivationCard(
+                status: desktopLifecycleStatus,
+                onDismiss: () {
+                  services.desktopLifecycle.clearExternalActivation();
+                },
+                onOpenSettings: onOpenSettings,
+              ),
+              const SizedBox(height: 16),
+            ],
             if (selectedProfile == null && activeProfile == null)
               _StateCalloutCard(
                 icon: Icons.playlist_add,
@@ -189,6 +204,132 @@ class DashboardPage extends StatelessWidget {
     if (!profile.hasStoredPassword) return true;
     return status.phase != ClientConnectionPhase.connected &&
         status.phase != ClientConnectionPhase.disconnecting;
+  }
+}
+
+class _ExternalActivationCard extends StatelessWidget {
+  const _ExternalActivationCard({
+    required this.status,
+    required this.onDismiss,
+    this.onOpenSettings,
+  });
+
+  final DesktopLifecycleStatus status;
+  final VoidCallback onDismiss;
+  final VoidCallback? onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'Recent desktop activation',
+      subtitle:
+          'Make duplicate-launch and focus handoff behavior visible instead of leaving it hidden in the background.',
+      trailing: TextButton.icon(
+        onPressed: onDismiss,
+        icon: const Icon(Icons.close),
+        label: const Text('Dismiss'),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.deepPurple.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              status.externalActivationHeadline(),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.deepPurple,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(status.externalActivationGuidance()),
+            const SizedBox(height: 8),
+            Text(
+              'Observed at: ${status.lastExternalActivationAt?.toIso8601String() ?? 'unknown'}',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _ActivationFactPill(
+                  label: status.singleInstancePrimary
+                      ? 'Single-instance guard active'
+                      : 'Secondary instance handoff',
+                ),
+                _ActivationFactPill(
+                  label: status.trayReady
+                      ? 'Tray integration ready'
+                      : 'Tray integration unavailable',
+                ),
+                _ActivationFactPill(
+                  label: status.closeInterceptEnabled
+                      ? 'Close interception enabled'
+                      : 'Close interception disabled',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Why you are seeing this: the app prevented a duplicate desktop session and handed focus back to the window that was already running.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                if (onOpenSettings != null)
+                  OutlinedButton.icon(
+                    onPressed: onOpenSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('Review desktop behavior'),
+                  ),
+                TextButton.icon(
+                  onPressed: onDismiss,
+                  icon: const Icon(Icons.done),
+                  label: const Text('Got it'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This reminder auto-hides after a short window so the dashboard does not keep stale activation noise around forever.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivationFactPill extends StatelessWidget {
+  const _ActivationFactPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.deepPurple,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 }
 

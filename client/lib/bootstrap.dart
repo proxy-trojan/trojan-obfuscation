@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'features/controller/application/adapter_backed_client_controller.dart';
 import 'features/controller/application/client_controller_api.dart';
 import 'features/controller/application/fake_shell_controller_adapter.dart';
-import 'features/controller/domain/client_connection_status.dart';
 import 'features/controller/application/real_shell_controller_adapter.dart';
 import 'features/controller/application/shell_controller_adapter.dart';
+import 'features/controller/domain/client_connection_status.dart';
 import 'features/diagnostics/application/diagnostics_export_service.dart';
 import 'features/packaging/application/packaging_export_service.dart';
 import 'features/packaging/application/packaging_store.dart';
@@ -19,6 +20,7 @@ import 'platform/secure_storage/fallback_secure_storage.dart';
 import 'platform/secure_storage/flutter_secure_storage_adapter.dart';
 import 'platform/secure_storage/memory_secure_storage.dart';
 import 'platform/secure_storage/secure_storage.dart';
+import 'platform/services/app_runtime_error_store.dart';
 import 'platform/services/client_filesystem_layout.dart';
 import 'platform/services/desktop_lifecycle_models.dart';
 import 'platform/services/desktop_lifecycle_service.dart';
@@ -30,24 +32,27 @@ import 'platform/services/noop_desktop_lifecycle_service.dart';
 import 'platform/services/plugin_desktop_lifecycle_service.dart';
 import 'platform/services/service_registry.dart';
 
-import 'dart:io';
-
 class ClientBootstrap {
   static Future<ClientServiceRegistry> createServices({
     bool singleInstancePrimary = true,
   }) async {
     final secureStorage = _createSecureStorage();
     final filesystemLayout = ClientFilesystemLayout.maybeForCurrentPlatform();
+
     final localStateStore = filesystemLayout == null
         ? MemoryLocalStateStore()
         : FileBackedLocalStateStore(
-            directoryPath: filesystemLayout.stateDirectoryPath);
+            directoryPath: filesystemLayout.stateDirectoryPath,
+          );
     final diagnosticsFileExporter = filesystemLayout == null
         ? MemoryDiagnosticsFileExporter()
         : FileDiagnosticsFileExporter(
-            directoryPath: filesystemLayout.diagnosticsDirectoryPath);
+            directoryPath: filesystemLayout.diagnosticsDirectoryPath,
+          );
+
     final profileSerialization = ProfileSerialization();
     final settingsSerialization = SettingsSerialization();
+
     final profileStore = ProfileStore.withSampleProfiles(
       localStateStore: localStateStore,
       serialization: profileSerialization,
@@ -58,11 +63,17 @@ class ClientBootstrap {
     );
     final profilePortability = ProfilePortabilityService();
     final profileSecrets = ProfileSecretsService(secureStorage: secureStorage);
+
     final packagingStore = PackagingStore();
+    final appRuntimeErrors = AppRuntimeErrorStore(
+      localStateStore: localStateStore,
+    );
+
     final packagingExport = PackagingExportService(
       packagingStore: packagingStore,
       fileExporter: diagnosticsFileExporter,
     );
+
     final controller = AdapterBackedClientController(
       adapter: _createShellControllerAdapter(),
       profileSecrets: profileSecrets,
@@ -72,6 +83,7 @@ class ClientBootstrap {
 
     await profileStore.load();
     await settingsStore.load();
+    await appRuntimeErrors.restore();
 
     final secretSnapshots =
         await profileSecrets.snapshotForProfiles(profileStore.profiles);
@@ -79,6 +91,7 @@ class ClientBootstrap {
       for (final snapshot in secretSnapshots)
         snapshot.profileId: snapshot.hasTrojanPassword,
     });
+
     packagingStore.syncUpdatePreferences(
       channel: settingsStore.settings.updateChannel,
       autoCheckForUpdates: settingsStore.settings.autoCheckForUpdates,
@@ -134,6 +147,7 @@ class ClientBootstrap {
       controller: controller,
       secureStorage: secureStorage,
       fileExporter: diagnosticsFileExporter,
+      appRuntimeErrors: appRuntimeErrors,
     );
 
     return ClientServiceRegistry(
@@ -149,6 +163,7 @@ class ClientBootstrap {
       controller: controller,
       diagnostics: diagnostics,
       desktopLifecycle: desktopLifecycle,
+      appRuntimeErrors: appRuntimeErrors,
     );
   }
 

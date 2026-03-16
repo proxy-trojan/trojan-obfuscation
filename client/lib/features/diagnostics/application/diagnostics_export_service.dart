@@ -1,12 +1,13 @@
 import 'dart:convert';
 
+import '../../../platform/secure_storage/secure_storage.dart';
+import '../../../platform/services/app_runtime_error_store.dart';
+import '../../../platform/services/diagnostics_file_exporter.dart';
 import '../../controller/application/client_controller_api.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
 import '../../settings/application/settings_store.dart';
-import '../../../platform/secure_storage/secure_storage.dart';
-import '../../../platform/services/diagnostics_file_exporter.dart';
 
 class DiagnosticsExportResult {
   const DiagnosticsExportResult({
@@ -27,7 +28,8 @@ class DiagnosticsExportService {
     required this.controller,
     required this.secureStorage,
     required this.fileExporter,
-  });
+    AppRuntimeErrorStore? appRuntimeErrors,
+  }) : appRuntimeErrors = appRuntimeErrors ?? AppRuntimeErrorStore();
 
   final ProfileStore profileStore;
   final ProfilePortabilityService profilePortability;
@@ -36,6 +38,7 @@ class DiagnosticsExportService {
   final ClientControllerApi controller;
   final SecureStorage secureStorage;
   final DiagnosticsFileExporter fileExporter;
+  final AppRuntimeErrorStore appRuntimeErrors;
 
   Future<String> buildPreviewBundle() async {
     final selected = profileStore.selectedProfile;
@@ -44,6 +47,7 @@ class DiagnosticsExportService {
     final releaseManifest = packagingStore.buildReleaseManifest();
     final updateMetadata = packagingStore.buildUpdateMetadataSnapshot();
     final storageStatus = secureStorage.status;
+    final appUnhandledError = appRuntimeErrors.lastUnhandledError;
 
     final payload = <String, Object?>{
       'generatedAt': DateTime.now().toIso8601String(),
@@ -98,7 +102,18 @@ class DiagnosticsExportService {
         'updateChannel': settingsStore.settings.updateChannel.name,
         'launchOnLogin': settingsStore.settings.launchOnLogin,
         'collectDiagnostics': settingsStore.settings.collectDiagnostics,
-        'diagnosticsRetentionDays': settingsStore.settings.diagnosticsRetentionDays,
+        'diagnosticsRetentionDays':
+            settingsStore.settings.diagnosticsRetentionDays,
+      },
+      'appRuntime': {
+        'lastUnhandledError': appUnhandledError == null
+            ? null
+            : {
+                'source': appUnhandledError.source,
+                'message': appUnhandledError.message,
+                'stackPreview': appUnhandledError.stackPreview,
+                'recordedAt': appUnhandledError.recordedAt.toIso8601String(),
+              },
       },
       'secureStorage': {
         'backend': secureStorage.backendName,
@@ -108,62 +123,31 @@ class DiagnosticsExportService {
         'isSecure': storageStatus.isSecure,
         'isPersistent': storageStatus.isPersistent,
         'fallbackEnabled': storageStatus.fallbackEnabled,
-        'fallbackActive': storageStatus.fallbackActive,
-        'primaryBackend': storageStatus.primaryBackendName,
-        'fallbackBackend': storageStatus.fallbackBackendName,
-        'lastPrimaryError': storageStatus.lastPrimaryError,
-        'storedKeyCount': keys.length,
         'keys': keys,
       },
-      'packaging': {
-        'workflow': {
-          'channel': packagingStore.state.selectedChannel.name,
-          'currentVersionLabel': packagingStore.state.currentVersionLabel,
-          'updateChecksEnabled': packagingStore.state.updateChecksEnabled,
-          'installerSkeletonReady': packagingStore.state.installerSkeletonReady,
-          'exportStatus': packagingStore.state.exportStatus.name,
-          'lastCheckSummary': packagingStore.state.lastCheckSummary,
-          'lastExport': packagingStore.state.lastExport == null
-              ? null
-              : {
-                  'startedAt': packagingStore.state.lastExport!.startedAt.toIso8601String(),
-                  'finishedAt': packagingStore.state.lastExport!.finishedAt?.toIso8601String(),
-                  'status': packagingStore.state.lastExport!.status.name,
-                  'manifestTarget': packagingStore.state.lastExport!.manifestTarget,
-                  'metadataTarget': packagingStore.state.lastExport!.metadataTarget,
-                  'rollbackPlanTarget': packagingStore.state.lastExport!.rollbackPlanTarget,
-                  'error': packagingStore.state.lastExport!.error,
-                },
-        },
-        'releaseManifest': releaseManifest.toJson(),
+      'release': {
+        'manifest': releaseManifest.toJson(),
         'updateMetadata': updateMetadata.toJson(),
-        'exportHistory': packagingStore.exportHistory
-            .map(
-              (record) => <String, Object?>{
-                'startedAt': record.startedAt.toIso8601String(),
-                'finishedAt': record.finishedAt?.toIso8601String(),
-                'status': record.status.name,
-                'manifestTarget': record.manifestTarget,
-                'metadataTarget': record.metadataTarget,
-                'rollbackPlanTarget': record.rollbackPlanTarget,
-                'error': record.error,
-              },
-            )
-            .toList(),
       },
-      'exportPreview': selected == null ? null : profilePortability.exportProfile(selected),
+      'profilesExport':
+          jsonDecode(profilePortability.exportProfiles(profileStore.profiles)),
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);
   }
 
-  Future<DiagnosticsExportResult> exportPreviewBundle() async {
+  Future<DiagnosticsExportResult> exportSupportBundle() async {
     final contents = await buildPreviewBundle();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     final target = await fileExporter.exportText(
-      fileName: 'diagnostics-$timestamp.json',
+      fileName: 'trojan-pro-support-$timestamp.json',
       contents: contents,
     );
     return DiagnosticsExportResult(target: target, contents: contents);
+  }
+
+  @Deprecated('Use exportSupportBundle instead.')
+  Future<DiagnosticsExportResult> exportPreviewBundle() {
+    return exportSupportBundle();
   }
 }

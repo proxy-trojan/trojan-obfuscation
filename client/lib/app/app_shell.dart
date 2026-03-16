@@ -19,17 +19,38 @@ class TrojanClientAppShell extends StatefulWidget {
 
 class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
   int _selectedIndex = 0;
+  DateTime? _lastHandledExternalActivationAt;
 
   @override
   void initState() {
     super.initState();
+    widget.services.desktopLifecycle.addListener(_handleDesktopLifecycleChanged);
     unawaited(widget.services.desktopLifecycle.initialize());
   }
 
   @override
   void dispose() {
+    widget.services.desktopLifecycle
+        .removeListener(_handleDesktopLifecycleChanged);
     unawaited(widget.services.desktopLifecycle.disposeService());
     super.dispose();
+  }
+
+  void _handleDesktopLifecycleChanged() {
+    final status = widget.services.desktopLifecycle.status;
+    if (!status.isRecentExternalActivation()) {
+      return;
+    }
+
+    final activatedAt = status.lastExternalActivationAt;
+    if (activatedAt == null || activatedAt == _lastHandledExternalActivationAt) {
+      return;
+    }
+
+    _lastHandledExternalActivationAt = activatedAt;
+    if (_selectedIndex != 0 && mounted) {
+      setState(() => _selectedIndex = 0);
+    }
   }
 
   @override
@@ -39,6 +60,7 @@ class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
         services: widget.services,
         onOpenProfiles: () => setState(() => _selectedIndex = 1),
         onOpenAdvanced: () => setState(() => _selectedIndex = 3),
+        onOpenSettings: () => setState(() => _selectedIndex = 2),
       ),
       ProfilesPage(services: widget.services),
       SettingsPage(services: widget.services),

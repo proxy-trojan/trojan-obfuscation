@@ -94,5 +94,35 @@ void main() {
     expect(find.textContaining('Minimize:'), findsOneWidget);
     expect(find.textContaining('Quit:'), findsOneWidget);
     expect(find.textContaining('Lifecycle status:'), findsOneWidget);
+    expect(find.textContaining('Tray integration:'), findsOneWidget);
+    expect(find.textContaining('Close interception:'), findsOneWidget);
+    expect(find.textContaining('Duplicate launch:'), findsOneWidget);
+    expect(find.textContaining('Tray policy:'), findsOneWidget);
+    expect(find.textContaining('Quick actions profile:'), findsOneWidget);
+    expect(find.textContaining('Quick actions readiness:'), findsOneWidget);
+    expect(find.textContaining('External activation:'), findsOneWidget);
+  });
+
+  testWidgets('shows external activation summary after focus handoff is recorded',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+    await services.desktopLifecycle.recordExternalActivation(
+      source: 'secondary-launch-focus-ipc',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(services: services),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.textContaining('secondary-launch-focus-ipc'),
+      findsOneWidget,
+    );
   });
 }

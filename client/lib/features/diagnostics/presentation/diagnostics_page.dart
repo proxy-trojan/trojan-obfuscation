@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
+import '../application/support_issue_descriptor.dart';
 import '../../profiles/presentation/import_export_dialog.dart';
 
 class DiagnosticsPage extends StatefulWidget {
@@ -14,8 +15,9 @@ class DiagnosticsPage extends StatefulWidget {
 }
 
 class _DiagnosticsPageState extends State<DiagnosticsPage> {
-  String _preview = 'Press “Generate preview” to build a diagnostics payload.';
+  String _preview = 'Press “Generate preview” to build a support bundle payload.';
   String? _lastExportTarget;
+  SupportIssueDescriptor? _lastExportIssue;
   bool _busy = false;
 
   @override
@@ -64,6 +66,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               Text('Last export target: $_lastExportTarget'),
               const SizedBox(height: 12),
             ],
+            if (_lastExportIssue != null) ...<Widget>[
+              _ExportIssueBanner(issue: _lastExportIssue!),
+              const SizedBox(height: 12),
+            ],
             Text(
               'Preview excerpt',
               style: Theme.of(context)
@@ -92,6 +98,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       if (!mounted) return;
       setState(() {
         _preview = preview;
+        _lastExportIssue = null;
       });
     } catch (error) {
       if (!mounted) return;
@@ -109,14 +116,19 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   Future<void> _export() async {
     setState(() => _busy = true);
     try {
-      final result = await widget.services.diagnostics.exportPreviewBundle();
+      final result = await widget.services.diagnostics.exportSupportBundle();
       if (!mounted) return;
       setState(() {
         _preview = result.contents;
         _lastExportTarget = result.target;
+        _lastExportIssue = null;
       });
     } catch (error) {
       if (!mounted) return;
+      final issue = SupportIssueDescriptor.fromExportError(error);
+      setState(() {
+        _lastExportIssue = issue;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to export diagnostics bundle: $error')),
       );
@@ -125,6 +137,41 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         setState(() => _busy = false);
       }
     }
+  }
+}
+
+class _ExportIssueBanner extends StatelessWidget {
+  const _ExportIssueBanner({required this.issue});
+
+  final SupportIssueDescriptor issue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            issue.headline,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.deepPurple,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(issue.guidance),
+          const SizedBox(height: 6),
+          Text('Detail: ${issue.summary}'),
+        ],
+      ),
+    );
   }
 }
 
@@ -160,7 +207,7 @@ class _SupportBundleSummaryCard extends StatelessWidget {
           const Text('Includes'),
           const SizedBox(height: 4),
           const Text(
-            '• selected profile summary\n• controller status, session, and recent events\n• settings and packaging/update metadata\n• secure-storage backend summary and key counts',
+            '• selected profile summary and profile portability bundle\n• controller status, runtime session, and recent events\n• settings and release metadata snapshots\n• last uncaught app error summary (if available)\n• secure-storage backend summary and key inventory',
           ),
           const SizedBox(height: 12),
           const Text('Does not include'),

@@ -8,12 +8,16 @@ class NoopDesktopLifecycleService extends DesktopLifecycleService {
 
   DesktopLifecyclePolicy _policy;
   DesktopLifecycleStatus _status;
+  DesktopQuickActionsState _quickActions = DesktopQuickActionsState.initial;
 
   @override
   DesktopLifecyclePolicy get policy => _policy;
 
   @override
   DesktopLifecycleStatus get status => _status;
+
+  @override
+  DesktopQuickActionsState get quickActions => _quickActions;
 
   @override
   Future<void> initialize() async {
@@ -31,7 +35,25 @@ class NoopDesktopLifecycleService extends DesktopLifecycleService {
   }
 
   @override
-  Future<void> updateQuickActions(DesktopQuickActionsState state) async {}
+  Future<void> updateQuickActions(DesktopQuickActionsState state) async {
+    _quickActions = state;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> recordExternalActivation({required String source}) async {
+    _status = _status.copyWith(
+      lastExternalActivationAt: DateTime.now(),
+      lastExternalActivationSource: source,
+    );
+    notifyListeners();
+  }
+
+  @override
+  Future<void> clearExternalActivation() async {
+    _status = _status.copyWith(clearLastExternalActivation: true);
+    notifyListeners();
+  }
 
   @override
   Future<void> minimizeMainWindow() async {}

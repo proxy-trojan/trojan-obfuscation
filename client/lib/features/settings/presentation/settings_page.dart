@@ -22,6 +22,7 @@ class SettingsPage extends StatelessWidget {
         final settings = services.settingsStore.settings;
         final lifecyclePolicy = services.desktopLifecycle.policy;
         final lifecycleStatus = services.desktopLifecycle.status;
+        final quickActions = services.desktopLifecycle.quickActions;
         final packagingWorkflow = services.packagingStore.state;
 
         return SectionCard(
@@ -190,6 +191,55 @@ class SettingsPage extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text('Lifecycle status: ${lifecycleStatus.summary}'),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Tray integration: ${lifecycleStatus.trayReady ? 'ready' : 'unavailable'}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Close interception: ${lifecycleStatus.closeInterceptEnabled ? 'enabled' : 'disabled'}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Duplicate launch: ${lifecyclePolicy.duplicateLaunchSummary(singleInstancePrimary: lifecycleStatus.singleInstancePrimary)}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Tray policy: ${lifecyclePolicy.trayPolicySummary()}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Quick actions profile: ${quickActions.profileSummary()}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Quick actions readiness: ${quickActions.readinessSummary(trayReady: lifecycleStatus.trayReady)}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'External activation: ${lifecycleStatus.externalActivationSummary()}',
+                ),
               ),
               const SizedBox(height: 16),
               const Divider(),
