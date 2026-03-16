@@ -29,7 +29,8 @@ class PackagingDryRunService {
       generatedAt: generatedAt,
       artifactPrefix: 'trojan-pro-client-${state.selectedChannel.name}',
       platforms: _packagingStore.packageStatuses,
-      rollbackHint: 'Retain previous stable manifest + installer metadata for one-click rollback.',
+      rollbackHint:
+          'Retain previous stable manifest + installer metadata for one-click rollback.',
     );
     final metadata = UpdateMetadataSnapshot(
       generatedAt: generatedAt,
@@ -37,13 +38,15 @@ class PackagingDryRunService {
       updateChecksEnabled: state.updateChecksEnabled,
       currentVersionLabel: state.currentVersionLabel,
       manifestArtifactName: '${manifest.artifactPrefix}-manifest.json',
+      contractVersion: state.releaseMetadataContractVersion,
       summary: state.lastCheckSummary,
     );
 
     return PackagingDryRunResult(
       manifest: manifest,
       updateMetadata: metadata,
-      summary: 'Dry-run snapshot built for ${state.selectedChannel.name} channel with ${_packagingStore.packageStatuses.length} platform targets.',
+      summary:
+          'Dry-run snapshot built for ${state.selectedChannel.name} channel with ${_packagingStore.packageStatuses.length} platform targets.',
     );
   }
 }

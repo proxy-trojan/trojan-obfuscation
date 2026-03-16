@@ -88,6 +88,8 @@ void main() {
 
     expect(find.text('Desktop lifecycle policy'), findsOneWidget);
     expect(find.text('Window close behavior'), findsOneWidget);
+    expect(find.text('Check for updates now'), findsOneWidget);
+    expect(find.text('Update channel skeleton'), findsOneWidget);
     expect(find.textContaining('Close:'), findsOneWidget);
     expect(find.textContaining('Minimize:'), findsOneWidget);
     expect(find.textContaining('Quit:'), findsOneWidget);

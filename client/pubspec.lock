@@ -448,10 +448,9 @@ packages:
   tray_manager:
     dependency: "direct main"
     description:
-      name: tray_manager
-      sha256: c5fd83b0ae4d80be6eaedfad87aaefab8787b333b8ebd064b0e442a81006035b
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/tray_manager_linux_fallback"
+      relative: true
+    source: path
     version: "0.5.2"
   typed_data:
     dependency: transitive

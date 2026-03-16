@@ -24,6 +24,11 @@ This directory only keeps the current, useful project documentation.
 - `v1.3.0-sprint-3-plan.md` — execution plan for the crash handling and recovery polish sprint
 - `v1.3.0-sprint-4-plan.md` — execution plan for the desktop lifecycle polish sprint
 - `desktop-lifecycle-behavior.md` — current desktop lifecycle semantics and limitations
+- `update-channel-skeleton.md` — current update-channel boundary, contract draft, and non-promises
+- `v1.3.0-beta-validation-checklist.md` — release checklist for desktop beta candidate validation
+- `desktop-validation-matrix.md` — manual three-platform validation matrix
+- `v1.3.0-known-limitations-template.md` — starting template for beta release notes / limitations
+- `v1.3.0-linux-runtime-smoke-report-2026-03-16.md` — latest Linux runtime smoke result and blocker note
 - `../CHANGELOG.md` — versioned release history
 
 ## Decisions

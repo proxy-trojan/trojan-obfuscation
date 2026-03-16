@@ -8,6 +8,9 @@ class UpdateWorkflowState {
     required this.updateChecksEnabled,
     required this.lastCheckSummary,
     required this.rolloutPolicySummary,
+    required this.releaseMetadataContractVersion,
+    required this.lastUpdateCheckAt,
+    required this.updateCheckStatusLabel,
     required this.installerSkeletonReady,
     required this.exportStatus,
     this.lastExport,
@@ -18,6 +21,9 @@ class UpdateWorkflowState {
   final bool updateChecksEnabled;
   final String lastCheckSummary;
   final String rolloutPolicySummary;
+  final String releaseMetadataContractVersion;
+  final DateTime? lastUpdateCheckAt;
+  final String updateCheckStatusLabel;
   final bool installerSkeletonReady;
   final PackagingExportStatus exportStatus;
   final PackagingExportRecord? lastExport;
@@ -28,6 +34,9 @@ class UpdateWorkflowState {
     bool? updateChecksEnabled,
     String? lastCheckSummary,
     String? rolloutPolicySummary,
+    String? releaseMetadataContractVersion,
+    DateTime? lastUpdateCheckAt,
+    String? updateCheckStatusLabel,
     bool? installerSkeletonReady,
     PackagingExportStatus? exportStatus,
     PackagingExportRecord? lastExport,
@@ -38,7 +47,13 @@ class UpdateWorkflowState {
       updateChecksEnabled: updateChecksEnabled ?? this.updateChecksEnabled,
       lastCheckSummary: lastCheckSummary ?? this.lastCheckSummary,
       rolloutPolicySummary: rolloutPolicySummary ?? this.rolloutPolicySummary,
-      installerSkeletonReady: installerSkeletonReady ?? this.installerSkeletonReady,
+      releaseMetadataContractVersion:
+          releaseMetadataContractVersion ?? this.releaseMetadataContractVersion,
+      lastUpdateCheckAt: lastUpdateCheckAt ?? this.lastUpdateCheckAt,
+      updateCheckStatusLabel:
+          updateCheckStatusLabel ?? this.updateCheckStatusLabel,
+      installerSkeletonReady:
+          installerSkeletonReady ?? this.installerSkeletonReady,
       exportStatus: exportStatus ?? this.exportStatus,
       lastExport: lastExport ?? this.lastExport,
     );
@@ -48,8 +63,13 @@ class UpdateWorkflowState {
     selectedChannel: UpdateChannel.stable,
     currentVersionLabel: 'client-shell-dev',
     updateChecksEnabled: true,
-    lastCheckSummary: 'No update check has been executed in this shell environment yet.',
-    rolloutPolicySummary: 'Desktop-first staged rollout with stable/beta/nightly lanes.',
+    lastCheckSummary:
+        'No update check has been executed in this shell environment yet.',
+    rolloutPolicySummary:
+        'Desktop-first staged rollout with stable/beta/nightly lanes.',
+    releaseMetadataContractVersion: 'v0-draft',
+    lastUpdateCheckAt: null,
+    updateCheckStatusLabel: 'Not yet checked (stub only)',
     installerSkeletonReady: false,
     exportStatus: PackagingExportStatus.idle,
   );

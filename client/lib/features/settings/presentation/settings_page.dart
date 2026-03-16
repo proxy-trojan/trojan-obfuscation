@@ -13,12 +13,17 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge(
-          <Listenable>[services.settingsStore, services.desktopLifecycle]),
+      animation: Listenable.merge(<Listenable>[
+        services.settingsStore,
+        services.desktopLifecycle,
+        services.packagingStore,
+      ]),
       builder: (BuildContext context, _) {
         final settings = services.settingsStore.settings;
         final lifecyclePolicy = services.desktopLifecycle.policy;
         final lifecycleStatus = services.desktopLifecycle.status;
+        final packagingWorkflow = services.packagingStore.state;
+
         return SectionCard(
           title: 'Settings',
           subtitle: 'Product-layer settings, not runtime internals.',
@@ -75,6 +80,30 @@ class SettingsPage extends StatelessWidget {
                 },
                 title: const Text('Check for updates automatically'),
               ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: <Widget>[
+                    FilledButton.tonal(
+                      onPressed: settings.autoCheckForUpdates
+                          ? () => services.packagingStore.runStubUpdateCheck()
+                          : null,
+                      child: const Text('Check for updates now'),
+                    ),
+                    Text('Status: ${packagingWorkflow.updateCheckStatusLabel}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Update boundary: contract ${packagingWorkflow.releaseMetadataContractVersion} · ${packagingWorkflow.rolloutPolicySummary}',
+                ),
+              ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: settings.launchOnLogin,
@@ -113,10 +142,12 @@ class SettingsPage extends StatelessWidget {
                   DropdownButton<int>(
                     value: settings.diagnosticsRetentionDays,
                     items: const <int>[3, 7, 14, 30]
-                        .map((int value) => DropdownMenuItem<int>(
-                              value: value,
-                              child: Text('$value'),
-                            ))
+                        .map(
+                          (int value) => DropdownMenuItem<int>(
+                            value: value,
+                            child: Text('$value'),
+                          ),
+                        )
                         .toList(),
                     onChanged: (int? value) {
                       if (value != null) {
@@ -159,6 +190,36 @@ class SettingsPage extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text('Lifecycle status: ${lifecycleStatus.summary}'),
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Update channel skeleton',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                    'Current channel: ${packagingWorkflow.selectedChannel.name}'),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Last check: ${packagingWorkflow.lastUpdateCheckAt?.toIso8601String() ?? 'never'}',
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Self-update is not wired in v1.3.0; current actions only exercise the product boundary and metadata contract.',
+                ),
               ),
             ],
           ),

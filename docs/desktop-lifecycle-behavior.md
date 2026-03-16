@@ -40,8 +40,10 @@ Tray labels include the selected profile name when available.
 
 ## Known limitations
 
-- Tray support depends on platform plugins; on some Linux distros you may need
-  `libayatana-appindicator` or equivalent
+- Tray support depends on platform plugins; on Linux without appindicator packages,
+  the app now falls back to a **no-op tray plugin** rather than failing the build
+- In that fallback case, desktop lifecycle behavior degrades to non-tray behavior
+  (for example close falls back away from tray-specific semantics)
 - Duplicate-launch focus IPC is best-effort (no guarantee on window focus on all DEs)
 - Tray menu is a first-cut surface and does not yet expose advanced actions
 

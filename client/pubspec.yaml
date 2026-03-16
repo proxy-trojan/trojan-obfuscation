@@ -11,7 +11,8 @@ dependencies:
     sdk: flutter
   flutter_secure_storage: ^10.0.0
   window_manager: ^0.5.1
-  tray_manager: ^0.5.2
+  tray_manager:
+    path: third_party/tray_manager_linux_fallback
 
 dev_dependencies:
   flutter_test:

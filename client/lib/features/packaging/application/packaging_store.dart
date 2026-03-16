@@ -12,6 +12,7 @@ class PackagingStore extends ChangeNotifier {
   PackagingStore({UpdateChannel initialChannel = UpdateChannel.stable})
       : _state = UpdateWorkflowState.initial.copyWith(
           selectedChannel: initialChannel,
+          rolloutPolicySummary: _rolloutPolicySummaryFor(initialChannel),
         ) {
     _dryRunService = PackagingDryRunService(packagingStore: this);
   }
@@ -24,22 +25,23 @@ class PackagingStore extends ChangeNotifier {
 
   final List<DesktopPackageStatus> _packageStatuses =
       const <DesktopPackageStatus>[
-        DesktopPackageStatus(
-          platform: DesktopPackagePlatform.windows,
-          readiness: DesktopPackageReadiness.planned,
-          notes: 'Windows installer/update workflow not scaffolded yet.',
-        ),
-        DesktopPackageStatus(
-          platform: DesktopPackagePlatform.macos,
-          readiness: DesktopPackageReadiness.planned,
-          notes: 'macOS app bundle/notarization flow not scaffolded yet.',
-        ),
-        DesktopPackageStatus(
-          platform: DesktopPackagePlatform.linux,
-          readiness: DesktopPackageReadiness.scaffolded,
-          notes: 'Linux desktop shell path exists; packaging workflow still missing.',
-        ),
-      ];
+    DesktopPackageStatus(
+      platform: DesktopPackagePlatform.windows,
+      readiness: DesktopPackageReadiness.planned,
+      notes: 'Windows installer/update workflow not scaffolded yet.',
+    ),
+    DesktopPackageStatus(
+      platform: DesktopPackagePlatform.macos,
+      readiness: DesktopPackageReadiness.planned,
+      notes: 'macOS app bundle/notarization flow not scaffolded yet.',
+    ),
+    DesktopPackageStatus(
+      platform: DesktopPackagePlatform.linux,
+      readiness: DesktopPackageReadiness.scaffolded,
+      notes:
+          'Linux desktop shell path exists; packaging workflow still missing.',
+    ),
+  ];
 
   UpdateWorkflowState get state => _state;
 
@@ -49,7 +51,8 @@ class PackagingStore extends ChangeNotifier {
   List<PackagingExportRecord> get exportHistory =>
       List<PackagingExportRecord>.unmodifiable(_exportHistory);
 
-  ReleaseManifest buildReleaseManifest() => _dryRunService.buildSnapshot().manifest;
+  ReleaseManifest buildReleaseManifest() =>
+      _dryRunService.buildSnapshot().manifest;
 
   UpdateMetadataSnapshot buildUpdateMetadataSnapshot() =>
       _dryRunService.buildSnapshot().updateMetadata;
@@ -61,9 +64,11 @@ class PackagingStore extends ChangeNotifier {
     final nextState = _state.copyWith(
       selectedChannel: channel,
       updateChecksEnabled: autoCheckForUpdates,
+      rolloutPolicySummary: _rolloutPolicySummaryFor(channel),
     );
     if (nextState.selectedChannel == _state.selectedChannel &&
-        nextState.updateChecksEnabled == _state.updateChecksEnabled) {
+        nextState.updateChecksEnabled == _state.updateChecksEnabled &&
+        nextState.rolloutPolicySummary == _state.rolloutPolicySummary) {
       return;
     }
     _state = nextState;
@@ -77,11 +82,24 @@ class PackagingStore extends ChangeNotifier {
     );
   }
 
+  void runStubUpdateCheck() {
+    final checkedAt = DateTime.now();
+    final channel = _state.selectedChannel;
+    _state = _state.copyWith(
+      lastUpdateCheckAt: checkedAt,
+      updateCheckStatusLabel: 'Stub only — no release feed wired yet',
+      lastCheckSummary: _stubUpdateSummaryFor(channel),
+      rolloutPolicySummary: _rolloutPolicySummaryFor(channel),
+    );
+    notifyListeners();
+  }
+
   void markInstallerSkeletonReady() {
     if (_state.installerSkeletonReady) return;
     _state = _state.copyWith(
       installerSkeletonReady: true,
-      lastCheckSummary: 'Packaging skeleton drafted; runtime validation still pending.',
+      lastCheckSummary:
+          'Packaging skeleton drafted; runtime validation still pending.',
     );
     notifyListeners();
   }
@@ -151,5 +169,20 @@ class PackagingStore extends ChangeNotifier {
     if (_exportHistory.length > _maxExportHistory) {
       _exportHistory.removeRange(_maxExportHistory, _exportHistory.length);
     }
+  }
+
+  static String _rolloutPolicySummaryFor(UpdateChannel channel) {
+    return switch (channel) {
+      UpdateChannel.stable =>
+        'Stable lane is the default user-facing channel with the strongest rollout caution.',
+      UpdateChannel.beta =>
+        'Beta lane is opt-in for desktop testers and may move faster than stable.',
+      UpdateChannel.nightly =>
+        'Nightly lane is internal/fast-moving and should not be treated as support-ready.',
+    };
+  }
+
+  static String _stubUpdateSummaryFor(UpdateChannel channel) {
+    return 'Update check stub executed for ${channel.name}. No remote release feed is wired in v1.3.0 yet; use exported release metadata + packaging docs instead.';
   }
 }

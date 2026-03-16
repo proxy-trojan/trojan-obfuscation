@@ -22,117 +22,158 @@ class PackagingPage extends StatelessWidget {
         final packageStatuses = services.packagingStore.packageStatuses;
         final exportHistory = services.packagingStore.exportHistory;
         final manifest = services.packagingStore.buildReleaseManifest();
-        final updateMetadata = services.packagingStore.buildUpdateMetadataSnapshot();
+        final updateMetadata =
+            services.packagingStore.buildUpdateMetadataSnapshot();
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            SectionCard(
-              title: 'Update Status',
-              subtitle: 'See update posture and release readiness for this desktop client. Most users will only need this occasionally.',
-              trailing: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  OutlinedButton(
-                    onPressed: () => _exportPackagingSnapshots(context),
-                    child: const Text('Export Snapshots'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      services.packagingStore.markInstallerSkeletonReady();
-                      services.packagingStore.runDryRunSnapshot();
-                    },
-                    child: Text(
-                      workflow.installerSkeletonReady ? 'Skeleton Ready' : 'Acknowledge Skeleton',
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SectionCard(
+                title: 'Update Status',
+                subtitle:
+                    'See update posture and release readiness for this desktop client. Most users will only need this occasionally.',
+                trailing: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    OutlinedButton(
+                      onPressed: services
+                              .settingsStore.settings.autoCheckForUpdates
+                          ? () => services.packagingStore.runStubUpdateCheck()
+                          : null,
+                      child: const Text('Check for Updates (Stub)'),
                     ),
-                  ),
-                ],
-              ),
-              child: Wrap(
-                spacing: 24,
-                runSpacing: 12,
-                children: <Widget>[
-                  _kv('Current Version', workflow.currentVersionLabel),
-                  _kv('Update Channel', workflow.selectedChannel.name),
-                  _kv('Auto Update Checks', workflow.updateChecksEnabled ? 'Enabled' : 'Disabled'),
-                  _kv('Installer Skeleton', workflow.installerSkeletonReady ? 'Drafted' : 'Not yet drafted'),
-                  _kv('Export Status', workflow.exportStatus.name),
-                  _kv('Rollout Policy', workflow.rolloutPolicySummary),
-                  _kv('Last Summary', workflow.lastCheckSummary),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SectionCard(
-              title: 'Release Snapshot',
-              subtitle: 'What the product layer would hand to packaging/update automation.',
-              child: Wrap(
-                spacing: 24,
-                runSpacing: 12,
-                children: <Widget>[
-                  _kv('Artifact Prefix', manifest.artifactPrefix),
-                  _kv('Manifest Channel', manifest.channel.name),
-                  _kv('Generated At', manifest.generatedAt.toIso8601String()),
-                  _kv('Rollback Hint', manifest.rollbackHint),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SectionCard(
-              title: 'Update Metadata Snapshot',
-              subtitle: 'Draft metadata view for client-side update behavior.',
-              child: Wrap(
-                spacing: 24,
-                runSpacing: 12,
-                children: <Widget>[
-                  _kv('Manifest Artifact', updateMetadata.manifestArtifactName),
-                  _kv('Channel', updateMetadata.channel),
-                  _kv('Update Checks', updateMetadata.updateChecksEnabled ? 'Enabled' : 'Disabled'),
-                  _kv('Summary', updateMetadata.summary),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SectionCard(
-              title: 'Export History',
-              subtitle: 'Recent packaging export operations and their outcomes.',
-              child: exportHistory.isEmpty
-                  ? const Text('No packaging exports have been run yet.')
-                  : Column(
-                      children: exportHistory
-                          .map((record) => _ExportHistoryRow(record: record))
-                          .toList(),
+                    OutlinedButton(
+                      onPressed: () => _exportPackagingSnapshots(context),
+                      child: const Text('Export Snapshots'),
                     ),
-            ),
-            const SizedBox(height: 16),
-            SectionCard(
-              title: 'Desktop Release Readiness',
-              subtitle: 'Per-platform release readiness and notes.',
-              child: Column(
-                children: packageStatuses
-                    .map((status) => _PlatformPackageRow(status: status))
-                    .toList(),
+                    FilledButton(
+                      onPressed: () {
+                        services.packagingStore.markInstallerSkeletonReady();
+                        services.packagingStore.runDryRunSnapshot();
+                      },
+                      child: Text(
+                        workflow.installerSkeletonReady
+                            ? 'Skeleton Ready'
+                            : 'Acknowledge Skeleton',
+                      ),
+                    ),
+                  ],
+                ),
+                child: Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: <Widget>[
+                    _kv('Current Version', workflow.currentVersionLabel),
+                    _kv('Update Channel', workflow.selectedChannel.name),
+                    _kv('Auto Update Checks',
+                        workflow.updateChecksEnabled ? 'Enabled' : 'Disabled'),
+                    _kv(
+                        'Installer Skeleton',
+                        workflow.installerSkeletonReady
+                            ? 'Drafted'
+                            : 'Not yet drafted'),
+                    _kv('Update Check Status', workflow.updateCheckStatusLabel),
+                    _kv(
+                      'Last Update Check',
+                      workflow.lastUpdateCheckAt?.toIso8601String() ?? 'never',
+                    ),
+                    _kv('Metadata Contract',
+                        workflow.releaseMetadataContractVersion),
+                    _kv('Export Status', workflow.exportStatus.name),
+                    _kv('Rollout Policy', workflow.rolloutPolicySummary),
+                    _kv('Last Summary', workflow.lastCheckSummary),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const SectionCard(
-              title: 'Planned Workflow Skeleton',
-              subtitle: 'Product-side delivery shape before CI/runtime validation exists.',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('1. Build desktop artifacts per release channel.'),
-                  SizedBox(height: 8),
-                  Text('2. Produce installer/update metadata bundles and release manifests.'),
-                  SizedBox(height: 8),
-                  Text('3. Validate diagnostics/export/update surfaces in a desktop runtime.'),
-                  SizedBox(height: 8),
-                  Text('4. Roll out stable/beta/nightly lanes with explicit rollback posture.'),
-                ],
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Release Snapshot',
+                subtitle:
+                    'What the product layer would hand to packaging/update automation.',
+                child: Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: <Widget>[
+                    _kv('Artifact Prefix', manifest.artifactPrefix),
+                    _kv('Manifest Channel', manifest.channel.name),
+                    _kv('Generated At', manifest.generatedAt.toIso8601String()),
+                    _kv('Rollback Hint', manifest.rollbackHint),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Update Metadata Snapshot',
+                subtitle:
+                    'Draft metadata view for client-side update behavior.',
+                child: Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: <Widget>[
+                    _kv('Manifest Artifact',
+                        updateMetadata.manifestArtifactName),
+                    _kv('Channel', updateMetadata.channel),
+                    _kv(
+                        'Update Checks',
+                        updateMetadata.updateChecksEnabled
+                            ? 'Enabled'
+                            : 'Disabled'),
+                    _kv('Contract Version', updateMetadata.contractVersion),
+                    _kv('Summary', updateMetadata.summary),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Export History',
+                subtitle:
+                    'Recent packaging export operations and their outcomes.',
+                child: exportHistory.isEmpty
+                    ? const Text('No packaging exports have been run yet.')
+                    : Column(
+                        children: exportHistory
+                            .map((record) => _ExportHistoryRow(record: record))
+                            .toList(),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Desktop Release Readiness',
+                subtitle: 'Per-platform release readiness and notes.',
+                child: Column(
+                  children: packageStatuses
+                      .map((status) => _PlatformPackageRow(status: status))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const SectionCard(
+                title: 'Planned Workflow Skeleton',
+                subtitle:
+                    'Product-side delivery shape before CI/runtime validation exists.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('1. Build desktop artifacts per release channel.'),
+                    SizedBox(height: 8),
+                    Text(
+                        '2. Produce installer/update metadata bundles and release manifests.'),
+                    SizedBox(height: 8),
+                    Text(
+                        '3. Validate diagnostics/export/update surfaces in a desktop runtime.'),
+                    SizedBox(height: 8),
+                    Text(
+                        '4. Roll out stable/beta/nightly lanes with explicit rollback posture.'),
+                    SizedBox(height: 8),
+                    Text(
+                        '5. Treat update checks as stub-only until a real release feed is wired.'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -195,7 +236,8 @@ class _ExportHistoryRow extends StatelessWidget {
     final summary = switch (record.status) {
       PackagingExportStatus.idle => 'Idle',
       PackagingExportStatus.running => 'Running export…',
-      PackagingExportStatus.succeeded => 'manifest=${record.manifestTarget}\nmetadata=${record.metadataTarget}\nrollback=${record.rollbackPlanTarget}',
+      PackagingExportStatus.succeeded =>
+        'manifest=${record.manifestTarget}\nmetadata=${record.metadataTarget}\nrollback=${record.rollbackPlanTarget}',
       PackagingExportStatus.failed => record.error ?? 'Unknown export failure',
     };
 
@@ -204,7 +246,10 @@ class _ExportHistoryRow extends StatelessWidget {
       leading: Icon(icon),
       title: Text(record.status.name),
       subtitle: Text(summary),
-      trailing: Text(record.finishedAt?.toIso8601String() ?? record.startedAt.toIso8601String()),
+      trailing: Text(
+        record.finishedAt?.toIso8601String() ??
+            record.startedAt.toIso8601String(),
+      ),
     );
   }
 }

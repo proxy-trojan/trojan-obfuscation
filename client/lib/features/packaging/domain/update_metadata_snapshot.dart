@@ -5,6 +5,7 @@ class UpdateMetadataSnapshot {
     required this.updateChecksEnabled,
     required this.currentVersionLabel,
     required this.manifestArtifactName,
+    required this.contractVersion,
     required this.summary,
   });
 
@@ -13,6 +14,7 @@ class UpdateMetadataSnapshot {
   final bool updateChecksEnabled;
   final String currentVersionLabel;
   final String manifestArtifactName;
+  final String contractVersion;
   final String summary;
 
   Map<String, Object?> toJson() {
@@ -22,6 +24,7 @@ class UpdateMetadataSnapshot {
       'updateChecksEnabled': updateChecksEnabled,
       'currentVersionLabel': currentVersionLabel,
       'manifestArtifactName': manifestArtifactName,
+      'contractVersion': contractVersion,
       'summary': summary,
     };
   }
