@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../domain/controller_command.dart';
 import '../domain/controller_command_result.dart';
+import '../domain/controller_launch_plan.dart';
 import '../domain/controller_runtime_config.dart';
 import '../domain/controller_runtime_health.dart';
 import '../domain/controller_runtime_session.dart';
@@ -17,6 +19,9 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
   RealShellControllerAdapter({
     this.binaryPathHint = 'UNCONFIGURED',
     this.transportEndpointHint = 'local-controller://pending',
+    this.runtimeMode = 'external-runtime-boundary',
+    this.backendKind = 'real-shell-controller-pending',
+    this.backendVersion = 'unvalidated',
     RealShellRuntimePlanner? runtimePlanner,
     RealShellConnectPlanner? connectPlanner,
     TrojanClientConfigRenderer? configRenderer,
@@ -34,6 +39,9 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
 
   final String binaryPathHint;
   final String transportEndpointHint;
+  final String runtimeMode;
+  final String backendKind;
+  final String backendVersion;
   final RealShellRuntimePlanner _runtimePlanner;
   final RealShellConnectPlanner _connectPlanner;
   final TrojanClientConfigRenderer _configRenderer;
@@ -42,8 +50,13 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
   Process? _runningProcess;
   String? _activeConfigPath;
   bool _disconnectRequested = false;
+  DateTime? _stopRequestedAt;
   int? _lastExitCode;
   String? _lastError;
+  ControllerLaunchPlan? _lastLaunchPlan;
+  String? _configProvenance;
+  int? _expectedLocalSocksPort;
+  ControllerRuntimePhase _runtimePhase = ControllerRuntimePhase.stopped;
   DateTime _sessionUpdatedAt = DateTime.now();
   final List<String> _stdoutTail = <String>[];
   final List<String> _stderrTail = <String>[];
@@ -52,8 +65,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
 
   @override
   ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
-        backendKind: 'real-shell-controller-pending',
-        backendVersion: 'unvalidated',
+        backendKind: backendKind,
+        backendVersion: backendVersion,
         capabilities: const <String>[
           'connect',
           'disconnect',
@@ -65,7 +78,7 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
 
   @override
   ControllerRuntimeConfig get runtimeConfig => ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
+        mode: runtimeMode,
         endpointHint: transportEndpointHint,
         enableVerboseTelemetry: true,
       );
@@ -74,8 +87,14 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
   ControllerRuntimeSession get session => ControllerRuntimeSession(
         isRunning: _runningProcess != null,
         updatedAt: _sessionUpdatedAt,
+        phase: _runtimePhase,
+        stopRequested: _disconnectRequested,
+        stopRequestedAt: _stopRequestedAt,
         pid: _runningProcess?.pid,
         activeConfigPath: _activeConfigPath,
+        configProvenance: _configProvenance,
+        expectedLocalSocksPort: _expectedLocalSocksPort,
+        launchPlan: _lastLaunchPlan,
         lastExitCode: _lastExitCode,
         lastError: _lastError,
         stdoutTail: List<String>.unmodifiable(_stdoutTail),
@@ -87,10 +106,12 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
     final now = DateTime.now();
     final runningProcess = _runningProcess;
     if (runningProcess != null) {
+      final summary = _runtimePhase == ControllerRuntimePhase.sessionReady
+          ? 'Trojan runtime is session-ready. pid=${runningProcess.pid} config=${_activeConfigPath ?? 'unknown'}'
+          : 'Trojan runtime process is alive. pid=${runningProcess.pid} config=${_activeConfigPath ?? 'unknown'}';
       return ControllerRuntimeHealth(
         level: ControllerRuntimeHealthLevel.healthy,
-        summary:
-            'Trojan client process is running. pid=${runningProcess.pid} config=${_activeConfigPath ?? 'unknown'}',
+        summary: summary,
         updatedAt: now,
       );
     }
@@ -170,6 +191,7 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
     final killed = process.kill();
     if (killed) {
       _disconnectRequested = true;
+      _stopRequestedAt = DateTime.now();
       _markSessionUpdated();
       return ControllerCommandResult(
         commandId: command.id,
@@ -227,6 +249,13 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       profile: input.profile,
       configPath: input.configPath,
     );
+    _lastLaunchPlan = plan;
+    _activeConfigPath = input.configPath;
+    _configProvenance = 'managed-runtime://${input.profile.id}';
+    _expectedLocalSocksPort = input.profile.localSocksPort;
+    _runtimePhase = ControllerRuntimePhase.planned;
+    _markSessionUpdated();
+
     final configPreview = _configRenderer.render(
       profile: input.profile,
       password: input.password,
@@ -246,12 +275,18 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
         await Process.run('chmod', <String>['600', input.configPath]);
       }
 
+      _runtimePhase = ControllerRuntimePhase.launching;
+      _markSessionUpdated();
+
       final process = await Process.start(plan.binaryPath, plan.arguments);
       _runningProcess = process;
       _activeConfigPath = input.configPath;
       _lastError = null;
       _lastExitCode = null;
+      _runtimePhase = ControllerRuntimePhase.alive;
       _markSessionUpdated();
+
+      unawaited(_promoteSessionReadyWhenPortOpens(process));
 
       process.stdout
           .transform(const SystemEncoding().decoder)
@@ -267,12 +302,20 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
           // not as runtime failure noise.
           _lastError = null;
         }
+        if (disconnectRequested) {
+          _runtimePhase = ControllerRuntimePhase.stopped;
+        } else if (exitCode == 0) {
+          _runtimePhase = ControllerRuntimePhase.stopped;
+        } else {
+          _runtimePhase = ControllerRuntimePhase.failed;
+        }
         _markSessionUpdated();
         if (identical(_runningProcess, process)) {
           final configPath = _activeConfigPath;
           _runningProcess = null;
           _activeConfigPath = null;
           _disconnectRequested = false;
+          _stopRequestedAt = null;
           _markSessionUpdated();
           await _cleanupConfigFile(configPath);
           await _cleanupRuntimeDirectoryIfEmpty(configPath);
@@ -288,12 +331,16 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
         details: <String, Object?>{
           'pid': process.pid,
           'launchPlan': plan.toJson(),
+          'runtimePhase': _runtimePhase.name,
           'configPath': input.configPath,
+          'configProvenance': _configProvenance,
+          'expectedLocalSocksPort': _expectedLocalSocksPort,
           'configPreview': configPreviewRedacted,
         },
       );
     } catch (error) {
       _lastError = error.toString();
+      _runtimePhase = ControllerRuntimePhase.failed;
       _markSessionUpdated();
       await _cleanupConfigFile(input.configPath);
       await _cleanupRuntimeDirectoryIfEmpty(input.configPath);
@@ -305,7 +352,10 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
         error: error.toString(),
         details: <String, Object?>{
           'launchPlan': plan.toJson(),
+          'runtimePhase': _runtimePhase.name,
           'configPath': input.configPath,
+          'configProvenance': _configProvenance,
+          'expectedLocalSocksPort': _expectedLocalSocksPort,
           'configPreview': configPreviewRedacted,
         },
       );
@@ -314,8 +364,10 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
 
   void _prepareFreshSessionForConnect() {
     _disconnectRequested = false;
+    _stopRequestedAt = null;
     _lastError = null;
     _lastExitCode = null;
+    _runtimePhase = ControllerRuntimePhase.stopped;
     _stdoutTail.clear();
     _stderrTail.clear();
     _markSessionUpdated();
@@ -345,6 +397,40 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       }
     } catch (_) {
       // keep best-effort cleanup non-blocking
+    }
+  }
+
+  Future<void> _promoteSessionReadyWhenPortOpens(Process process) async {
+    final expectedPort = _expectedLocalSocksPort;
+    if (expectedPort == null || expectedPort <= 0) return;
+
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!identical(_runningProcess, process)) return;
+
+      final isOpen = await _isLocalPortOpen(expectedPort);
+      if (isOpen) {
+        _runtimePhase = ControllerRuntimePhase.sessionReady;
+        _markSessionUpdated();
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+  }
+
+  Future<bool> _isLocalPortOpen(int port) async {
+    Socket? socket;
+    try {
+      socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(milliseconds: 200),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      socket?.destroy();
     }
   }
 

@@ -20,7 +20,10 @@ This test is designed to answer one question only:
 Optional environment variables:
 
 ```bash
-export TROJAN_CLIENT_ENABLE_REAL_ADAPTER=1
+# v1.4.0 first cut: backend mode defaults to auto on desktop.
+# You can still force modes explicitly when validating behavior.
+export TROJAN_CLIENT_BACKEND_MODE=real   # or stub
+export TROJAN_CLIENT_ENABLE_REAL_ADAPTER=1  # legacy compatibility path
 export TROJAN_CLIENT_BINARY=/absolute/path/to/trojan
 export KEEP_SMOKE_ARTIFACTS=1
 ```
@@ -92,7 +95,8 @@ Check Dashboard / Profile details:
 - runtime session block
 
 Expected:
-- runtime mode is `external-runtime-boundary` when env flag is enabled
+- runtime mode is `real-runtime-boundary` when real adapter is selected
+- fallback/degraded cases use explicit `stubbed-local-boundary-*` modes (not silently pretending to be real)
 - health is not permanently `unavailable`
 
 ---
@@ -123,7 +127,7 @@ Expected:
 - process terminates
 - PID clears
 - config file is cleaned up
-- status summary reflects disconnect request/result
+- status summary reflects disconnect request/result truthfully (`stop requested` while pending, `disconnected` after exit)
 
 ---
 
@@ -186,3 +190,11 @@ If the smoke test fails, capture:
 - stdout tail
 - stderr tail
 - exported diagnostics bundle path
+
+---
+
+## Current limitations (Sprint 1)
+
+- In headless environments without `DISPLAY`/`WAYLAND_DISPLAY` and without `xvfb-run`, GUI launch smoke is expected to be reported as **skipped**.
+- `sessionReady` currently depends on local SOCKS port observability; some environments may stay in `alive` longer even when process startup succeeded.
+- The smoke script proves a high-signal local runtime path, but it is not yet a substitute for real staging beta validation on operator-like desktop environments.

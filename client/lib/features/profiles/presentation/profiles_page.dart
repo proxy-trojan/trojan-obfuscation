@@ -275,6 +275,25 @@ class _SelectedProfileCard extends StatelessWidget {
     return status.message;
   }
 
+  String _executionPathLabel(String mode) {
+    if (mode.contains('real-runtime-boundary')) {
+      return 'Real runtime path';
+    }
+    if (mode.contains('stubbed-local-boundary-fallback')) {
+      return 'Fallback stub (real runtime unavailable)';
+    }
+    if (mode.contains('stubbed-local-boundary-explicit')) {
+      return 'Explicit stub mode';
+    }
+    if (mode.contains('stubbed-local-boundary-non-desktop')) {
+      return 'Stub mode (non-desktop target)';
+    }
+    if (mode.contains('stubbed-local-boundary')) {
+      return 'Simulated runtime path';
+    }
+    return 'Unknown runtime path';
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = _active;
@@ -361,6 +380,10 @@ class _SelectedProfileCard extends StatelessWidget {
             _detail('TLS Verification',
                 selected.verifyTls ? 'Enabled' : 'Disabled'),
             _detail('Runtime Mode', services.controller.runtimeConfig.mode),
+            _detail(
+              'Execution Path',
+              _executionPathLabel(services.controller.runtimeConfig.mode),
+            ),
             _detail('Runtime Endpoint',
                 services.controller.runtimeConfig.endpointHint),
             _detail(

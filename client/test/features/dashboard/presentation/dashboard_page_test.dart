@@ -61,6 +61,9 @@ class _TestLifecycleController extends ClientControllerApi {
   ControllerRuntimeSession get session => ControllerRuntimeSession(
         isRunning: _status.phase == ClientConnectionPhase.connected,
         updatedAt: DateTime.now(),
+        phase: _status.phase == ClientConnectionPhase.connected
+            ? ControllerRuntimePhase.sessionReady
+            : ControllerRuntimePhase.stopped,
       );
 
   @override

@@ -93,10 +93,19 @@ ControllerRuntimeSession _session({
   int? pid,
   int? lastExitCode,
   String? lastError,
+  ControllerRuntimePhase? phase,
+  bool stopRequested = false,
+  DateTime? stopRequestedAt,
 }) {
   return ControllerRuntimeSession(
     isRunning: isRunning,
     updatedAt: DateTime.now(),
+    phase: phase ??
+        (isRunning
+            ? ControllerRuntimePhase.sessionReady
+            : ControllerRuntimePhase.stopped),
+    stopRequested: stopRequested,
+    stopRequestedAt: stopRequestedAt,
     pid: pid,
     lastExitCode: lastExitCode,
     lastError: lastError,
@@ -154,11 +163,54 @@ void main() {
     );
 
     expect(controller.status.phase, ClientConnectionPhase.connected);
-    expect(controller.status.message, contains('Runtime session is active'));
+    expect(controller.status.message, contains('Runtime session is ready'));
     expect(
       controller.recentEvents.first.title,
-      anyOf(equals('Runtime session active'), equals('Connect requested')),
+      anyOf(equals('Runtime session ready'), equals('Connect requested')),
     );
+  });
+
+  test('keeps connecting status while runtime is alive but not session-ready',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+        profileId: 'profile-demo', password: 'secret');
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.connect(_demoProfile());
+    expect(controller.status.phase, ClientConnectionPhase.connecting);
+
+    adapter.setSession(
+      _session(
+        isRunning: true,
+        pid: 4321,
+        phase: ControllerRuntimePhase.alive,
+      ),
+    );
+    await _waitFor(
+      () => controller.status.message.contains('Waiting for session-ready'),
+      description: 'connecting status reflects alive-but-not-ready runtime',
+    );
+
+    expect(controller.status.phase, ClientConnectionPhase.connecting);
+    expect(controller.status.message, contains('Waiting for session-ready'));
   });
 
   test(
@@ -282,12 +334,30 @@ void main() {
     expect(controller.status.activeProfileId, 'profile-demo');
 
     await disconnectFuture;
+    adapter.setSession(
+      _session(
+        isRunning: true,
+        pid: 4321,
+        phase: ControllerRuntimePhase.alive,
+        stopRequested: true,
+        stopRequestedAt: _fixedTime,
+      ),
+    );
+    await _waitFor(
+      () => controller.status.message.contains('Waiting for the runtime process to exit cleanly'),
+      description: 'disconnecting status reflects stop-requested runtime',
+    );
+
     expect(
       controller.status.phase,
       anyOf(
         equals(ClientConnectionPhase.disconnecting),
         equals(ClientConnectionPhase.disconnected),
       ),
+    );
+    expect(
+      controller.status.message,
+      contains('Waiting for the runtime process to exit cleanly'),
     );
   });
 

@@ -29,6 +29,8 @@ class DiagnosticsExportService {
     required this.secureStorage,
     required this.fileExporter,
     AppRuntimeErrorStore? appRuntimeErrors,
+    this.adapterSelectionReason,
+    this.expectedRealRuntimePath,
   }) : appRuntimeErrors = appRuntimeErrors ?? AppRuntimeErrorStore();
 
   final ProfileStore profileStore;
@@ -39,6 +41,8 @@ class DiagnosticsExportService {
   final SecureStorage secureStorage;
   final DiagnosticsFileExporter fileExporter;
   final AppRuntimeErrorStore appRuntimeErrors;
+  final String? adapterSelectionReason;
+  final bool? expectedRealRuntimePath;
 
   Future<String> buildPreviewBundle() async {
     final selected = profileStore.selectedProfile;
@@ -80,6 +84,10 @@ class DiagnosticsExportService {
           'updatedAt': controllerHealth.updatedAt.toIso8601String(),
         },
         'runtimeSession': controller.session.toJson(),
+        'selection': {
+          'expectedRealRuntimePath': expectedRealRuntimePath,
+          'reason': adapterSelectionReason,
+        },
         'recentEvents': controller.recentEvents
             .map(
               (event) => <String, Object?>{

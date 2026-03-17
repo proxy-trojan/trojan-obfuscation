@@ -210,14 +210,21 @@ class AdapterBackedClientController extends ClientControllerApi {
     );
 
     final runtimeMode = runtimeConfig.mode;
-    final acceptedPhase = commandResult.details.containsKey('pid') ||
-            runtimeMode == 'stubbed-local-boundary'
-        ? ClientConnectionPhase.connected
-        : ClientConnectionPhase.connecting;
+    final runtimeSession = _adapter.session;
+    final acceptedPhase = _acceptedPhaseForConnect(
+      runtimeMode: runtimeMode,
+      runtimeSession: runtimeSession,
+      commandResult: commandResult,
+    );
+    final acceptedMessage = _acceptedMessageForConnect(
+      runtimeMode: runtimeMode,
+      runtimeSession: runtimeSession,
+      commandResult: commandResult,
+    );
 
     _recordEvent(
       title: 'Connect requested',
-      message: commandResult.summary,
+      message: commandResult.accepted ? acceptedMessage : commandResult.summary,
       phase:
           commandResult.accepted ? acceptedPhase : ClientConnectionPhase.error,
       profileId: profile.id,
@@ -249,7 +256,7 @@ class AdapterBackedClientController extends ClientControllerApi {
 
     _status = ClientConnectionStatus(
       phase: acceptedPhase,
-      message: commandResult.summary,
+      message: acceptedMessage,
       updatedAt: DateTime.now(),
       activeProfileId: profile.id,
     );
@@ -328,14 +335,18 @@ class AdapterBackedClientController extends ClientControllerApi {
       return commandResult;
     }
 
-    final runningAfterRequest = _adapter.session.isRunning;
+    final runtimeSession = _adapter.session;
+    final runningAfterRequest = runtimeSession.isRunning;
     final nextPhase = runningAfterRequest
         ? ClientConnectionPhase.disconnecting
         : ClientConnectionPhase.disconnected;
+    final nextMessage = runningAfterRequest
+        ? _disconnectPendingMessage(runtimeSession, commandResult)
+        : commandResult.summary;
 
     _recordEvent(
       title: 'Disconnect requested',
-      message: commandResult.summary,
+      message: nextMessage,
       phase: nextPhase,
       profileId: activeProfileId,
       kind: ClientControllerEventKind.result,
@@ -347,12 +358,12 @@ class AdapterBackedClientController extends ClientControllerApi {
     _status = nextPhase == ClientConnectionPhase.disconnected
         ? ClientConnectionStatus(
             phase: ClientConnectionPhase.disconnected,
-            message: commandResult.summary,
+            message: nextMessage,
             updatedAt: DateTime.now(),
           )
         : ClientConnectionStatus(
             phase: ClientConnectionPhase.disconnecting,
-            message: commandResult.summary,
+            message: nextMessage,
             updatedAt: DateTime.now(),
             activeProfileId: activeProfileId,
           );
@@ -363,6 +374,59 @@ class AdapterBackedClientController extends ClientControllerApi {
     await _persistRuntimeSnapshot();
     _notifyIfActive();
     return commandResult;
+  }
+
+  ClientConnectionPhase _acceptedPhaseForConnect({
+    required String runtimeMode,
+    required ControllerRuntimeSession runtimeSession,
+    required ControllerCommandResult commandResult,
+  }) {
+    if (runtimeMode.startsWith('stubbed-local-boundary')) {
+      return ClientConnectionPhase.connected;
+    }
+
+    if (commandResult.details.containsKey('pid') &&
+        runtimeSession.phase == ControllerRuntimePhase.sessionReady) {
+      return ClientConnectionPhase.connected;
+    }
+
+    return ClientConnectionPhase.connecting;
+  }
+
+  String _acceptedMessageForConnect({
+    required String runtimeMode,
+    required ControllerRuntimeSession runtimeSession,
+    required ControllerCommandResult commandResult,
+  }) {
+    if (runtimeMode.startsWith('stubbed-local-boundary')) {
+      return commandResult.summary;
+    }
+
+    return switch (runtimeSession.phase) {
+      ControllerRuntimePhase.planned =>
+        'Launch plan accepted. Preparing managed runtime config.',
+      ControllerRuntimePhase.launching =>
+        'Launch plan accepted. Starting runtime process.',
+      ControllerRuntimePhase.alive =>
+        'Runtime process is alive. Waiting for session-ready signal.',
+      ControllerRuntimePhase.sessionReady =>
+        commandResult.summary,
+      ControllerRuntimePhase.failed =>
+        commandResult.summary,
+      ControllerRuntimePhase.stopped =>
+        'Launch accepted. Waiting for runtime state update.',
+    };
+  }
+
+  String _disconnectPendingMessage(
+    ControllerRuntimeSession runtimeSession,
+    ControllerCommandResult commandResult,
+  ) {
+    final pidSuffix = runtimeSession.pid == null ? '' : ' (pid=${runtimeSession.pid})';
+    if (runtimeSession.stopRequested) {
+      return 'Stop requested$pidSuffix. Waiting for the runtime process to exit cleanly.';
+    }
+    return commandResult.summary;
   }
 
   String _configPathFor(String profileId) {
@@ -382,24 +446,82 @@ class AdapterBackedClientController extends ClientControllerApi {
 
     if (session.isRunning) {
       if (_status.phase == ClientConnectionPhase.connecting) {
-        final summary = session.pid == null
-            ? 'Runtime session is active.'
-            : 'Runtime session is active. pid=${session.pid}';
-        _status = _status.copyWith(
-          phase: ClientConnectionPhase.connected,
-          message: summary,
-          updatedAt: DateTime.now(),
-        );
-        _recordEvent(
-          title: 'Runtime session active',
-          message: summary,
-          phase: ClientConnectionPhase.connected,
-          profileId: _status.activeProfileId,
-          kind: ClientControllerEventKind.progress,
-          level: ClientControllerEventLevel.info,
-        );
-        _clearLastRuntimeFailureSoon();
-        _persistRuntimeSnapshotSoon();
+        if (session.phase == ControllerRuntimePhase.sessionReady) {
+          final summary = session.pid == null
+              ? 'Runtime session is ready.'
+              : 'Runtime session is ready. pid=${session.pid}';
+          _status = _status.copyWith(
+            phase: ClientConnectionPhase.connected,
+            message: summary,
+            updatedAt: DateTime.now(),
+          );
+          _recordEvent(
+            title: 'Runtime session ready',
+            message: summary,
+            phase: ClientConnectionPhase.connected,
+            profileId: _status.activeProfileId,
+            kind: ClientControllerEventKind.progress,
+            level: ClientControllerEventLevel.info,
+          );
+          _clearLastRuntimeFailureSoon();
+          _persistRuntimeSnapshotSoon();
+          return;
+        }
+
+        final progressSummary = switch (session.phase) {
+          ControllerRuntimePhase.planned =>
+            'Launch plan prepared. Writing managed runtime config.',
+          ControllerRuntimePhase.launching =>
+            'Managed runtime is launching now.',
+          ControllerRuntimePhase.alive => session.pid == null
+              ? 'Runtime process is alive. Waiting for session-ready signal.'
+              : 'Runtime process is alive (pid=${session.pid}). Waiting for session-ready signal.',
+          ControllerRuntimePhase.failed =>
+            'Runtime launch reported a failure state.',
+          ControllerRuntimePhase.stopped =>
+            'Launch accepted. Waiting for runtime process to start.',
+          ControllerRuntimePhase.sessionReady =>
+            'Runtime session is ready.',
+        };
+
+        if (_status.message != progressSummary) {
+          _status = _status.copyWith(
+            phase: ClientConnectionPhase.connecting,
+            message: progressSummary,
+            updatedAt: DateTime.now(),
+          );
+          _recordEvent(
+            title: 'Runtime launch in progress',
+            message: progressSummary,
+            phase: ClientConnectionPhase.connecting,
+            profileId: _status.activeProfileId,
+            kind: ClientControllerEventKind.progress,
+            level: ClientControllerEventLevel.info,
+          );
+          _persistRuntimeSnapshotSoon();
+        }
+      }
+
+      if (_status.phase == ClientConnectionPhase.disconnecting) {
+        final stopSummary = session.stopRequested
+            ? 'Stop requested${session.pid == null ? '' : ' (pid=${session.pid})'}. Waiting for the runtime process to exit cleanly.'
+            : 'Disconnect requested. Waiting for the runtime process to exit.';
+        if (_status.message != stopSummary) {
+          _status = _status.copyWith(
+            phase: ClientConnectionPhase.disconnecting,
+            message: stopSummary,
+            updatedAt: DateTime.now(),
+          );
+          _recordEvent(
+            title: 'Runtime stop in progress',
+            message: stopSummary,
+            phase: ClientConnectionPhase.disconnecting,
+            profileId: _status.activeProfileId,
+            kind: ClientControllerEventKind.progress,
+            level: ClientControllerEventLevel.info,
+          );
+          _persistRuntimeSnapshotSoon();
+        }
       }
       return;
     }
@@ -581,9 +703,15 @@ class AdapterBackedClientController extends ClientControllerApi {
       statusMessage: _status.message,
       activeProfileId: _status.activeProfileId,
       statusUpdatedAt: _status.updatedAt,
+      sessionPhase: currentSession.phase.name,
       sessionIsRunning: currentSession.isRunning,
+      sessionStopRequested: currentSession.stopRequested,
+      sessionStopRequestedAt: currentSession.stopRequestedAt,
       sessionPid: currentSession.pid,
       sessionActiveConfigPath: currentSession.activeConfigPath,
+      sessionConfigProvenance: currentSession.configProvenance,
+      sessionExpectedLocalSocksPort: currentSession.expectedLocalSocksPort,
+      sessionLaunchPlanSummary: currentSession.launchPlan?.summary,
       sessionLastExitCode: currentSession.lastExitCode,
       sessionLastError: currentSession.lastError,
       sessionUpdatedAt: currentSession.updatedAt,
@@ -749,9 +877,15 @@ class _PersistedRuntimeSnapshot {
     required this.statusMessage,
     required this.activeProfileId,
     required this.statusUpdatedAt,
+    required this.sessionPhase,
     required this.sessionIsRunning,
+    required this.sessionStopRequested,
+    required this.sessionStopRequestedAt,
     required this.sessionPid,
     required this.sessionActiveConfigPath,
+    required this.sessionConfigProvenance,
+    required this.sessionExpectedLocalSocksPort,
+    required this.sessionLaunchPlanSummary,
     required this.sessionLastExitCode,
     required this.sessionLastError,
     required this.sessionUpdatedAt,
@@ -761,9 +895,15 @@ class _PersistedRuntimeSnapshot {
   final String statusMessage;
   final String? activeProfileId;
   final DateTime statusUpdatedAt;
+  final String sessionPhase;
   final bool sessionIsRunning;
+  final bool sessionStopRequested;
+  final DateTime? sessionStopRequestedAt;
   final int? sessionPid;
   final String? sessionActiveConfigPath;
+  final String? sessionConfigProvenance;
+  final int? sessionExpectedLocalSocksPort;
+  final String? sessionLaunchPlanSummary;
   final int? sessionLastExitCode;
   final String? sessionLastError;
   final DateTime sessionUpdatedAt;
@@ -774,9 +914,15 @@ class _PersistedRuntimeSnapshot {
       'statusMessage': statusMessage,
       'activeProfileId': activeProfileId,
       'statusUpdatedAt': statusUpdatedAt.toIso8601String(),
+      'sessionPhase': sessionPhase,
       'sessionIsRunning': sessionIsRunning,
+      'sessionStopRequested': sessionStopRequested,
+      'sessionStopRequestedAt': sessionStopRequestedAt?.toIso8601String(),
       'sessionPid': sessionPid,
       'sessionActiveConfigPath': sessionActiveConfigPath,
+      'sessionConfigProvenance': sessionConfigProvenance,
+      'sessionExpectedLocalSocksPort': sessionExpectedLocalSocksPort,
+      'sessionLaunchPlanSummary': sessionLaunchPlanSummary,
       'sessionLastExitCode': sessionLastExitCode,
       'sessionLastError': sessionLastError,
       'sessionUpdatedAt': sessionUpdatedAt.toIso8601String(),
@@ -789,9 +935,15 @@ class _PersistedRuntimeSnapshot {
     final statusMessage = value['statusMessage'];
     final activeProfileId = value['activeProfileId'];
     final statusUpdatedAt = value['statusUpdatedAt'];
+    final sessionPhase = value['sessionPhase'];
     final sessionIsRunning = value['sessionIsRunning'];
+    final sessionStopRequested = value['sessionStopRequested'];
+    final sessionStopRequestedAt = value['sessionStopRequestedAt'];
     final sessionPid = value['sessionPid'];
     final sessionActiveConfigPath = value['sessionActiveConfigPath'];
+    final sessionConfigProvenance = value['sessionConfigProvenance'];
+    final sessionExpectedLocalSocksPort = value['sessionExpectedLocalSocksPort'];
+    final sessionLaunchPlanSummary = value['sessionLaunchPlanSummary'];
     final sessionLastExitCode = value['sessionLastExitCode'];
     final sessionLastError = value['sessionLastError'];
     final sessionUpdatedAt = value['sessionUpdatedAt'];
@@ -815,10 +967,21 @@ class _PersistedRuntimeSnapshot {
       statusMessage: statusMessage,
       activeProfileId: activeProfileId is String ? activeProfileId : null,
       statusUpdatedAt: parsedStatusUpdatedAt,
+      sessionPhase: sessionPhase is String ? sessionPhase : 'stopped',
       sessionIsRunning: sessionIsRunning,
+      sessionStopRequested: sessionStopRequested is bool ? sessionStopRequested : false,
+      sessionStopRequestedAt: sessionStopRequestedAt is String
+          ? DateTime.tryParse(sessionStopRequestedAt)
+          : null,
       sessionPid: sessionPid is int ? sessionPid : null,
       sessionActiveConfigPath:
           sessionActiveConfigPath is String ? sessionActiveConfigPath : null,
+      sessionConfigProvenance:
+          sessionConfigProvenance is String ? sessionConfigProvenance : null,
+      sessionExpectedLocalSocksPort:
+          sessionExpectedLocalSocksPort is int ? sessionExpectedLocalSocksPort : null,
+      sessionLaunchPlanSummary:
+          sessionLaunchPlanSummary is String ? sessionLaunchPlanSummary : null,
       sessionLastExitCode:
           sessionLastExitCode is int ? sessionLastExitCode : null,
       sessionLastError: sessionLastError is String ? sessionLastError : null,

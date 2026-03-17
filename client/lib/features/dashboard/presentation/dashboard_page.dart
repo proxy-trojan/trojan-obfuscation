@@ -572,6 +572,25 @@ class _ConnectionHomeCard extends StatelessWidget {
         ConnectionLifecycleStage.error => Colors.red,
       };
 
+  String _executionPathLabel(String mode) {
+    if (mode.contains('real-runtime-boundary')) {
+      return 'Real runtime path';
+    }
+    if (mode.contains('stubbed-local-boundary-fallback')) {
+      return 'Fallback stub (real runtime unavailable)';
+    }
+    if (mode.contains('stubbed-local-boundary-explicit')) {
+      return 'Explicit stub mode';
+    }
+    if (mode.contains('stubbed-local-boundary-non-desktop')) {
+      return 'Stub mode (non-desktop target)';
+    }
+    if (mode.contains('stubbed-local-boundary')) {
+      return 'Simulated runtime path';
+    }
+    return 'Unknown runtime path';
+  }
+
   @override
   Widget build(BuildContext context) {
     return SectionCard(
@@ -634,6 +653,7 @@ class _ConnectionHomeCard extends StatelessWidget {
                     KeyValuePair(label: 'Status Note', value: lifecycle.statusSummary),
                     KeyValuePair(label: 'Secret Storage', value: storageSummary),
                     KeyValuePair(label: 'Runtime Mode', value: runtimeMode),
+                    KeyValuePair(label: 'Execution Path', value: _executionPathLabel(runtimeMode)),
                     KeyValuePair(label: 'Controller Backend', value: controllerBackend),
                     KeyValuePair(label: 'Backend Version', value: controllerVersion),
                     KeyValuePair(label: 'Update Channel', value: updateChannel),
@@ -774,9 +794,32 @@ class _RuntimeSessionSummary extends StatelessWidget {
               runSpacing: 12,
               children: <Widget>[
                 KeyValuePair(label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
+                KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
+                KeyValuePair(
+                  label: 'Stop Requested',
+                  value: session.stopRequested ? 'Yes' : 'No',
+                ),
+                KeyValuePair(
+                  label: 'Stop Requested At',
+                  value: session.stopRequestedAt == null
+                      ? 'N/A'
+                      : formatTimestamp(session.stopRequestedAt!),
+                ),
                 KeyValuePair(label: 'PID', value: session.pid?.toString() ?? 'N/A'),
                 KeyValuePair(
                     label: 'Config Path', value: session.activeConfigPath ?? 'N/A'),
+                KeyValuePair(
+                  label: 'Config Provenance',
+                  value: session.configProvenance ?? 'N/A',
+                ),
+                KeyValuePair(
+                  label: 'Expected Local SOCKS Port',
+                  value: session.expectedLocalSocksPort?.toString() ?? 'N/A',
+                ),
+                KeyValuePair(
+                  label: 'Launch Plan',
+                  value: session.launchPlan?.summary ?? 'N/A',
+                ),
                 KeyValuePair(label: 'Last Exit Code',
                     value: session.lastExitCode?.toString() ?? 'N/A'),
                 KeyValuePair(label: 'Last Error', value: session.lastError ?? 'None'),

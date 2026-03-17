@@ -155,6 +155,25 @@ class _SupportOverviewCard extends StatelessWidget {
     };
   }
 
+  String _executionPathLabel(String mode) {
+    if (mode.contains('real-runtime-boundary')) {
+      return 'Real runtime path';
+    }
+    if (mode.contains('stubbed-local-boundary-fallback')) {
+      return 'Fallback stub (real runtime unavailable)';
+    }
+    if (mode.contains('stubbed-local-boundary-explicit')) {
+      return 'Explicit stub mode';
+    }
+    if (mode.contains('stubbed-local-boundary-non-desktop')) {
+      return 'Stub mode (non-desktop target)';
+    }
+    if (mode.contains('stubbed-local-boundary')) {
+      return 'Simulated runtime path';
+    }
+    return 'Unknown runtime path';
+  }
+
   @override
   Widget build(BuildContext context) {
     return SectionCard(
@@ -191,6 +210,11 @@ class _SupportOverviewCard extends StatelessWidget {
               KeyValuePair(label: 'Connection phase', value: status.phase.name, width: 240),
               KeyValuePair(label: 'Status note', value: status.message, width: 240),
               KeyValuePair(label: 'Runtime mode', value: runtimeMode, width: 240),
+              KeyValuePair(
+                label: 'Execution path',
+                value: _executionPathLabel(runtimeMode),
+                width: 240,
+              ),
               KeyValuePair(label: 'Endpoint hint', value: endpointHint, width: 240),
               KeyValuePair(label: 'Backend', value: backendKind, width: 240),
               KeyValuePair(label: 'Backend version', value: backendVersion, width: 240),
