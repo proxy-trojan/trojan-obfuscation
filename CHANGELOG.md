@@ -46,6 +46,22 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.3.0-beta.2] - 2026-03-17
+
+### EN
+
+#### Fixed
+- Release workflow now checks out repository code before artifact validation, so checksum and package validation helper scripts are available in `validate-artifacts`.
+- `v1.3.0-beta.1` failed at CI validation due to workflow orchestration, not product build/package failure.
+
+### 中文
+
+#### 修复
+- release workflow 的 `validate-artifacts` 现已补上仓库 checkout，确保 checksum 与 package validation 脚本在校验阶段可用。
+- `v1.3.0-beta.1` 的失败根因是 CI 编排问题，而不是产品代码/打包产物失败。
+
+---
+
 ## [v1.3.0-beta.1] - 2026-03-17
 
 ### EN
