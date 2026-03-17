@@ -48,4 +48,34 @@ class ClientProfile {
       hasStoredPassword: hasStoredPassword ?? this.hasStoredPassword,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ClientProfile &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          serverHost == other.serverHost &&
+          serverPort == other.serverPort &&
+          sni == other.sni &&
+          localSocksPort == other.localSocksPort &&
+          verifyTls == other.verifyTls &&
+          notes == other.notes &&
+          updatedAt == other.updatedAt &&
+          hasStoredPassword == other.hasStoredPassword;
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        name,
+        serverHost,
+        serverPort,
+        sni,
+        localSocksPort,
+        verifyTls,
+        notes,
+        updatedAt,
+        hasStoredPassword,
+      );
 }

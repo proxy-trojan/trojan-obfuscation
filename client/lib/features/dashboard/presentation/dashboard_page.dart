@@ -1,27 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/format_timestamp.dart';
+import '../../../core/widgets/key_value_pair.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/controller_runtime_health.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../application/connection_lifecycle_view_model.dart';
 
-Widget _kvWidget(String label, String value) {
-  return SizedBox(
-    width: 220,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        Text(value),
-      ],
-    ),
-  );
-}
-
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({
     super.key,
     required this.services,
@@ -36,7 +25,27 @@ class DashboardPage extends StatelessWidget {
   final VoidCallback? onOpenSettings;
 
   @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  Future<ControllerRuntimeHealth>? _healthFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _healthFuture = widget.services.controller.checkHealth();
+  }
+
+  void _refreshHealth() {
+    setState(() {
+      _healthFuture = widget.services.controller.checkHealth();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final services = widget.services;
     return AnimatedBuilder(
       animation: Listenable.merge(<Listenable>[
         services.profileStore,
@@ -66,7 +75,7 @@ class DashboardPage extends StatelessWidget {
                 onDismiss: () {
                   services.desktopLifecycle.clearExternalActivation();
                 },
-                onOpenSettings: onOpenSettings,
+                onOpenSettings: widget.onOpenSettings,
               ),
               const SizedBox(height: 16),
             ],
@@ -77,7 +86,7 @@ class DashboardPage extends StatelessWidget {
                 body:
                     'The first useful step is simple: create or import one profile, then save its password and try one connection.',
                 primaryLabel: 'Open Profiles',
-                onPrimary: onOpenProfiles,
+                onPrimary: widget.onOpenProfiles,
               )
             else if (activeProfile == null &&
                 selectedProfile != null &&
@@ -88,7 +97,7 @@ class DashboardPage extends StatelessWidget {
                 body:
                     'This profile is almost ready. Save the password first, then try one connection attempt.',
                 primaryLabel: 'Open Profiles',
-                onPrimary: onOpenProfiles,
+                onPrimary: widget.onOpenProfiles,
               )
             else
               _ConnectionHomeCard(
@@ -102,8 +111,8 @@ class DashboardPage extends StatelessWidget {
                 updateChannel:
                     services.settingsStore.settings.updateChannel.name,
                 storageSummary: services.profileSecrets.storageSummary,
-                onOpenProfiles: onOpenProfiles,
-                onOpenAdvanced: onOpenAdvanced,
+                onOpenProfiles: widget.onOpenProfiles,
+                onOpenAdvanced: widget.onOpenAdvanced,
               ),
             const SizedBox(height: 16),
             SectionCard(
@@ -116,8 +125,8 @@ class DashboardPage extends StatelessWidget {
                 activeProfile: activeProfile,
                 status: status,
                 lifecycle: lifecycle,
-                onOpenProfiles: onOpenProfiles,
-                onOpenAdvanced: onOpenAdvanced,
+                onOpenProfiles: widget.onOpenProfiles,
+                onOpenAdvanced: widget.onOpenAdvanced,
               ),
             ),
             const SizedBox(height: 16),
@@ -147,9 +156,15 @@ class DashboardPage extends StatelessWidget {
             SectionCard(
               title: 'Before you connect',
               subtitle: 'Only the facts the user needs before trying one test.',
-              child: FutureBuilder(
-                future: services.controller.checkHealth(),
-                builder: (BuildContext context, snapshot) {
+              trailing: IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh health check',
+                onPressed: _refreshHealth,
+              ),
+              child: FutureBuilder<ControllerRuntimeHealth>(
+                future: _healthFuture,
+                builder: (BuildContext context,
+                    AsyncSnapshot<ControllerRuntimeHealth> snapshot) {
                   final health = snapshot.data;
                   final levelName =
                       health == null ? 'Checking…' : health.level.name;
@@ -160,17 +175,17 @@ class DashboardPage extends StatelessWidget {
                     spacing: 24,
                     runSpacing: 12,
                     children: <Widget>[
-                      _kvWidget('Profile Ready',
-                          selectedProfile == null ? 'No' : 'Yes'),
-                      _kvWidget(
-                        'Password Ready',
-                        _passwordReadyLabel(selectedProfile ?? activeProfile),
+                      KeyValuePair(label: 'Profile Ready',
+                          value: selectedProfile == null ? 'No' : 'Yes'),
+                      KeyValuePair(
+                        label: 'Password Ready',
+                        value: _passwordReadyLabel(selectedProfile ?? activeProfile),
                       ),
-                      _kvWidget('Secret Storage',
-                          services.profileSecrets.storageSummary),
-                      _kvWidget('App Ready', levelName),
-                      _kvWidget('Status Note', summary),
-                      _kvWidget('Runtime Path', runtimeConfig.endpointHint),
+                      KeyValuePair(label: 'Secret Storage',
+                          value: services.profileSecrets.storageSummary),
+                      KeyValuePair(label: 'App Ready', value: levelName),
+                      KeyValuePair(label: 'Status Note', value: summary),
+                      KeyValuePair(label: 'Runtime Path', value: runtimeConfig.endpointHint),
                     ],
                   );
                 },
@@ -251,7 +266,7 @@ class _ExternalActivationCard extends StatelessWidget {
             Text(status.externalActivationGuidance()),
             const SizedBox(height: 8),
             Text(
-              'Observed at: ${status.lastExternalActivationAt?.toIso8601String() ?? 'unknown'}',
+              'Observed at: ${formatTimestamp(status.lastExternalActivationAt)}',
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -315,18 +330,21 @@ class _ActivationFactPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.deepPurple.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.deepPurple,
-          fontWeight: FontWeight.w600,
+    return Semantics(
+      label: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.deepPurple.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.deepPurple,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -605,20 +623,20 @@ class _ConnectionHomeCard extends StatelessWidget {
                   spacing: 24,
                   runSpacing: 12,
                   children: <Widget>[
-                    _kvWidget('Lifecycle', lifecycle.label),
-                    _kvWidget('Selected Profile', selectedProfile.name),
-                    _kvWidget(
-                      'Active Profile',
-                      activeProfile?.name ??
+                    KeyValuePair(label: 'Lifecycle', value: lifecycle.label),
+                    KeyValuePair(label: 'Selected Profile', value: selectedProfile.name),
+                    KeyValuePair(
+                      label: 'Active Profile',
+                      value: activeProfile?.name ??
                           lifecycle.activeProfileName ??
                           'None',
                     ),
-                    _kvWidget('Status Note', lifecycle.statusSummary),
-                    _kvWidget('Secret Storage', storageSummary),
-                    _kvWidget('Runtime Mode', runtimeMode),
-                    _kvWidget('Controller Backend', controllerBackend),
-                    _kvWidget('Backend Version', controllerVersion),
-                    _kvWidget('Update Channel', updateChannel),
+                    KeyValuePair(label: 'Status Note', value: lifecycle.statusSummary),
+                    KeyValuePair(label: 'Secret Storage', value: storageSummary),
+                    KeyValuePair(label: 'Runtime Mode', value: runtimeMode),
+                    KeyValuePair(label: 'Controller Backend', value: controllerBackend),
+                    KeyValuePair(label: 'Backend Version', value: controllerVersion),
+                    KeyValuePair(label: 'Update Channel', value: updateChannel),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -668,18 +686,21 @@ class _LifecyclePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
+    return Semantics(
+      label: 'Connection status: $label',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -739,31 +760,38 @@ class _RuntimeSessionSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = services.controller.session;
+    // 使用 AnimatedBuilder 确保 ExpansionTile 展开后 session 变更仍能刷新
+    return AnimatedBuilder(
+      animation: services.controller,
+      builder: (BuildContext context, _) {
+        final session = services.controller.session;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Wrap(
-          spacing: 24,
-          runSpacing: 12,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            _kvWidget('Running', session.isRunning ? 'Yes' : 'No'),
-            _kvWidget('PID', session.pid?.toString() ?? 'N/A'),
-            _kvWidget('Config Path', session.activeConfigPath ?? 'N/A'),
-            _kvWidget(
-                'Last Exit Code', session.lastExitCode?.toString() ?? 'N/A'),
-            _kvWidget('Last Error', session.lastError ?? 'None'),
+            Wrap(
+              spacing: 24,
+              runSpacing: 12,
+              children: <Widget>[
+                KeyValuePair(label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
+                KeyValuePair(label: 'PID', value: session.pid?.toString() ?? 'N/A'),
+                KeyValuePair(
+                    label: 'Config Path', value: session.activeConfigPath ?? 'N/A'),
+                KeyValuePair(label: 'Last Exit Code',
+                    value: session.lastExitCode?.toString() ?? 'N/A'),
+                KeyValuePair(label: 'Last Error', value: session.lastError ?? 'None'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (session.stdoutTail.isNotEmpty)
+              _logTail('stdout tail', session.stdoutTail),
+            if (session.stderrTail.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 12),
+              _logTail('stderr tail', session.stderrTail),
+            ],
           ],
-        ),
-        const SizedBox(height: 12),
-        if (session.stdoutTail.isNotEmpty)
-          _logTail('stdout tail', session.stdoutTail),
-        if (session.stderrTail.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 12),
-          _logTail('stderr tail', session.stderrTail),
-        ],
-      ],
+        );
+      },
     );
   }
 

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import 'app/app.dart';
 import 'bootstrap.dart';
@@ -19,9 +19,33 @@ Future<void> main() async {
     exit(0);
   }
 
-  final services = await ClientBootstrap.createServices(
-    singleInstancePrimary: primaryInstance,
-  );
+  late final ClientServiceRegistry services;
+  try {
+    services = await ClientBootstrap.createServices(
+      singleInstancePrimary: primaryInstance,
+    );
+  } catch (error, stackTrace) {
+    debugPrint('Trojan-Pro Client: bootstrap failed: $error\n$stackTrace');
+    // 显示最小化的错误 UI，防止白屏崩溃
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                'App startup failed.\n\n'
+                'Please try clearing app data or reinstalling.\n'
+                'Error reference: ${error.runtimeType}',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
@@ -50,6 +74,12 @@ Future<void> main() async {
       source: 'secondary-launch-focus-ipc',
     );
     await services.desktopLifecycle.showMainWindow();
+  });
+
+  // 进程退出前刷盘：确保 debounce 中未完成的写入不丢失
+  AppLifecycleListener(onExitRequested: () async {
+    await services.dispose();
+    return AppExitResponse.exit;
   });
 
   runZonedGuarded(

@@ -12,6 +12,7 @@ class DesktopInstanceGuard {
   static RandomAccessFile? _lockHandle;
   static ServerSocket? _focusServer;
   static String? _lockName;
+  static String? _focusNonce;
   static Future<void> Function()? _focusRequestHandler;
 
   static Future<bool> tryAcquirePrimaryLock({
@@ -54,6 +55,7 @@ class DesktopInstanceGuard {
 
     final lockName = _lockName;
     _lockName = null;
+    _focusNonce = null;
 
     if (server != null) {
       try {
@@ -93,16 +95,30 @@ class DesktopInstanceGuard {
     );
     _focusServer = server;
 
+    // 生成格式校验 token，用于过滤随机噪声数据。
+    // 注意：该 token 会明文写入临时文件供二次实例读取，因此不具备
+    // 防恶意本地进程的安全认证能力，仅防止非预期的垃圾数据触发聚焦。
+    final nonce = DateTime.now().microsecondsSinceEpoch.toRadixString(36) +
+        pid.toRadixString(36);
+    _focusNonce = nonce;
+
     final endpointFile = File(_focusEndpointPath(lockName));
-    await endpointFile.writeAsString('${server.port}', flush: true);
+    await endpointFile.writeAsString('${server.port}:$nonce', flush: true);
 
     unawaited(
       server.forEach((socket) async {
         String payload = '';
         try {
-          payload = await utf8.decoder.bind(socket).join();
+          // 限制接收 chunk 数和超时，防止恶意本地进程消耗内存
+          payload = await utf8.decoder
+              .bind(socket.take(4))
+              .join()
+              .timeout(const Duration(seconds: 2), onTimeout: () => '');
+          if (payload.length > 256) {
+            payload = '';
+          }
         } catch (_) {
-          // ignore malformed payload
+          // 忽略格式异常的数据
         } finally {
           try {
             await socket.close();
@@ -111,7 +127,11 @@ class DesktopInstanceGuard {
           }
         }
 
-        if (payload.trim() != _focusMessage) {
+        // 验证格式校验 token：格式为 "focus:<token>"
+        final parts = payload.trim().split(':');
+        if (parts.length != 2 ||
+            parts[0] != _focusMessage ||
+            parts[1] != _focusNonce) {
           return;
         }
 
@@ -133,9 +153,13 @@ class DesktopInstanceGuard {
       return;
     }
 
-    final rawPort = await endpointFile.readAsString();
-    final port = int.tryParse(rawPort.trim());
-    if (port == null) {
+    final rawContent = await endpointFile.readAsString();
+    final parts = rawContent.trim().split(':');
+    if (parts.length != 2) return;
+
+    final port = int.tryParse(parts[0]);
+    final nonce = parts[1];
+    if (port == null || nonce.isEmpty) {
       return;
     }
 
@@ -146,7 +170,7 @@ class DesktopInstanceGuard {
         port,
         timeout: const Duration(milliseconds: 300),
       );
-      socket.write(_focusMessage);
+      socket.write('$_focusMessage:$nonce');
       await socket.flush();
     } catch (_) {
       // ignore notification failures
@@ -171,6 +195,7 @@ class DesktopInstanceGuard {
   static Future<void> debugResetForTests() async {
     await release();
     _focusRequestHandler = null;
+    _focusNonce = null;
   }
 
   @visibleForTesting

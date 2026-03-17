@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../features/controller/application/client_controller_api.dart';
 import '../../features/diagnostics/application/diagnostics_export_service.dart';
 import '../../features/packaging/application/packaging_export_service.dart';
@@ -45,5 +47,39 @@ class ClientServiceRegistry {
   final DesktopLifecycleService desktopLifecycle;
   final AppRuntimeErrorStore appRuntimeErrors;
 
+  /// bootstrap 阶段注册的 listener，dispose 时统一移除。
+  final List<_ListenerBinding> _listenerBindings = <_ListenerBinding>[];
+
+  void registerListener(Listenable listenable, VoidCallback callback) {
+    listenable.addListener(callback);
+    _listenerBindings.add(_ListenerBinding(listenable, callback));
+  }
+
   SecureStorageStatus get secureStorageStatus => secureStorage.status;
+
+  /// 释放所有 ChangeNotifier 和 listener，应在 app 退出时调用。
+  Future<void> dispose() async {
+    // 先移除所有 bootstrap 阶段注册的 listener
+    for (final binding in _listenerBindings) {
+      binding.listenable.removeListener(binding.callback);
+    }
+    _listenerBindings.clear();
+
+    // 释放 desktop lifecycle（包含 tray、window listener 等平台资源）
+    await desktopLifecycle.disposeService();
+
+    // 释放各 ChangeNotifier
+    controller.dispose();
+    profileStore.dispose();
+    settingsStore.dispose();
+    packagingStore.dispose();
+    appRuntimeErrors.dispose();
+  }
+}
+
+class _ListenerBinding {
+  const _ListenerBinding(this.listenable, this.callback);
+
+  final Listenable listenable;
+  final VoidCallback callback;
 }

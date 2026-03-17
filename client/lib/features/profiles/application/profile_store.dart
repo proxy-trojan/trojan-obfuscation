@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../platform/services/local_state_store.dart';
@@ -49,12 +51,15 @@ class ProfileStore extends ChangeNotifier {
         _selectedProfileId = 'sample-hk-1';
 
   static const String _profilesKey = 'profiles.json';
+  static const String _selectedProfileKey = 'profiles.selectedId';
+  static const Duration _saveDebounceDuration = Duration(milliseconds: 300);
 
   final LocalStateStore _localStateStore;
   final ProfileSerialization _serialization;
   final List<ClientProfile> _profiles;
   String? _selectedProfileId;
   bool _loaded = false;
+  Timer? _saveDebounce;
 
   List<ClientProfile> get profiles =>
       List<ClientProfile>.unmodifiable(_profiles);
@@ -87,15 +92,30 @@ class ProfileStore extends ChangeNotifier {
       _profiles
         ..clear()
         ..addAll(profiles);
+    }
+
+    // 恢复上次选中的 profile
+    final savedSelectedId = await _localStateStore.read(_selectedProfileKey);
+    if (savedSelectedId != null &&
+        savedSelectedId.trim().isNotEmpty &&
+        _profiles.any((p) => p.id == savedSelectedId.trim())) {
+      _selectedProfileId = savedSelectedId.trim();
+    } else {
       _selectedProfileId = _profiles.isEmpty ? null : _profiles.first.id;
     }
+
     _loaded = true;
     notifyListeners();
   }
 
   Future<void> save() async {
-    await _localStateStore.write(
-        _profilesKey, _serialization.encodeProfileList(_profiles));
+    try {
+      await _localStateStore.write(
+          _profilesKey, _serialization.encodeProfileList(_profiles));
+    } catch (error) {
+      debugPrint('ProfileStore: 保存配置失败: $error');
+      // 尽力持久化：保存失败不阻塞 UI 交互
+    }
   }
 
   Future<void> syncStoredPasswordFlags(
@@ -111,13 +131,14 @@ class ProfileStore extends ChangeNotifier {
       changed = true;
     }
     if (!changed) return;
-    await save();
+    _scheduleDebouncedSave();
     notifyListeners();
   }
 
   void selectProfile(String id) {
     if (_selectedProfileId == id) return;
     _selectedProfileId = id;
+    _persistSelectedProfile();
     notifyListeners();
   }
 
@@ -135,7 +156,7 @@ class ProfileStore extends ChangeNotifier {
     );
     _profiles.add(profile);
     _selectedProfileId = profile.id;
-    save();
+    _scheduleDebouncedSave();
     notifyListeners();
     return profile;
   }
@@ -148,7 +169,7 @@ class ProfileStore extends ChangeNotifier {
       _profiles[index] = profile.copyWith(updatedAt: DateTime.now());
     }
     _selectedProfileId = profile.id;
-    save();
+    _scheduleDebouncedSave();
     notifyListeners();
   }
 
@@ -157,7 +178,37 @@ class ProfileStore extends ChangeNotifier {
     if (selected == null) return;
     _profiles.removeWhere((item) => item.id == selected.id);
     _selectedProfileId = _profiles.isEmpty ? null : _profiles.first.id;
-    save();
+    _scheduleDebouncedSave();
+    _persistSelectedProfile();
     notifyListeners();
+  }
+
+  void _persistSelectedProfile() {
+    final id = _selectedProfileId;
+    if (id == null) {
+      _localStateStore.delete(_selectedProfileKey).catchError((error) {
+        debugPrint('ProfileStore: 删除 selectedProfile 持久化失败: $error');
+      });
+    } else {
+      _localStateStore.write(_selectedProfileKey, id).catchError((error) {
+        debugPrint('ProfileStore: 保存 selectedProfile 持久化失败: $error');
+      });
+    }
+  }
+
+  void _scheduleDebouncedSave() {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(_saveDebounceDuration, () {
+      unawaited(save());
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_saveDebounce?.isActive ?? false) {
+      _saveDebounce!.cancel();
+      unawaited(save()); // 确保 pending 的数据不丢失
+    }
+    super.dispose();
   }
 }

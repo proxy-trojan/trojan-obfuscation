@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'secure_storage.dart';
 
 class FallbackSecureStorage implements SecureStorage {
@@ -174,6 +176,11 @@ class FallbackSecureStorage implements SecureStorage {
 
   void _markPrimaryFailed(Object error) {
     _promotionNeeded = true;
+    debugPrint(
+      'FallbackSecureStorage: primary 存储失败，已降级到 fallback '
+      '(${_fallback.backendName})。密码等敏感数据在重启后可能丢失。'
+      '错误: ${error.runtimeType}: $error',
+    );
     _status = SecureStorageStatus(
       backendName: '${_primary.backendName}|fallback:${_fallback.backendName}',
       activeBackendName: _fallback.status.activeBackendName,

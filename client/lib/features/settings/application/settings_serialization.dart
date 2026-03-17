@@ -6,20 +6,31 @@ import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../domain/app_settings.dart';
 
 class SettingsSerialization {
+  /// 安全地将字符串解析为枚举值，未匹配时返回 [fallback]。
+  static T _safeEnum<T extends Enum>(List<T> values, String? name, T fallback) {
+    if (name == null) return fallback;
+    return values.asNameMap()[name] ?? fallback;
+  }
+
   AppSettings decode(String text) {
     final decoded = jsonDecode(text) as Map<String, dynamic>;
     return AppSettings(
-      themeMode: ThemeMode.values.byName(
-        (decoded['themeMode'] as String?) ?? ThemeMode.system.name,
+      themeMode: _safeEnum(
+        ThemeMode.values,
+        decoded['themeMode'] as String?,
+        ThemeMode.system,
       ),
-      updateChannel: UpdateChannel.values.byName(
-        (decoded['updateChannel'] as String?) ?? UpdateChannel.stable.name,
+      updateChannel: _safeEnum(
+        UpdateChannel.values,
+        decoded['updateChannel'] as String?,
+        UpdateChannel.stable,
       ),
       autoCheckForUpdates: (decoded['autoCheckForUpdates'] as bool?) ?? true,
       launchOnLogin: (decoded['launchOnLogin'] as bool?) ?? false,
-      desktopCloseBehavior: DesktopCloseBehavior.values.byName(
-        (decoded['desktopCloseBehavior'] as String?) ??
-            DesktopCloseBehavior.hideToTray.name,
+      desktopCloseBehavior: _safeEnum(
+        DesktopCloseBehavior.values,
+        decoded['desktopCloseBehavior'] as String?,
+        DesktopCloseBehavior.hideToTray,
       ),
       collectDiagnostics: (decoded['collectDiagnostics'] as bool?) ?? true,
       diagnosticsRetentionDays:

@@ -57,4 +57,28 @@ class AppSettings {
     collectDiagnostics: true,
     diagnosticsRetentionDays: 7,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppSettings &&
+          runtimeType == other.runtimeType &&
+          themeMode == other.themeMode &&
+          updateChannel == other.updateChannel &&
+          autoCheckForUpdates == other.autoCheckForUpdates &&
+          launchOnLogin == other.launchOnLogin &&
+          desktopCloseBehavior == other.desktopCloseBehavior &&
+          collectDiagnostics == other.collectDiagnostics &&
+          diagnosticsRetentionDays == other.diagnosticsRetentionDays;
+
+  @override
+  int get hashCode => Object.hash(
+        themeMode,
+        updateChannel,
+        autoCheckForUpdates,
+        launchOnLogin,
+        desktopCloseBehavior,
+        collectDiagnostics,
+        diagnosticsRetentionDays,
+      );
 }

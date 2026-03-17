@@ -9,6 +9,7 @@ class NoopDesktopLifecycleService extends DesktopLifecycleService {
   DesktopLifecyclePolicy _policy;
   DesktopLifecycleStatus _status;
   DesktopQuickActionsState _quickActions = DesktopQuickActionsState.initial;
+  bool _disposed = false;
 
   @override
   DesktopLifecyclePolicy get policy => _policy;
@@ -65,5 +66,9 @@ class NoopDesktopLifecycleService extends DesktopLifecycleService {
   Future<void> showMainWindow() async {}
 
   @override
-  Future<void> disposeService() async {}
+  Future<void> disposeService() async {
+    if (_disposed) return;
+    _disposed = true;
+    dispose(); // 释放 ChangeNotifier 资源
+  }
 }

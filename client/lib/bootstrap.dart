@@ -127,17 +127,6 @@ class ClientBootstrap {
     }
 
     await syncDesktopQuickActions();
-    profileStore.addListener(() {
-      unawaited(syncDesktopQuickActions());
-    });
-    controller.addListener(() {
-      unawaited(syncDesktopQuickActions());
-    });
-    settingsStore.addListener(() {
-      unawaited(
-        desktopLifecycle.applyPolicy(_desktopPolicyFromSettings(settingsStore)),
-      );
-    });
 
     final diagnostics = DiagnosticsExportService(
       profileStore: profileStore,
@@ -150,7 +139,7 @@ class ClientBootstrap {
       appRuntimeErrors: appRuntimeErrors,
     );
 
-    return ClientServiceRegistry(
+    final registry = ClientServiceRegistry(
       secureStorage: secureStorage,
       localStateStore: localStateStore,
       diagnosticsFileExporter: diagnosticsFileExporter,
@@ -165,6 +154,23 @@ class ClientBootstrap {
       desktopLifecycle: desktopLifecycle,
       appRuntimeErrors: appRuntimeErrors,
     );
+
+    // 使用具名回调通过 registry 注册，dispose 时可统一移除
+    void onProfileOrControllerChanged() {
+      unawaited(syncDesktopQuickActions());
+    }
+
+    void onSettingsChanged() {
+      unawaited(
+        desktopLifecycle.applyPolicy(_desktopPolicyFromSettings(settingsStore)),
+      );
+    }
+
+    registry.registerListener(profileStore, onProfileOrControllerChanged);
+    registry.registerListener(controller, onProfileOrControllerChanged);
+    registry.registerListener(settingsStore, onSettingsChanged);
+
+    return registry;
   }
 
   static SecureStorage _createSecureStorage() {
@@ -216,12 +222,9 @@ class ClientBootstrap {
 
   static ShellControllerAdapter _createShellControllerAdapter() {
     final env = Platform.environment;
-    final enableRealAdapter = (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '')
-                .trim()
-                .toLowerCase() ==
-            '1' ||
-        (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '').trim().toLowerCase() ==
-            'true';
+    final rawFlag =
+        (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '').trim().toLowerCase();
+    final enableRealAdapter = rawFlag == '1' || rawFlag == 'true';
     final binaryOverride = (env['TROJAN_CLIENT_BINARY'] ?? '').trim();
 
     if (enableRealAdapter) {

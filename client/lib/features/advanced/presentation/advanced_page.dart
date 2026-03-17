@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/format_timestamp.dart';
+import '../../../core/widgets/key_value_pair.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/service_registry.dart';
@@ -9,76 +11,100 @@ import '../../diagnostics/application/support_issue_descriptor.dart';
 import '../../diagnostics/presentation/diagnostics_page.dart';
 import '../../packaging/presentation/packaging_page.dart';
 
-class AdvancedPage extends StatelessWidget {
+class AdvancedPage extends StatefulWidget {
   const AdvancedPage({super.key, required this.services});
 
   final ClientServiceRegistry services;
 
   @override
-  Widget build(BuildContext context) {
-    final status = services.controller.status;
-    final runtimeConfig = services.controller.runtimeConfig;
-    final telemetry = services.controller.telemetry;
-    final issue = SupportIssueDescriptor.fromConnectionStatus(status);
-    final lastRuntimeFailure = services.controller.lastRuntimeFailure;
-    final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
+  State<AdvancedPage> createState() => _AdvancedPageState();
+}
 
-    return DefaultTabController(
-      length: 2,
-      child: Builder(
-        builder: (BuildContext context) {
-          final tabController = DefaultTabController.of(context);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Use Advanced when you need a support-oriented overview, a problem report bundle, or update/package details.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              _SupportOverviewCard(
-                status: status,
-                issue: issue,
-                runtimeMode: runtimeConfig.mode,
-                endpointHint: runtimeConfig.endpointHint,
-                backendKind: telemetry.backendKind,
-                backendVersion: telemetry.backendVersion,
-                diagnosticsBackend:
-                    services.diagnosticsFileExporter.backendName,
-                lastRuntimeFailure: lastRuntimeFailure,
-                appUnhandledError: appUnhandledError,
-              ),
-              const SizedBox(height: 16),
-              _SupportActionsCard(
-                status: status,
-                onOpenProblemReport: () => tabController.animateTo(0),
-                onOpenUpdateStatus: () => tabController.animateTo(1),
-              ),
-              const SizedBox(height: 16),
-              const TabBar(
-                isScrollable: true,
-                tabs: <Widget>[
-                  Tab(text: 'Problem Report'),
-                  Tab(text: 'Update Status'),
+class _AdvancedPageState extends State<AdvancedPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final services = widget.services;
+    return AnimatedBuilder(
+      animation: Listenable.merge(<Listenable>[
+        services.controller,
+        services.appRuntimeErrors,
+        services.packagingStore,
+      ]),
+      builder: (BuildContext context, _) {
+        final status = services.controller.status;
+        final runtimeConfig = services.controller.runtimeConfig;
+        final telemetry = services.controller.telemetry;
+        final issue = SupportIssueDescriptor.fromConnectionStatus(status);
+        final lastRuntimeFailure = services.controller.lastRuntimeFailure;
+        final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Use Advanced when you need a support-oriented overview, a problem report bundle, or update/package details.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            _SupportOverviewCard(
+              status: status,
+              issue: issue,
+              runtimeMode: runtimeConfig.mode,
+              endpointHint: runtimeConfig.endpointHint,
+              backendKind: telemetry.backendKind,
+              backendVersion: telemetry.backendVersion,
+              diagnosticsBackend:
+                  services.diagnosticsFileExporter.backendName,
+              lastRuntimeFailure: lastRuntimeFailure,
+              appUnhandledError: appUnhandledError,
+            ),
+            const SizedBox(height: 16),
+            _SupportActionsCard(
+              status: status,
+              onOpenProblemReport: () => _tabController.animateTo(0),
+              onOpenUpdateStatus: () => _tabController.animateTo(1),
+            ),
+            const SizedBox(height: 16),
+            TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabs: const <Widget>[
+                Tab(text: 'Problem Report'),
+                Tab(text: 'Update Status'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: <Widget>[
+                  SingleChildScrollView(
+                    child: DiagnosticsPage(services: services),
+                  ),
+                  SingleChildScrollView(
+                    child: PackagingPage(services: services),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: TabBarView(
-                  children: <Widget>[
-                    SingleChildScrollView(
-                      child: DiagnosticsPage(services: services),
-                    ),
-                    SingleChildScrollView(
-                      child: PackagingPage(services: services),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -162,15 +188,15 @@ class _SupportOverviewCard extends StatelessWidget {
             spacing: 24,
             runSpacing: 12,
             children: <Widget>[
-              _kv('Connection phase', status.phase.name),
-              _kv('Status note', status.message),
-              _kv('Runtime mode', runtimeMode),
-              _kv('Endpoint hint', endpointHint),
-              _kv('Backend', backendKind),
-              _kv('Backend version', backendVersion),
-              _kv('Diagnostics export', diagnosticsBackend),
-              _kv('Issue category', issue.label),
-              _kv('Support summary', issue.summary),
+              KeyValuePair(label: 'Connection phase', value: status.phase.name, width: 240),
+              KeyValuePair(label: 'Status note', value: status.message, width: 240),
+              KeyValuePair(label: 'Runtime mode', value: runtimeMode, width: 240),
+              KeyValuePair(label: 'Endpoint hint', value: endpointHint, width: 240),
+              KeyValuePair(label: 'Backend', value: backendKind, width: 240),
+              KeyValuePair(label: 'Backend version', value: backendVersion, width: 240),
+              KeyValuePair(label: 'Diagnostics export', value: diagnosticsBackend, width: 240),
+              KeyValuePair(label: 'Issue category', value: issue.label, width: 240),
+              KeyValuePair(label: 'Support summary', value: issue.summary, width: 240),
             ],
           ),
         ],
@@ -186,32 +212,35 @@ class _LastRuntimeFailureBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Last recorded runtime failure',
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700, color: Colors.red),
-          ),
-          const SizedBox(height: 8),
-          Text(summary.headline),
-          const SizedBox(height: 6),
-          Text(summary.detail),
-          const SizedBox(height: 6),
-          Text('Phase: ${summary.phase}'),
-          Text('Recorded at: ${summary.recordedAt.toIso8601String()}'),
-        ],
+    return Semantics(
+      label: 'Runtime error: ${summary.headline}',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Last recorded runtime failure',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700, color: Colors.red),
+            ),
+            const SizedBox(height: 8),
+            Text(summary.headline),
+            const SizedBox(height: 6),
+            Text(summary.detail),
+            const SizedBox(height: 6),
+            Text('Phase: ${summary.phase}'),
+            Text('Recorded at: ${formatTimestamp(summary.recordedAt)}'),
+          ],
+        ),
       ),
     );
   }
@@ -224,33 +253,36 @@ class _AppUnhandledErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.deepPurple.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Last uncaught app error',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.deepPurple,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(summary.message),
-          const SizedBox(height: 6),
-          Text('Source: ${summary.source}'),
-          const SizedBox(height: 6),
-          Text(summary.stackPreview),
-          const SizedBox(height: 6),
-          Text('Recorded at: ${summary.recordedAt.toIso8601String()}'),
-        ],
+    return Semantics(
+      label: 'Uncaught error: ${summary.message}',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.deepPurple.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Last uncaught app error',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.deepPurple,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(summary.message),
+            const SizedBox(height: 6),
+            Text('Source: ${summary.source}'),
+            const SizedBox(height: 6),
+            Text(summary.stackPreview),
+            const SizedBox(height: 6),
+            Text('Recorded at: ${formatTimestamp(summary.recordedAt)}'),
+          ],
+        ),
       ),
     );
   }
@@ -274,29 +306,32 @@ class _IssueCategoryBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _accent(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Issue category: ${issue.label}',
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700, color: color),
-          ),
-          const SizedBox(height: 8),
-          Text(issue.headline),
-          const SizedBox(height: 8),
-          Text(issue.guidance),
-        ],
+    return Semantics(
+      label: 'Issue category: ${issue.label}, ${issue.headline}',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Issue category: ${issue.label}',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700, color: color),
+            ),
+            const SizedBox(height: 8),
+            Text(issue.headline),
+            const SizedBox(height: 8),
+            Text(issue.guidance),
+          ],
+        ),
       ),
     );
   }
@@ -361,19 +396,3 @@ class _SupportActionsCard extends StatelessWidget {
   }
 }
 
-Widget _kv(String label, String value) {
-  return SizedBox(
-    width: 240,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Text(value),
-      ],
-    ),
-  );
-}

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'desktop_instance_guard.dart';
 import 'desktop_lifecycle_models.dart';
 import 'desktop_lifecycle_service.dart';
 
@@ -37,6 +38,7 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
   DesktopLifecycleStatus _status = DesktopLifecycleStatus.initializing();
   DesktopQuickActionsState _quickActions = DesktopQuickActionsState.initial;
   bool _trayReady = false;
+  bool _trayListenerAdded = false;
   bool _closeInterceptEnabled = false;
   bool _initialized = false;
   bool _disposed = false;
@@ -164,22 +166,36 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     _quitting = true;
 
     try {
-      await _onQuitRequested();
-    } catch (error) {
-      debugPrint('DesktopLifecycleService: quit preflight failed: $error');
-    }
-
-    await _teardownTray();
-
-    if (_closeInterceptEnabled) {
+      // 为 quit preflight 设置超时，防止 disconnect 卡住导致退出流程锁死
       try {
-        await windowManager.setPreventClose(false);
-      } catch (_) {
-        // best-effort shutdown
+        await _onQuitRequested().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint(
+                'DesktopLifecycleService: quit preflight 超时，强制继续退出流程');
+          },
+        );
+      } catch (error) {
+        debugPrint('DesktopLifecycleService: quit preflight failed: $error');
       }
-    }
 
-    await windowManager.close();
+      await _teardownTray();
+      await DesktopInstanceGuard.release();
+
+      if (_closeInterceptEnabled) {
+        try {
+          await windowManager.setPreventClose(false);
+        } catch (_) {
+          // best-effort shutdown
+        }
+      }
+
+      await windowManager.close();
+    } catch (error) {
+      debugPrint('DesktopLifecycleService: requestQuit failed: $error');
+      _quitting = false; // 重置标志，允许用户重试退出
+      rethrow;
+    }
   }
 
   @override
@@ -192,6 +208,8 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
     if (isDesktopPlatform()) {
       windowManager.removeListener(this);
     }
+
+    dispose(); // 释放 ChangeNotifier 资源
   }
 
   @override
@@ -219,6 +237,12 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
 
   @override
   void onTrayIconMouseDown() {
+    unawaited(trayManager.popUpContextMenu());
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    // Windows/Linux 用户习惯右键弹出菜单
     unawaited(trayManager.popUpContextMenu());
   }
 
@@ -282,7 +306,10 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
       await trayManager.setIcon(_resolveTrayIconPath());
       await trayManager.setToolTip(trayToolTip);
       await _refreshTrayMenu();
-      trayManager.addListener(this);
+      if (!_trayListenerAdded) {
+        trayManager.addListener(this);
+        _trayListenerAdded = true;
+      }
       _trayReady = true;
     } catch (error) {
       _trayReady = false;
@@ -335,7 +362,10 @@ class PluginDesktopLifecycleService extends DesktopLifecycleService
 
   Future<void> _teardownTray() async {
     if (!_trayReady) return;
-    trayManager.removeListener(this);
+    if (_trayListenerAdded) {
+      trayManager.removeListener(this);
+      _trayListenerAdded = false;
+    }
     try {
       await trayManager.destroy();
     } catch (_) {

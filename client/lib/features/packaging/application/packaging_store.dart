@@ -23,8 +23,9 @@ class PackagingStore extends ChangeNotifier {
   UpdateWorkflowState _state;
   final List<PackagingExportRecord> _exportHistory = <PackagingExportRecord>[];
 
+  // 不使用 const：列表内容在后续版本中可能被动态更新
   final List<DesktopPackageStatus> _packageStatuses =
-      const <DesktopPackageStatus>[
+      <DesktopPackageStatus>[
     DesktopPackageStatus(
       platform: DesktopPackagePlatform.windows,
       readiness: DesktopPackageReadiness.planned,

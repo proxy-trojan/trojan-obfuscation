@@ -55,6 +55,7 @@ class AdapterBackedClientController extends ClientControllerApi {
   int _operationCounter = 0;
   int _eventCounter = 0;
   bool _disposed = false;
+  bool _operationInProgress = false;
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
   LastRuntimeFailureSummary? _lastRuntimeFailure;
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
@@ -137,6 +138,24 @@ class AdapterBackedClientController extends ClientControllerApi {
 
   @override
   Future<ControllerCommandResult> connect(ClientProfile profile) async {
+    if (_operationInProgress) {
+      return ControllerCommandResult(
+        commandId: 'connect-rejected',
+        accepted: false,
+        completedAt: DateTime.now(),
+        summary: '另一个连接/断开操作正在进行中，请稍后重试。',
+        error: 'OPERATION_IN_PROGRESS',
+      );
+    }
+    _operationInProgress = true;
+    try {
+      return await _connectInner(profile);
+    } finally {
+      _operationInProgress = false;
+    }
+  }
+
+  Future<ControllerCommandResult> _connectInner(ClientProfile profile) async {
     final operationId = 'connect-${++_operationCounter}';
     final password = await _profileSecrets.readTrojanPassword(profile.id);
     if (password == null || password.trim().isEmpty) {
@@ -242,6 +261,24 @@ class AdapterBackedClientController extends ClientControllerApi {
 
   @override
   Future<ControllerCommandResult> disconnect() async {
+    if (_operationInProgress) {
+      return ControllerCommandResult(
+        commandId: 'disconnect-rejected',
+        accepted: false,
+        completedAt: DateTime.now(),
+        summary: '另一个连接/断开操作正在进行中，请稍后重试。',
+        error: 'OPERATION_IN_PROGRESS',
+      );
+    }
+    _operationInProgress = true;
+    try {
+      return await _disconnectInner();
+    } finally {
+      _operationInProgress = false;
+    }
+  }
+
+  Future<ControllerCommandResult> _disconnectInner() async {
     final operationId = 'disconnect-${++_operationCounter}';
     final activeProfileId = _status.activeProfileId;
 

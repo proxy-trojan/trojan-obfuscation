@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/format_timestamp.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
@@ -29,9 +30,10 @@ class SettingsPage extends StatelessWidget {
           title: 'Settings',
           subtitle: 'Product-layer settings, not runtime internals.',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               DropdownButtonFormField<ThemeMode>(
-                initialValue: settings.themeMode,
+                value: settings.themeMode,
                 decoration: const InputDecoration(labelText: 'Appearance'),
                 items: ThemeMode.values
                     .map(
@@ -47,7 +49,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<UpdateChannel>(
-                initialValue: settings.updateChannel,
+                value: settings.updateChannel,
                 decoration: const InputDecoration(labelText: 'Update Track'),
                 items: UpdateChannel.values
                     .map(
@@ -81,29 +83,23 @@ class SettingsPage extends StatelessWidget {
                 },
                 title: const Text('Check for updates automatically'),
               ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: <Widget>[
-                    FilledButton.tonal(
-                      onPressed: settings.autoCheckForUpdates
-                          ? () => services.packagingStore.runStubUpdateCheck()
-                          : null,
-                      child: const Text('Check for updates now'),
-                    ),
-                    Text('Status: ${packagingWorkflow.updateCheckStatusLabel}'),
-                  ],
-                ),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  FilledButton.tonal(
+                    onPressed: settings.autoCheckForUpdates
+                        ? () => services.packagingStore.runStubUpdateCheck()
+                        : null,
+                    child: const Text('Check for updates now'),
+                  ),
+                  Text('Status: ${packagingWorkflow.updateCheckStatusLabel}'),
+                ],
               ),
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Update boundary: contract ${packagingWorkflow.releaseMetadataContractVersion} · ${packagingWorkflow.rolloutPolicySummary}',
-                ),
+              Text(
+                'Update boundary: contract ${packagingWorkflow.releaseMetadataContractVersion} · ${packagingWorkflow.rolloutPolicySummary}',
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -113,7 +109,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<DesktopCloseBehavior>(
-                initialValue: settings.desktopCloseBehavior,
+                value: settings.desktopCloseBehavior,
                 decoration:
                     const InputDecoration(labelText: 'Window close behavior'),
                 items: DesktopCloseBehavior.values
@@ -162,114 +158,67 @@ class SettingsPage extends StatelessWidget {
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Desktop lifecycle policy',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              Text(
+                'Desktop lifecycle policy',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Close: ${lifecyclePolicy.closeSemanticsSummary(trayReady: lifecycleStatus.trayReady)}',
-                ),
+              Text(
+                'Close: ${lifecyclePolicy.closeSemanticsSummary(trayReady: lifecycleStatus.trayReady)}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                    'Minimize: ${lifecyclePolicy.minimizeSemanticsSummary()}'),
+              Text(
+                'Minimize: ${lifecyclePolicy.minimizeSemanticsSummary()}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Quit: ${lifecyclePolicy.quitSemanticsSummary()}'),
-              ),
+              Text('Quit: ${lifecyclePolicy.quitSemanticsSummary()}'),
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Lifecycle status: ${lifecycleStatus.summary}'),
+              Text('Lifecycle status: ${lifecycleStatus.summary}'),
+              const SizedBox(height: 4),
+              Text(
+                'Tray integration: ${lifecycleStatus.trayReady ? 'ready' : 'unavailable'}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Tray integration: ${lifecycleStatus.trayReady ? 'ready' : 'unavailable'}',
-                ),
+              Text(
+                'Close interception: ${lifecycleStatus.closeInterceptEnabled ? 'enabled' : 'disabled'}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Close interception: ${lifecycleStatus.closeInterceptEnabled ? 'enabled' : 'disabled'}',
-                ),
+              Text(
+                'Duplicate launch: ${lifecyclePolicy.duplicateLaunchSummary(singleInstancePrimary: lifecycleStatus.singleInstancePrimary)}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Duplicate launch: ${lifecyclePolicy.duplicateLaunchSummary(singleInstancePrimary: lifecycleStatus.singleInstancePrimary)}',
-                ),
+              Text(
+                'Tray policy: ${lifecyclePolicy.trayPolicySummary()}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Tray policy: ${lifecyclePolicy.trayPolicySummary()}',
-                ),
+              Text(
+                'Quick actions profile: ${quickActions.profileSummary()}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Quick actions profile: ${quickActions.profileSummary()}',
-                ),
+              Text(
+                'Quick actions readiness: ${quickActions.readinessSummary(trayReady: lifecycleStatus.trayReady)}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Quick actions readiness: ${quickActions.readinessSummary(trayReady: lifecycleStatus.trayReady)}',
-                ),
-              ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'External activation: ${lifecycleStatus.externalActivationSummary()}',
-                ),
+              Text(
+                'External activation: ${lifecycleStatus.externalActivationSummary()}',
               ),
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Update channel skeleton',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              Text(
+                'Update channel skeleton',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                    'Current channel: ${packagingWorkflow.selectedChannel.name}'),
+              Text(
+                  'Current channel: ${packagingWorkflow.selectedChannel.name}'),
+              const SizedBox(height: 4),
+              Text(
+                'Last check: ${formatTimestamp(packagingWorkflow.lastUpdateCheckAt)}',
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Last check: ${packagingWorkflow.lastUpdateCheckAt?.toIso8601String() ?? 'never'}',
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Self-update is not wired in v1.3.0; current actions only exercise the product boundary and metadata contract.',
-                ),
+              const Text(
+                'Self-update is not wired in v1.3.0; current actions only exercise the product boundary and metadata contract.',
               ),
             ],
           ),
