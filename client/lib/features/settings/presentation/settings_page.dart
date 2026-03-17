@@ -33,7 +33,8 @@ class SettingsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               DropdownButtonFormField<ThemeMode>(
-                value: settings.themeMode,
+                key: ValueKey<String>('theme-mode-${settings.themeMode.name}'),
+                initialValue: settings.themeMode,
                 decoration: const InputDecoration(labelText: 'Appearance'),
                 items: ThemeMode.values
                     .map(
@@ -49,7 +50,10 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<UpdateChannel>(
-                value: settings.updateChannel,
+                key: ValueKey<String>(
+                  'update-channel-${settings.updateChannel.name}',
+                ),
+                initialValue: settings.updateChannel,
                 decoration: const InputDecoration(labelText: 'Update Track'),
                 items: UpdateChannel.values
                     .map(
@@ -109,7 +113,10 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<DesktopCloseBehavior>(
-                value: settings.desktopCloseBehavior,
+                key: ValueKey<String>(
+                  'close-behavior-${settings.desktopCloseBehavior.name}',
+                ),
+                initialValue: settings.desktopCloseBehavior,
                 decoration:
                     const InputDecoration(labelText: 'Window close behavior'),
                 items: DesktopCloseBehavior.values

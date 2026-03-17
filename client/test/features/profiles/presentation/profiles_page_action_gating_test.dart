@@ -30,6 +30,7 @@ ClientServiceRegistry _buildServices() {
   final profileStore = ProfileStore.withSampleProfiles(
     localStateStore: localState,
     serialization: ProfileSerialization(),
+    saveDebounceDuration: Duration.zero,
   );
   final profilePortability = ProfilePortabilityService();
   final profileSecrets = ProfileSecretsService(secureStorage: secureStorage);

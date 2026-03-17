@@ -11,8 +11,10 @@ class ProfileStore extends ChangeNotifier {
     List<ClientProfile>? initialProfiles,
     required LocalStateStore localStateStore,
     required ProfileSerialization serialization,
+    Duration saveDebounceDuration = _defaultSaveDebounceDuration,
   })  : _localStateStore = localStateStore,
         _serialization = serialization,
+        _saveDebounceDuration = saveDebounceDuration,
         _profiles = List<ClientProfile>.from(initialProfiles ?? const []),
         _selectedProfileId =
             initialProfiles != null && initialProfiles.isNotEmpty
@@ -22,8 +24,10 @@ class ProfileStore extends ChangeNotifier {
   ProfileStore.withSampleProfiles({
     required LocalStateStore localStateStore,
     required ProfileSerialization serialization,
+    Duration saveDebounceDuration = _defaultSaveDebounceDuration,
   })  : _localStateStore = localStateStore,
         _serialization = serialization,
+        _saveDebounceDuration = saveDebounceDuration,
         _profiles = <ClientProfile>[
           ClientProfile(
             id: 'sample-hk-1',
@@ -52,10 +56,12 @@ class ProfileStore extends ChangeNotifier {
 
   static const String _profilesKey = 'profiles.json';
   static const String _selectedProfileKey = 'profiles.selectedId';
-  static const Duration _saveDebounceDuration = Duration(milliseconds: 300);
+  static const Duration _defaultSaveDebounceDuration =
+      Duration(milliseconds: 300);
 
   final LocalStateStore _localStateStore;
   final ProfileSerialization _serialization;
+  final Duration _saveDebounceDuration;
   final List<ClientProfile> _profiles;
   String? _selectedProfileId;
   bool _loaded = false;
@@ -94,7 +100,6 @@ class ProfileStore extends ChangeNotifier {
         ..addAll(profiles);
     }
 
-    // 恢复上次选中的 profile
     final savedSelectedId = await _localStateStore.read(_selectedProfileKey);
     if (savedSelectedId != null &&
         savedSelectedId.trim().isNotEmpty &&
@@ -111,15 +116,17 @@ class ProfileStore extends ChangeNotifier {
   Future<void> save() async {
     try {
       await _localStateStore.write(
-          _profilesKey, _serialization.encodeProfileList(_profiles));
+        _profilesKey,
+        _serialization.encodeProfileList(_profiles),
+      );
     } catch (error) {
       debugPrint('ProfileStore: 保存配置失败: $error');
-      // 尽力持久化：保存失败不阻塞 UI 交互
     }
   }
 
   Future<void> syncStoredPasswordFlags(
-      Map<String, bool> flagsByProfileId) async {
+    Map<String, bool> flagsByProfileId,
+  ) async {
     var changed = false;
     for (var i = 0; i < _profiles.length; i++) {
       final profile = _profiles[i];
@@ -198,16 +205,30 @@ class ProfileStore extends ChangeNotifier {
 
   void _scheduleDebouncedSave() {
     _saveDebounce?.cancel();
+    if (_saveDebounceDuration == Duration.zero) {
+      unawaited(save());
+      return;
+    }
     _saveDebounce = Timer(_saveDebounceDuration, () {
       unawaited(save());
     });
+  }
+
+  @visibleForTesting
+  Future<void> flushPendingSave() async {
+    if (_saveDebounce?.isActive ?? false) {
+      _saveDebounce!.cancel();
+      _saveDebounce = null;
+    }
+    await save();
   }
 
   @override
   void dispose() {
     if (_saveDebounce?.isActive ?? false) {
       _saveDebounce!.cancel();
-      unawaited(save()); // 确保 pending 的数据不丢失
+      _saveDebounce = null;
+      unawaited(save());
     }
     super.dispose();
   }

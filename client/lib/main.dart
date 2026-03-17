@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'app/app.dart';
 import 'bootstrap.dart';
 import 'platform/services/desktop_instance_guard.dart';
+import 'platform/services/service_registry.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

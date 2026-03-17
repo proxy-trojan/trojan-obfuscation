@@ -26,17 +26,17 @@ class PackagingStore extends ChangeNotifier {
   // 不使用 const：列表内容在后续版本中可能被动态更新
   final List<DesktopPackageStatus> _packageStatuses =
       <DesktopPackageStatus>[
-    DesktopPackageStatus(
+    const DesktopPackageStatus(
       platform: DesktopPackagePlatform.windows,
       readiness: DesktopPackageReadiness.planned,
       notes: 'Windows installer/update workflow not scaffolded yet.',
     ),
-    DesktopPackageStatus(
+    const DesktopPackageStatus(
       platform: DesktopPackagePlatform.macos,
       readiness: DesktopPackageReadiness.planned,
       notes: 'macOS app bundle/notarization flow not scaffolded yet.',
     ),
-    DesktopPackageStatus(
+    const DesktopPackageStatus(
       platform: DesktopPackagePlatform.linux,
       readiness: DesktopPackageReadiness.scaffolded,
       notes:

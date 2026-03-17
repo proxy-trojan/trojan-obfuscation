@@ -29,11 +29,12 @@ void main() {
       initialProfiles: const <ClientProfile>[],
       localStateStore: localState,
       serialization: ProfileSerialization(),
+      saveDebounceDuration: Duration.zero,
     );
 
     final profile = _profile(id: 'persist-1', name: 'Persisted Profile');
     store.upsertProfile(profile);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await store.flushPendingSave();
 
     final raw = await localState.read('profiles.json');
     expect(raw, isNotNull);
@@ -54,6 +55,7 @@ void main() {
       initialProfiles: const <ClientProfile>[],
       localStateStore: localState,
       serialization: serialization,
+      saveDebounceDuration: Duration.zero,
     );
 
     await store.load();
@@ -74,12 +76,14 @@ void main() {
       ],
       localStateStore: localState,
       serialization: ProfileSerialization(),
+      saveDebounceDuration: Duration.zero,
     );
 
     await store.syncStoredPasswordFlags(<String, bool>{
       'p-1': true,
       'p-2': false,
     });
+    await store.flushPendingSave();
 
     final p1 = store.profiles.firstWhere((p) => p.id == 'p-1');
     final p2 = store.profiles.firstWhere((p) => p.id == 'p-2');

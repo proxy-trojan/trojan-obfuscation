@@ -46,6 +46,48 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.3.0-beta.1] - 2026-03-17
+
+### EN
+
+#### Added
+- Desktop lifecycle visibility polish across Settings + Dashboard:
+  - explicit close/minimize/quit semantics
+  - duplicate-launch posture and external-activation visibility
+  - recent activation card with dismiss + age-out + settings deep-link
+- App-level runtime error capture/persistence for support workflows.
+- Diagnostics export guidance improvements (categorized export failure hints).
+- New staging/handoff release docs for desktop beta readiness.
+
+#### Changed
+- ProfileStore persistence now supports test-friendly debounce control and pending-save flushing to avoid flaky timer-driven tests.
+- Settings form fields migrated to non-deprecated form API usage.
+
+#### Notes
+- Linux packaging/build remains green, but tray behavior may fall back to no-op when appindicator is unavailable.
+- This tag is a **beta pre-release** intended for staging/small-beta validation.
+
+### 中文
+
+#### 新增
+- 桌面生命周期可见性增强（Settings + Dashboard）：
+  - close/minimize/quit 语义显式化
+  - duplicate-launch 姿态与 external activation 可见化
+  - recent activation 卡片（支持 dismiss / age-out / 跳转设置）
+- 应用级运行时异常捕获与持久化，提升支持链路可诊断性。
+- diagnostics 导出失败的分类化指引。
+- 新增桌面 beta 的 handoff / staging release 文档。
+
+#### 变更
+- ProfileStore 持久化支持测试态 debounce 控制与 pending-save flush，降低 timer 相关测试不稳定。
+- Settings 表单迁移至非废弃 API 用法。
+
+#### 备注
+- Linux 打包与构建可通过；若缺少 appindicator，tray 行为可能降级为 no-op fallback。
+- 该 tag 为 **beta 预发布**，用于 staging / 小范围验证。
+
+---
+
 ## [v1.1.1] - 2026-03-12
 
 ### EN

@@ -79,6 +79,7 @@ void main() {
       profileStore: ProfileStore.withSampleProfiles(
         localStateStore: localState,
         serialization: ProfileSerialization(),
+        saveDebounceDuration: Duration.zero,
       ),
       profilePortability: ProfilePortabilityService(),
       settingsStore: SettingsStore(
