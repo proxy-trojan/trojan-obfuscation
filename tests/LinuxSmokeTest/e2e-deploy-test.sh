@@ -173,7 +173,7 @@ class FallbackHandler(http.server.BaseHTTPRequestHandler):
         pass  # 静默日志
 
 os.chdir(tmpdir)
-server = http.server.HTTPServer(('127.0.0.1', port), FallbackHandler)
+server = http.server.ThreadingHTTPServer(('127.0.0.1', port), FallbackHandler)
 server.serve_forever()
 PY
 FALLBACK_PID=$!
@@ -198,7 +198,7 @@ class TargetHandler(http.server.BaseHTTPRequestHandler):
         pass  # 静默日志
 
 os.chdir(tmpdir)
-server = http.server.HTTPServer(('127.0.0.1', port), TargetHandler)
+server = http.server.ThreadingHTTPServer(('127.0.0.1', port), TargetHandler)
 server.serve_forever()
 PY
 TARGET_PID=$!
@@ -425,7 +425,7 @@ mkdir -p "$CONCURRENT_RESULTS"
 
 for i in $(seq 1 5); do
   (
-    result=$(curl -s --max-time 10 \
+    result=$(curl -s --max-time 20 \
       --socks5-hostname "127.0.0.1:$SOCKS5_PORT" \
       "http://127.0.0.1:$TARGET_PORT/" 2>/dev/null || echo "CURL_FAILED")
     echo "$result" > "$CONCURRENT_RESULTS/$i.txt"

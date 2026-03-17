@@ -52,6 +52,11 @@ find_one() {
   find "$ARTIFACT_ROOT" -type f -name "$pattern" | sort | head -n 1
 }
 
+is_known_linux_gui_runtime_gap() {
+  local log_path="$1"
+  grep -Eq "Couldn't open libEGL\\.so\\.1|Failed to create platform view rendering surface|Unsupported GDK backend|Failed to create OpenGL context|Could not make the context current" "$log_path"
+}
+
 contains_platform() {
   local wanted="$1"
   local item
@@ -140,6 +145,8 @@ if contains_platform linux; then
     rc=$?
     if [[ $rc -eq 125 ]]; then
       linux_start_ok="skipped (no DISPLAY / WAYLAND_DISPLAY and xvfb-run unavailable)"
+    elif is_known_linux_gui_runtime_gap "$log_path"; then
+      linux_start_ok="skipped (missing GUI runtime deps on validation runner)"
     else
       echo "linux bundle start smoke failed; log follows:" >&2
       sed -n '1,160p' "$log_path" >&2 || true

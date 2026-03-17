@@ -46,6 +46,22 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.3.0-beta.3] - 2026-03-17
+
+### EN
+
+#### Fixed
+- Linux aarch64 E2E smoke now uses threaded local HTTP fixtures and a less timing-fragile concurrent curl timeout budget.
+- Linux client artifact start smoke now treats missing generic CI GUI runtime dependencies (for example `libEGL.so.1`) as a skipped best-effort signal instead of a hard release blocker.
+
+### 中文
+
+#### 修复
+- Linux aarch64 的 E2E smoke 现改用 threaded 本地 HTTP fixture，并放宽并发 curl 的 timeout 预算，降低时序敏感性。
+- Linux client artifact 启动 smoke 遇到通用 CI runner 缺少 GUI 运行依赖（如 `libEGL.so.1`）时，改为 best-effort 跳过，而不是直接阻断发布。
+
+---
+
 ## [v1.3.0-beta.2] - 2026-03-17
 
 ### EN
