@@ -91,5 +91,7 @@ void main() {
           check.level == ReadinessLevel.degraded),
       isTrue,
     );
+    expect(report.recommendation, isNotNull);
+    expect(report.recommendation!.action, ReadinessAction.openTroubleshooting);
   });
 }

@@ -99,18 +99,24 @@ class ReadinessReport {
   }
 
   ReadinessRecommendation? get recommendation {
-    final candidate = checks.firstWhere(
-      (check) =>
-          check.level == ReadinessLevel.blocked &&
-          check.action != null &&
-          check.actionLabel != null,
-      orElse: () => const ReadinessCheck(
-        domain: ReadinessDomain.profile,
-        level: ReadinessLevel.ready,
-        summary: '',
-      ),
-    );
-    if (candidate.action == null || candidate.actionLabel == null) {
+    final candidate = checks.cast<ReadinessCheck?>().firstWhere(
+          (check) =>
+              check != null &&
+              check.level == ReadinessLevel.blocked &&
+              check.action != null &&
+              check.actionLabel != null,
+          orElse: () => checks.cast<ReadinessCheck?>().firstWhere(
+                (check) =>
+                    check != null &&
+                    check.level == ReadinessLevel.degraded &&
+                    check.action != null &&
+                    check.actionLabel != null,
+                orElse: () => null,
+              ),
+        );
+    if (candidate == null ||
+        candidate.action == null ||
+        candidate.actionLabel == null) {
       return null;
     }
     return ReadinessRecommendation(
