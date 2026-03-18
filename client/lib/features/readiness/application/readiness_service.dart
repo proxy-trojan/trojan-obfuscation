@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../../controller/application/client_controller_api.dart';
@@ -7,6 +8,7 @@ import '../../profiles/application/profile_store.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../../../platform/secure_storage/secure_storage.dart';
 import '../../../platform/services/client_filesystem_layout.dart';
+import '../../../platform/services/local_state_store.dart';
 import '../domain/readiness_report.dart';
 
 class ReadinessService {
@@ -16,17 +18,20 @@ class ReadinessService {
     required SecureStorage secureStorage,
     required ClientControllerApi controller,
     ClientFilesystemLayout? filesystemLayout,
+    LocalStateStore? localStateStore,
   })  : _profileStore = profileStore,
         _profileSecrets = profileSecrets,
         _secureStorage = secureStorage,
         _controller = controller,
-        _filesystemLayout = filesystemLayout;
+        _filesystemLayout = filesystemLayout,
+        _localStateStore = localStateStore;
 
   final ProfileStore _profileStore;
   final ProfileSecretsService _profileSecrets;
   final SecureStorage _secureStorage;
   final ClientControllerApi _controller;
   final ClientFilesystemLayout? _filesystemLayout;
+  final LocalStateStore? _localStateStore;
 
   Future<ReadinessReport> buildReport({ClientProfile? profileOverride}) async {
     final checks = <ReadinessCheck>[];
@@ -41,7 +46,42 @@ class ReadinessService {
     checks.add(await _checkRuntimeBinary());
     checks.add(await _checkFilesystem());
 
-    return ReadinessReport.fromChecks(checks);
+    final report = ReadinessReport.fromChecks(checks);
+    await _persistLastKnownReport(report, profile: selectedProfile);
+    return report;
+  }
+
+  Future<ReadinessReport?> readLastKnownReport({
+    ClientProfile? profileOverride,
+  }) async {
+    final localStateStore = _localStateStore;
+    if (localStateStore == null) return null;
+    final selectedProfile = profileOverride ?? _profileStore.selectedProfile;
+    final raw = await localStateStore.read(_storageKeyFor(selectedProfile));
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return ReadinessReport.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _persistLastKnownReport(
+    ReadinessReport report, {
+    required ClientProfile? profile,
+  }) async {
+    final localStateStore = _localStateStore;
+    if (localStateStore == null) return;
+    await localStateStore.write(
+      _storageKeyFor(profile),
+      jsonEncode(report.toJson()),
+    );
+  }
+
+  String _storageKeyFor(ClientProfile? profile) {
+    return profile == null
+        ? 'client.readiness.last-known.none'
+        : 'client.readiness.last-known.${profile.id}';
   }
 
   ReadinessCheck _checkProfile(ClientProfile? profile) {

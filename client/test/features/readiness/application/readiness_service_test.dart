@@ -142,4 +142,33 @@ void main() {
     expect(report.recommendation, isNotNull);
     expect(report.recommendation!.detail, 'secure storage fallback');
   });
+
+  test('readiness persists and restores last-known snapshot', () async {
+    final localState = MemoryLocalStateStore();
+    final profileStore = ProfileStore.withSampleProfiles(
+      localStateStore: localState,
+      serialization: ProfileSerialization(),
+    );
+    final secureStorage = MemorySecureStorage();
+    final profile = profileStore.selectedProfile!;
+    final profileSecrets = ProfileSecretsService(secureStorage: secureStorage);
+    await profileSecrets.saveTrojanPassword(profileId: profile.id, password: 'pw');
+    profileStore.upsertProfile(profile.copyWith(hasStoredPassword: true));
+
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: profileSecrets,
+      secureStorage: secureStorage,
+      controller: FakeClientController(),
+      localStateStore: localState,
+    );
+
+    final built = await readiness.buildReport();
+    final restored = await readiness.readLastKnownReport();
+
+    expect(restored, isNotNull);
+    expect(restored!.overallLevel, built.overallLevel);
+    expect(restored.summary, built.summary);
+    expect(restored.recommendation?.action, built.recommendation?.action);
+  });
 }

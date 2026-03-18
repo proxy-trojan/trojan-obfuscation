@@ -37,7 +37,20 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     _lastReadinessRefreshKey = 'initial';
-    _refreshReadiness(profile: widget.services.profileStore.selectedProfile);
+    final profile = widget.services.profileStore.selectedProfile;
+    _restoreLastKnownReadiness(profile: profile);
+    _refreshReadiness(profile: profile);
+  }
+
+  void _restoreLastKnownReadiness({ClientProfile? profile}) {
+    widget.services.readiness
+        .readLastKnownReport(profileOverride: profile)
+        .then((report) {
+      if (!mounted || report == null) return;
+      setState(() {
+        _latestReadinessReport = report;
+      });
+    });
   }
 
   void _refreshReadiness({ClientProfile? profile}) {
@@ -59,6 +72,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _lastReadinessRefreshKey = key;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _restoreLastKnownReadiness(profile: profile);
       _refreshReadiness(profile: profile);
     });
   }

@@ -645,7 +645,7 @@ class _SelectedProfileCard extends StatelessWidget {
   }
 }
 
-class _ProfileReadinessNotice extends StatelessWidget {
+class _ProfileReadinessNotice extends StatefulWidget {
   const _ProfileReadinessNotice({
     required this.services,
     required this.selected,
@@ -653,6 +653,56 @@ class _ProfileReadinessNotice extends StatelessWidget {
 
   final ClientServiceRegistry services;
   final ClientProfile selected;
+
+  @override
+  State<_ProfileReadinessNotice> createState() => _ProfileReadinessNoticeState();
+}
+
+class _ProfileReadinessNoticeState extends State<_ProfileReadinessNotice> {
+  Future<ReadinessReport>? _future;
+  ReadinessReport? _latestReport;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreLastKnown();
+    _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileReadinessNotice oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected.id != widget.selected.id) {
+      _restoreLastKnown();
+      _refresh();
+    }
+  }
+
+  void _restoreLastKnown() {
+    widget.services.readiness
+        .readLastKnownReport(profileOverride: widget.selected)
+        .then((report) {
+      if (!mounted || report == null) return;
+      setState(() {
+        _latestReport = report;
+      });
+    });
+  }
+
+  void _refresh() {
+    final future =
+        widget.services.readiness.buildReport(profileOverride: widget.selected);
+    setState(() {
+      _future = future;
+    });
+    future.then((report) {
+      if (!mounted) return;
+      if (!identical(_future, future)) return;
+      setState(() {
+        _latestReport = report;
+      });
+    });
+  }
 
   Color _tone(ReadinessLevel level) {
     return switch (level) {
@@ -665,9 +715,9 @@ class _ProfileReadinessNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<ReadinessReport>(
-      future: services.readiness.buildReport(profileOverride: selected),
+      future: _future,
       builder: (BuildContext context, AsyncSnapshot<ReadinessReport> snapshot) {
-        final report = snapshot.data;
+        final report = snapshot.data ?? _latestReport;
         if (report == null) {
           return const SizedBox.shrink();
         }

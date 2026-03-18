@@ -134,6 +134,7 @@ class ClientBootstrap {
       secureStorage: secureStorage,
       controller: controller,
       filesystemLayout: filesystemLayout,
+      localStateStore: localStateStore,
     );
 
     final diagnostics = DiagnosticsExportService(

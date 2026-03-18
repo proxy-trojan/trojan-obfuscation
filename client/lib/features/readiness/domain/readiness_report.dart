@@ -39,6 +39,25 @@ class ReadinessCheck {
     this.actionLabel,
   });
 
+  static ReadinessCheck? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final domain = _enumByName(ReadinessDomain.values, value['domain']);
+    final level = _enumByName(ReadinessLevel.values, value['level']);
+    final summary = value['summary'];
+    if (domain == null || level == null || summary is! String) {
+      return null;
+    }
+    return ReadinessCheck(
+      domain: domain,
+      level: level,
+      summary: summary,
+      detail: value['detail'] is String ? value['detail'] as String : null,
+      action: _enumByName(ReadinessAction.values, value['action']),
+      actionLabel:
+          value['actionLabel'] is String ? value['actionLabel'] as String : null,
+    );
+  }
+
   final ReadinessDomain domain;
   final ReadinessLevel level;
   final String summary;
@@ -84,6 +103,31 @@ class ReadinessReport {
     required this.checks,
     required this.generatedAt,
   });
+
+  static ReadinessReport? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final overallLevel = _enumByName(ReadinessLevel.values, value['overallLevel']);
+    final generatedAtRaw = value['generatedAt'];
+    final checksRaw = value['checks'];
+    if (overallLevel == null ||
+        generatedAtRaw is! String ||
+        checksRaw is! List) {
+      return null;
+    }
+    final generatedAt = DateTime.tryParse(generatedAtRaw);
+    if (generatedAt == null) {
+      return null;
+    }
+    final checks = checksRaw
+        .map(ReadinessCheck.fromJson)
+        .whereType<ReadinessCheck>()
+        .toList();
+    return ReadinessReport(
+      overallLevel: overallLevel,
+      checks: List<ReadinessCheck>.unmodifiable(checks),
+      generatedAt: generatedAt,
+    );
+  }
 
   final ReadinessLevel overallLevel;
   final List<ReadinessCheck> checks;
@@ -182,4 +226,12 @@ class ReadinessReport {
     }
     return ReadinessLevel.ready;
   }
+}
+
+T? _enumByName<T extends Enum>(List<T> values, Object? raw) {
+  if (raw is! String) return null;
+  for (final value in values) {
+    if (value.name == raw) return value;
+  }
+  return null;
 }
