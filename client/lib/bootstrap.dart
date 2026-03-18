@@ -12,6 +12,7 @@ import 'features/profiles/application/profile_secrets_service.dart';
 import 'features/profiles/application/profile_serialization.dart';
 import 'features/profiles/application/profile_store.dart';
 import 'features/settings/application/settings_serialization.dart';
+import 'features/readiness/application/readiness_service.dart';
 import 'features/settings/application/settings_store.dart';
 import 'platform/secure_storage/fallback_secure_storage.dart';
 import 'platform/secure_storage/flutter_secure_storage_adapter.dart';
@@ -127,6 +128,14 @@ class ClientBootstrap {
 
     await syncDesktopQuickActions();
 
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: profileSecrets,
+      secureStorage: secureStorage,
+      controller: controller,
+      filesystemLayout: filesystemLayout,
+    );
+
     final diagnostics = DiagnosticsExportService(
       profileStore: profileStore,
       profilePortability: profilePortability,
@@ -138,6 +147,7 @@ class ClientBootstrap {
       appRuntimeErrors: appRuntimeErrors,
       adapterSelectionReason: adapterSelection.selectionReason,
       expectedRealRuntimePath: adapterSelection.isRealRuntimePath,
+      readiness: readiness,
     );
 
     final registry = ClientServiceRegistry(
@@ -151,6 +161,7 @@ class ClientBootstrap {
       packagingExport: packagingExport,
       settingsStore: settingsStore,
       controller: controller,
+      readiness: readiness,
       diagnostics: diagnostics,
       desktopLifecycle: desktopLifecycle,
       appRuntimeErrors: appRuntimeErrors,

@@ -12,6 +12,7 @@ import 'package:trojan_pro_client/features/controller/domain/controller_telemetr
 import 'package:trojan_pro_client/features/controller/domain/last_runtime_failure_summary.dart';
 import 'package:trojan_pro_client/features/dashboard/presentation/dashboard_page.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
+import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_portability_service.dart';
@@ -168,6 +169,13 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     packagingStore: packagingStore,
     fileExporter: diagnosticsExporter,
   );
+  final readiness = ReadinessService(
+    profileStore: profileStore,
+    profileSecrets: profileSecrets,
+    secureStorage: secureStorage,
+    controller: resolvedController,
+  );
+
   final diagnostics = DiagnosticsExportService(
     profileStore: profileStore,
     profilePortability: profilePortability,
@@ -176,6 +184,7 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     controller: resolvedController,
     secureStorage: secureStorage,
     fileExporter: diagnosticsExporter,
+    readiness: readiness,
   );
 
   return ClientServiceRegistry(
@@ -189,6 +198,7 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     packagingExport: packagingExport,
     settingsStore: settingsStore,
     controller: resolvedController,
+    readiness: readiness,
     diagnostics: diagnostics,
   );
 }

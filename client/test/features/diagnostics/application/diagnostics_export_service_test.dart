@@ -5,8 +5,10 @@ import 'package:trojan_pro_client/features/controller/application/fake_client_co
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_portability_service.dart';
+import 'package:trojan_pro_client/features/profiles/application/profile_secrets_service.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_serialization.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_store.dart';
+import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
@@ -37,9 +39,16 @@ void main() {
       error: StateError('background task exploded'),
       stackTrace: StackTrace.current,
     );
-    await secureStorage.writeSecret(
-      'profile.sample-hk-1.trojanPassword',
-      'super-secret-password',
+    await ProfileSecretsService(secureStorage: secureStorage).saveTrojanPassword(
+      profileId: 'sample-hk-1',
+      password: 'super-secret-password',
+    );
+
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: ProfileSecretsService(secureStorage: secureStorage),
+      secureStorage: secureStorage,
+      controller: controller,
     );
 
     final diagnostics = DiagnosticsExportService(
@@ -50,6 +59,7 @@ void main() {
       controller: controller,
       secureStorage: secureStorage,
       fileExporter: diagnosticsExporter,
+      readiness: readiness,
       appRuntimeErrors: appRuntimeErrors,
     );
 
@@ -75,21 +85,31 @@ void main() {
     final diagnosticsExporter = MemoryDiagnosticsFileExporter();
     final secureStorage = MemorySecureStorage();
 
+    final profileStore = ProfileStore.withSampleProfiles(
+      localStateStore: localState,
+      serialization: ProfileSerialization(),
+      saveDebounceDuration: Duration.zero,
+    );
+    final controller = FakeClientController();
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: ProfileSecretsService(secureStorage: secureStorage),
+      secureStorage: secureStorage,
+      controller: controller,
+    );
+
     final diagnostics = DiagnosticsExportService(
-      profileStore: ProfileStore.withSampleProfiles(
-        localStateStore: localState,
-        serialization: ProfileSerialization(),
-        saveDebounceDuration: Duration.zero,
-      ),
+      profileStore: profileStore,
       profilePortability: ProfilePortabilityService(),
       settingsStore: SettingsStore(
         localStateStore: localState,
         serialization: SettingsSerialization(),
       ),
       packagingStore: PackagingStore(),
-      controller: FakeClientController(),
+      controller: controller,
       secureStorage: secureStorage,
       fileExporter: diagnosticsExporter,
+      readiness: readiness,
       appRuntimeErrors: AppRuntimeErrorStore(localStateStore: localState),
     );
 

@@ -6,8 +6,8 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
-import '../../controller/domain/controller_runtime_health.dart';
 import '../../profiles/domain/client_profile.dart';
+import '../../readiness/domain/readiness_report.dart';
 import '../application/connection_lifecycle_view_model.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -29,18 +29,37 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  Future<ControllerRuntimeHealth>? _healthFuture;
+  Future<ReadinessReport>? _readinessFuture;
+  String? _lastReadinessRefreshKey;
 
   @override
   void initState() {
     super.initState();
-    _healthFuture = widget.services.controller.checkHealth();
+    _lastReadinessRefreshKey = 'initial';
+    _readinessFuture = widget.services.readiness.buildReport();
   }
 
-  void _refreshHealth() {
+  void _refreshReadiness() {
     setState(() {
-      _healthFuture = widget.services.controller.checkHealth();
+      _readinessFuture = widget.services.readiness.buildReport();
     });
+  }
+
+  void _refreshReadinessIfInputsChanged(String key) {
+    if (_lastReadinessRefreshKey == key) return;
+    _lastReadinessRefreshKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _refreshReadiness();
+    });
+  }
+
+  VoidCallback? _actionHandlerFor(ReadinessAction action) {
+    return switch (action) {
+      ReadinessAction.openProfiles => widget.onOpenProfiles,
+      ReadinessAction.openTroubleshooting => widget.onOpenAdvanced,
+      ReadinessAction.openSettings => widget.onOpenSettings,
+    };
   }
 
   @override
@@ -66,6 +85,15 @@ class _DashboardPageState extends State<DashboardPage> {
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
         final desktopLifecycleStatus = services.desktopLifecycle.status;
+        final readinessRefreshKey = <Object?>[
+          selectedProfile?.id,
+          selectedProfile?.hasStoredPassword,
+          activeProfile?.id,
+          services.profileSecrets.storageSummary,
+          runtimeConfig.mode,
+          runtimeConfig.endpointHint,
+        ].join('|');
+        _refreshReadinessIfInputsChanged(readinessRefreshKey);
 
         return ListView(
           children: <Widget>[
@@ -154,38 +182,76 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 16),
             ],
             SectionCard(
-              title: 'Before you connect',
-              subtitle: 'Only the facts the user needs before trying one test.',
+              title: 'Readiness doctor',
+              subtitle: 'Know if the app is ready, degraded, or blocked before connecting.',
               trailing: IconButton(
                 icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh health check',
-                onPressed: _refreshHealth,
+                tooltip: 'Refresh readiness',
+                onPressed: _refreshReadiness,
               ),
-              child: FutureBuilder<ControllerRuntimeHealth>(
-                future: _healthFuture,
+              child: FutureBuilder<ReadinessReport>(
+                future: _readinessFuture,
                 builder: (BuildContext context,
-                    AsyncSnapshot<ControllerRuntimeHealth> snapshot) {
-                  final health = snapshot.data;
-                  final levelName =
-                      health == null ? 'Checking…' : health.level.name;
-                  final summary =
-                      health == null ? 'Probing local runtime' : health.summary;
+                    AsyncSnapshot<ReadinessReport> snapshot) {
+                  final report = snapshot.data;
+                  if (report == null) {
+                    return const Text('Checking readiness…');
+                  }
 
-                  return Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      KeyValuePair(label: 'Profile Ready',
-                          value: selectedProfile == null ? 'No' : 'Yes'),
-                      KeyValuePair(
-                        label: 'Password Ready',
-                        value: _passwordReadyLabel(selectedProfile ?? activeProfile),
+                      Wrap(
+                        spacing: 24,
+                        runSpacing: 12,
+                        children: <Widget>[
+                          KeyValuePair(
+                            label: 'Overall',
+                            value: report.overallLevel.label,
+                          ),
+                          KeyValuePair(label: 'Headline', value: report.headline),
+                          KeyValuePair(label: 'Summary', value: report.summary),
+                          KeyValuePair(
+                            label: 'Runtime Mode',
+                            value: runtimeConfig.mode,
+                          ),
+                          KeyValuePair(
+                            label: 'Runtime Endpoint',
+                            value: runtimeConfig.endpointHint,
+                          ),
+                          KeyValuePair(
+                            label: 'Secure Storage',
+                            value: services.profileSecrets.storageSummary,
+                          ),
+                        ],
                       ),
-                      KeyValuePair(label: 'Secret Storage',
-                          value: services.profileSecrets.storageSummary),
-                      KeyValuePair(label: 'App Ready', value: levelName),
-                      KeyValuePair(label: 'Status Note', value: summary),
-                      KeyValuePair(label: 'Runtime Path', value: runtimeConfig.endpointHint),
+                      if (report.recommendation != null) ...<Widget>[
+                        const SizedBox(height: 12),
+                        Text(
+                          report.recommendation!.detail,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed:
+                              _actionHandlerFor(report.recommendation!.action),
+                          icon: const Icon(Icons.play_arrow),
+                          label: Text(report.recommendation!.label),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 24,
+                        runSpacing: 12,
+                        children: report.checks
+                            .map(
+                              (check) => KeyValuePair(
+                                label: check.domain.name,
+                                value: '${check.level.label}: ${check.summary}',
+                              ),
+                            )
+                            .toList(),
+                      ),
                     ],
                   );
                 },
@@ -206,11 +272,6 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       },
     );
-  }
-
-  String _passwordReadyLabel(ClientProfile? profile) {
-    if (profile == null) return 'N/A';
-    return profile.hasStoredPassword ? 'Yes' : 'No';
   }
 
   bool _showExperimentGuide(

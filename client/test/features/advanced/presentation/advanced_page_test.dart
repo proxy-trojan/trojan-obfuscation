@@ -9,6 +9,7 @@ import 'package:trojan_pro_client/features/profiles/application/profile_portabil
 import 'package:trojan_pro_client/features/profiles/application/profile_secrets_service.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_serialization.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_store.dart';
+import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
 import 'package:trojan_pro_client/platform/services/app_runtime_error_store.dart';
@@ -50,6 +51,12 @@ ClientServiceRegistry _buildServices({
     packagingStore: packagingStore,
     fileExporter: diagnosticsExporter,
   );
+  final readiness = ReadinessService(
+    profileStore: profileStore,
+    profileSecrets: profileSecrets,
+    secureStorage: secureStorage,
+    controller: controller,
+  );
   final diagnostics = DiagnosticsExportService(
     profileStore: profileStore,
     profilePortability: profilePortability,
@@ -58,6 +65,7 @@ ClientServiceRegistry _buildServices({
     controller: controller,
     secureStorage: secureStorage,
     fileExporter: diagnosticsExporter,
+    readiness: readiness,
     appRuntimeErrors: runtimeErrors,
   );
 
@@ -72,6 +80,7 @@ ClientServiceRegistry _buildServices({
     packagingExport: packagingExport,
     settingsStore: settingsStore,
     controller: controller,
+    readiness: readiness,
     diagnostics: diagnostics,
     appRuntimeErrors: runtimeErrors,
   );

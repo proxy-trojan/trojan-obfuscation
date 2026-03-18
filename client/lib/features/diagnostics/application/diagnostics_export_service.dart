@@ -7,6 +7,7 @@ import '../../controller/application/client_controller_api.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
+import '../../readiness/application/readiness_service.dart';
 import '../../settings/application/settings_store.dart';
 
 class DiagnosticsExportResult {
@@ -28,6 +29,7 @@ class DiagnosticsExportService {
     required this.controller,
     required this.secureStorage,
     required this.fileExporter,
+    required this.readiness,
     AppRuntimeErrorStore? appRuntimeErrors,
     this.adapterSelectionReason,
     this.expectedRealRuntimePath,
@@ -40,6 +42,7 @@ class DiagnosticsExportService {
   final ClientControllerApi controller;
   final SecureStorage secureStorage;
   final DiagnosticsFileExporter fileExporter;
+  final ReadinessService readiness;
   final AppRuntimeErrorStore appRuntimeErrors;
   final String? adapterSelectionReason;
   final bool? expectedRealRuntimePath;
@@ -48,6 +51,7 @@ class DiagnosticsExportService {
     final selected = profileStore.selectedProfile;
     final keys = await secureStorage.listKeys();
     final controllerHealth = await controller.checkHealth();
+    final readinessReport = await readiness.buildReport();
     final releaseManifest = packagingStore.buildReleaseManifest();
     final updateMetadata = packagingStore.buildUpdateMetadataSnapshot();
     final storageStatus = secureStorage.status;
@@ -66,6 +70,7 @@ class DiagnosticsExportService {
               'sni': selected.sni,
               'hasStoredPassword': selected.hasStoredPassword,
             },
+      'readiness': readinessReport.toJson(),
       'controller': {
         'phase': controller.status.phase.name,
         'message': controller.status.message,

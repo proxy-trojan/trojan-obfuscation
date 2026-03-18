@@ -9,6 +9,7 @@ import '../../features/packaging/application/packaging_store.dart';
 import '../../features/profiles/application/profile_portability_service.dart';
 import '../../features/profiles/application/profile_secrets_service.dart';
 import '../../features/profiles/application/profile_store.dart';
+import '../../features/readiness/application/readiness_service.dart';
 import '../../features/settings/application/settings_store.dart';
 import '../secure_storage/secure_storage.dart';
 import 'app_runtime_error_store.dart';
@@ -29,6 +30,7 @@ class ClientServiceRegistry {
     required this.packagingExport,
     required this.settingsStore,
     required this.controller,
+    required this.readiness,
     required this.diagnostics,
     DesktopLifecycleService? desktopLifecycle,
     AppRuntimeErrorStore? appRuntimeErrors,
@@ -45,6 +47,7 @@ class ClientServiceRegistry {
   final PackagingExportService packagingExport;
   final SettingsStore settingsStore;
   final ClientControllerApi controller;
+  final ReadinessService readiness;
   final DiagnosticsExportService diagnostics;
   final DesktopLifecycleService desktopLifecycle;
   final AppRuntimeErrorStore appRuntimeErrors;
