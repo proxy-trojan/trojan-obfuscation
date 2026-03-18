@@ -30,27 +30,36 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   Future<ReadinessReport>? _readinessFuture;
+  ReadinessReport? _latestReadinessReport;
   String? _lastReadinessRefreshKey;
 
   @override
   void initState() {
     super.initState();
     _lastReadinessRefreshKey = 'initial';
-    _readinessFuture = widget.services.readiness.buildReport();
+    _refreshReadiness(profile: widget.services.profileStore.selectedProfile);
   }
 
-  void _refreshReadiness() {
+  void _refreshReadiness({ClientProfile? profile}) {
+    final future = widget.services.readiness.buildReport(profileOverride: profile);
     setState(() {
-      _readinessFuture = widget.services.readiness.buildReport();
+      _readinessFuture = future;
+    });
+    future.then((report) {
+      if (!mounted) return;
+      if (!identical(_readinessFuture, future)) return;
+      setState(() {
+        _latestReadinessReport = report;
+      });
     });
   }
 
-  void _refreshReadinessIfInputsChanged(String key) {
+  void _refreshReadinessIfInputsChanged(String key, {ClientProfile? profile}) {
     if (_lastReadinessRefreshKey == key) return;
     _lastReadinessRefreshKey = key;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _refreshReadiness();
+      _refreshReadiness(profile: profile);
     });
   }
 
@@ -93,7 +102,10 @@ class _DashboardPageState extends State<DashboardPage> {
           runtimeConfig.mode,
           runtimeConfig.endpointHint,
         ].join('|');
-        _refreshReadinessIfInputsChanged(readinessRefreshKey);
+        _refreshReadinessIfInputsChanged(
+          readinessRefreshKey,
+          profile: selectedProfile,
+        );
 
         return ListView(
           children: <Widget>[
@@ -153,8 +165,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 activeProfile: activeProfile,
                 status: status,
                 lifecycle: lifecycle,
+                readiness: _latestReadinessReport,
                 onOpenProfiles: widget.onOpenProfiles,
                 onOpenAdvanced: widget.onOpenAdvanced,
+                onOpenSettings: widget.onOpenSettings,
               ),
             ),
             const SizedBox(height: 16),
@@ -193,7 +207,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 future: _readinessFuture,
                 builder: (BuildContext context,
                     AsyncSnapshot<ReadinessReport> snapshot) {
-                  final report = snapshot.data;
+                  final report = snapshot.data ?? _latestReadinessReport;
                   if (report == null) {
                     return const Text('Checking readiness…');
                   }
@@ -419,8 +433,10 @@ class _NextStepGuide extends StatelessWidget {
     required this.activeProfile,
     required this.status,
     required this.lifecycle,
+    required this.readiness,
     required this.onOpenProfiles,
     required this.onOpenAdvanced,
+    this.onOpenSettings,
   });
 
   final ClientServiceRegistry services;
@@ -428,8 +444,10 @@ class _NextStepGuide extends StatelessWidget {
   final ClientProfile? activeProfile;
   final ClientConnectionStatus status;
   final ConnectionLifecycleViewModel lifecycle;
+  final ReadinessReport? readiness;
   final VoidCallback? onOpenProfiles;
   final VoidCallback? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -471,12 +489,24 @@ class _NextStepGuide extends StatelessWidget {
       case _GuideAction.openAdvanced:
         onOpenAdvanced?.call();
         return;
+      case _GuideAction.openSettings:
+        onOpenSettings?.call();
+        return;
       case _GuideAction.connectNow:
       case _GuideAction.retryNow:
         final currentProfile = action == _GuideAction.retryNow
             ? (activeProfile ?? selectedProfile)
             : selectedProfile;
         if (currentProfile == null) return;
+        final readinessReport =
+            await services.readiness.buildReport(profileOverride: currentProfile);
+        if (!context.mounted) return;
+        if (readinessReport.overallLevel == ReadinessLevel.blocked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Connect blocked: ${readinessReport.summary}')),
+          );
+          return;
+        }
         final result = await services.controller.connect(currentProfile);
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -491,6 +521,14 @@ class _NextStepGuide extends StatelessWidget {
         );
         return;
     }
+  }
+
+  _GuideAction _guideActionFor(ReadinessAction action) {
+    return switch (action) {
+      ReadinessAction.openProfiles => _GuideAction.openProfiles,
+      ReadinessAction.openTroubleshooting => _GuideAction.openAdvanced,
+      ReadinessAction.openSettings => _GuideAction.openSettings,
+    };
   }
 
   _GuideModel _model() {
@@ -512,6 +550,24 @@ class _NextStepGuide extends StatelessWidget {
             'The selected profile still needs its Trojan password. Save it first, then try one connection attempt.',
         primaryLabel: 'Open Profiles',
         primaryAction: _GuideAction.openProfiles,
+      );
+    }
+    if (readiness != null &&
+        readiness!.overallLevel == ReadinessLevel.blocked &&
+        status.phase != ClientConnectionPhase.error &&
+        status.phase != ClientConnectionPhase.connected &&
+        status.phase != ClientConnectionPhase.connecting &&
+        status.phase != ClientConnectionPhase.disconnecting) {
+      final recommendation = readiness!.recommendation;
+      return _GuideModel(
+        title: readiness!.headline,
+        body: readiness!.summary,
+        primaryLabel: recommendation?.label ?? 'Open Troubleshooting',
+        primaryAction: recommendation == null
+            ? _GuideAction.openAdvanced
+            : _guideActionFor(recommendation.action),
+        secondaryLabel: 'Open Profiles',
+        secondaryAction: _GuideAction.openProfiles,
       );
     }
     if (status.phase == ClientConnectionPhase.error) {
@@ -575,6 +631,7 @@ class _NextStepGuide extends StatelessWidget {
 enum _GuideAction {
   openProfiles,
   openAdvanced,
+  openSettings,
   connectNow,
   retryNow,
   disconnectNow,

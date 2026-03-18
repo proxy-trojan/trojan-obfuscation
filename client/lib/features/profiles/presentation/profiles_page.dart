@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../readiness/domain/readiness_report.dart';
 import '../domain/client_profile.dart';
 import 'import_export_dialog.dart';
 import 'profile_editor_dialog.dart';
@@ -356,6 +357,22 @@ class _SelectedProfileCard extends StatelessWidget {
             onPressed: _canToggleConnection
                 ? () async {
                     final messenger = ScaffoldMessenger.of(context);
+                    if (!(active &&
+                        status.phase == ClientConnectionPhase.connected)) {
+                      final readinessReport = await services.readiness
+                          .buildReport(profileOverride: selected);
+                      if (!context.mounted) return;
+                      if (readinessReport.overallLevel == ReadinessLevel.blocked) {
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Connect blocked: ${readinessReport.summary}',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                    }
                     final result = active &&
                             status.phase == ClientConnectionPhase.connected
                         ? await services.controller.disconnect()

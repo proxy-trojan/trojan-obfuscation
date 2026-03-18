@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
+import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
@@ -144,5 +145,36 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('blocks connect action when readiness is blocked',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
+    await tester.pump();
+
+    expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(find.textContaining('Connect blocked:'), findsOneWidget);
   });
 }

@@ -28,9 +28,9 @@ class ReadinessService {
   final ClientControllerApi _controller;
   final ClientFilesystemLayout? _filesystemLayout;
 
-  Future<ReadinessReport> buildReport() async {
+  Future<ReadinessReport> buildReport({ClientProfile? profileOverride}) async {
     final checks = <ReadinessCheck>[];
-    final selectedProfile = _profileStore.selectedProfile;
+    final selectedProfile = profileOverride ?? _profileStore.selectedProfile;
 
     checks.add(_checkProfile(selectedProfile));
     checks.add(await _checkPassword(selectedProfile));

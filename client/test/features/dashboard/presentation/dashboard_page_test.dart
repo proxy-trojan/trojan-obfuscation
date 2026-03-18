@@ -269,6 +269,29 @@ void main() {
     expect(services.controller.status.phase, ClientConnectionPhase.connected);
   });
 
+  testWidgets('dashboard gates connect when readiness is blocked',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsWidgets);
+    expect(find.widgetWithText(FilledButton, 'Connect now'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Open Profiles'), findsWidgets);
+  });
+
   testWidgets('dashboard distinguishes selected and active profile',
       (WidgetTester tester) async {
     final services = _buildServices();
@@ -304,6 +327,11 @@ void main() {
     final services = _buildServices(controller: controller);
     final first = services.profileStore.selectedProfile!;
     final second = services.profileStore.profiles[1];
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: first.id,
+      password: 'secret-first',
+    );
+    services.profileStore.upsertProfile(first.copyWith(hasStoredPassword: true));
     services.profileStore.selectProfile(second.id);
     controller.statusForTest = ClientConnectionStatus(
       phase: ClientConnectionPhase.error,
