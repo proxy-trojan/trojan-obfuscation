@@ -99,26 +99,24 @@ class ReadinessReport {
   }
 
   ReadinessRecommendation? get recommendation {
-    final candidate = checks.cast<ReadinessCheck?>().firstWhere(
+    final candidates = checks
+        .where(
           (check) =>
-              check != null &&
-              check.level == ReadinessLevel.blocked &&
+              check.level != ReadinessLevel.ready &&
               check.action != null &&
               check.actionLabel != null,
-          orElse: () => checks.cast<ReadinessCheck?>().firstWhere(
-                (check) =>
-                    check != null &&
-                    check.level == ReadinessLevel.degraded &&
-                    check.action != null &&
-                    check.actionLabel != null,
-                orElse: () => null,
-              ),
-        );
-    if (candidate == null ||
-        candidate.action == null ||
-        candidate.actionLabel == null) {
+        )
+        .toList()
+      ..sort(
+        (left, right) =>
+            _recommendationPriority(left) - _recommendationPriority(right),
+      );
+
+    if (candidates.isEmpty) {
       return null;
     }
+
+    final candidate = candidates.first;
     return ReadinessRecommendation(
       action: candidate.action!,
       label: candidate.actionLabel!,
@@ -154,6 +152,25 @@ class ReadinessReport {
       'checks': checks.map((check) => check.toJson()).toList(),
       'recommendation': recommendation?.toJson(),
     };
+  }
+
+  static int _recommendationPriority(ReadinessCheck check) {
+    final levelBase = switch (check.level) {
+      ReadinessLevel.blocked => 0,
+      ReadinessLevel.degraded => 100,
+      ReadinessLevel.ready => 1000,
+    };
+    final domainRank = switch (check.domain) {
+      ReadinessDomain.password => 0,
+      ReadinessDomain.profile => 1,
+      ReadinessDomain.config => 2,
+      ReadinessDomain.runtimeBinary => 3,
+      ReadinessDomain.filesystem => 4,
+      ReadinessDomain.secureStorage => 5,
+      ReadinessDomain.runtimePath => 6,
+      ReadinessDomain.environment => 7,
+    };
+    return levelBase + domainRank;
   }
 
   static ReadinessLevel _calculateOverallLevel(List<ReadinessCheck> checks) {

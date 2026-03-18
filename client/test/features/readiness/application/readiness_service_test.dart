@@ -94,4 +94,52 @@ void main() {
     expect(report.recommendation, isNotNull);
     expect(report.recommendation!.action, ReadinessAction.openTroubleshooting);
   });
+
+  test('recommendation prefers blocked fixes over degraded warnings', () {
+    final report = ReadinessReport.fromChecks(
+      const <ReadinessCheck>[
+        ReadinessCheck(
+          domain: ReadinessDomain.secureStorage,
+          level: ReadinessLevel.degraded,
+          summary: 'secure storage fallback',
+          action: ReadinessAction.openTroubleshooting,
+          actionLabel: 'Open Troubleshooting',
+        ),
+        ReadinessCheck(
+          domain: ReadinessDomain.password,
+          level: ReadinessLevel.blocked,
+          summary: 'password missing',
+          action: ReadinessAction.openProfiles,
+          actionLabel: 'Open Profiles',
+        ),
+      ],
+    );
+
+    expect(report.recommendation, isNotNull);
+    expect(report.recommendation!.action, ReadinessAction.openProfiles);
+  });
+
+  test('recommendation ordering stays stable across degraded domains', () {
+    final report = ReadinessReport.fromChecks(
+      const <ReadinessCheck>[
+        ReadinessCheck(
+          domain: ReadinessDomain.runtimePath,
+          level: ReadinessLevel.degraded,
+          summary: 'stub runtime path',
+          action: ReadinessAction.openTroubleshooting,
+          actionLabel: 'Open Troubleshooting',
+        ),
+        ReadinessCheck(
+          domain: ReadinessDomain.secureStorage,
+          level: ReadinessLevel.degraded,
+          summary: 'secure storage fallback',
+          action: ReadinessAction.openTroubleshooting,
+          actionLabel: 'Open Troubleshooting',
+        ),
+      ],
+    );
+
+    expect(report.recommendation, isNotNull);
+    expect(report.recommendation!.detail, 'secure storage fallback');
+  });
 }
