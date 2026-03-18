@@ -415,6 +415,11 @@ class _SelectedProfileCard extends StatelessWidget {
             _detail('Updated', selected.updatedAt.toIso8601String()),
             if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
             const SizedBox(height: 12),
+            _ProfileReadinessNotice(
+              services: services,
+              selected: selected,
+            ),
+            const SizedBox(height: 12),
             Text('Controller status: $_statusHint'),
           ],
         ),
@@ -636,6 +641,70 @@ class _SelectedProfileCard extends StatelessWidget {
           Expanded(child: Text(value)),
         ],
       ),
+    );
+  }
+}
+
+class _ProfileReadinessNotice extends StatelessWidget {
+  const _ProfileReadinessNotice({
+    required this.services,
+    required this.selected,
+  });
+
+  final ClientServiceRegistry services;
+  final ClientProfile selected;
+
+  Color _tone(ReadinessLevel level) {
+    return switch (level) {
+      ReadinessLevel.ready => Colors.green,
+      ReadinessLevel.degraded => Colors.orange,
+      ReadinessLevel.blocked => Colors.red,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ReadinessReport>(
+      future: services.readiness.buildReport(profileOverride: selected),
+      builder: (BuildContext context, AsyncSnapshot<ReadinessReport> snapshot) {
+        final report = snapshot.data;
+        if (report == null) {
+          return const SizedBox.shrink();
+        }
+
+        final tone = _tone(report.overallLevel);
+        final recommendation = report.recommendation;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tone.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: tone.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Readiness: ${report.overallLevel.label}',
+                style: TextStyle(
+                  color: tone,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(report.summary),
+              if (recommendation != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  'Recommended next step: ${recommendation.label}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

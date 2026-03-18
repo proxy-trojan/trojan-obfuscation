@@ -170,6 +170,13 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Readiness: Blocked'), findsOneWidget);
+    expect(
+      find.textContaining('Check server host / server port / local SOCKS port'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
     await tester.pump();
