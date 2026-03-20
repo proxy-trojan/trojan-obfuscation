@@ -292,6 +292,42 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Open Profiles'), findsWidgets);
   });
 
+  testWidgets(
+      'dashboard readiness refreshes when selected profile changes in place',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsWidgets);
+    expect(find.widgetWithText(FilledButton, 'Connect now'), findsNothing);
+
+    final refreshed = services.profileStore.selectedProfile!.copyWith(
+      serverHost: 'hk-edge.example.com',
+      hasStoredPassword: true,
+      updatedAt: DateTime.now().add(const Duration(seconds: 1)),
+    );
+    services.profileStore.upsertProfile(refreshed);
+
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Connect now'), findsOneWidget);
+  });
+
   testWidgets('dashboard distinguishes selected and active profile',
       (WidgetTester tester) async {
     final services = _buildServices();
@@ -331,7 +367,8 @@ void main() {
       profileId: first.id,
       password: 'secret-first',
     );
-    services.profileStore.upsertProfile(first.copyWith(hasStoredPassword: true));
+    services.profileStore
+        .upsertProfile(first.copyWith(hasStoredPassword: true));
     services.profileStore.selectProfile(second.id);
     controller.statusForTest = ClientConnectionStatus(
       phase: ClientConnectionPhase.error,
@@ -390,7 +427,8 @@ void main() {
     );
   });
 
-  testWidgets('shows recent desktop activation when duplicate launch focuses window',
+  testWidgets(
+      'shows recent desktop activation when duplicate launch focuses window',
       (WidgetTester tester) async {
     final services = _buildServices();
     await services.desktopLifecycle.recordExternalActivation(
@@ -448,7 +486,8 @@ void main() {
       },
     );
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Review desktop behavior'));
+    await tester
+        .tap(find.widgetWithText(OutlinedButton, 'Review desktop behavior'));
     await tester.pump();
 
     expect(openedSettings, isTrue);

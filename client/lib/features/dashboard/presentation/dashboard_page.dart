@@ -7,6 +7,7 @@ import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../profiles/domain/client_profile.dart';
+import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../application/connection_lifecycle_view_model.dart';
 
@@ -54,7 +55,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _refreshReadiness({ClientProfile? profile}) {
-    final future = widget.services.readiness.buildReport(profileOverride: profile);
+    final future =
+        widget.services.readiness.buildReport(profileOverride: profile);
     setState(() {
       _readinessFuture = future;
     });
@@ -108,13 +110,14 @@ class _DashboardPageState extends State<DashboardPage> {
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
         final desktopLifecycleStatus = services.desktopLifecycle.status;
-        final readinessRefreshKey = <Object?>[
-          selectedProfile?.id,
-          selectedProfile?.hasStoredPassword,
-          activeProfile?.id,
-          services.profileSecrets.storageSummary,
-          runtimeConfig.mode,
-          runtimeConfig.endpointHint,
+        final readinessRefreshKey = [
+          buildReadinessRefreshFingerprint(
+            profile: selectedProfile,
+            storageSummary: services.profileSecrets.storageSummary,
+            runtimeMode: runtimeConfig.mode,
+            runtimeEndpointHint: runtimeConfig.endpointHint,
+          ),
+          'active:${activeProfile?.id}',
         ].join('|');
         _refreshReadinessIfInputsChanged(
           readinessRefreshKey,
@@ -123,7 +126,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
         return ListView(
           children: <Widget>[
-            if (desktopLifecycleStatus.isRecentExternalActivation()) ...<Widget>[
+            if (desktopLifecycleStatus
+                .isRecentExternalActivation()) ...<Widget>[
               _ExternalActivationCard(
                 status: desktopLifecycleStatus,
                 onDismiss: () {
@@ -211,7 +215,8 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
             SectionCard(
               title: 'Readiness doctor',
-              subtitle: 'Know if the app is ready, degraded, or blocked before connecting.',
+              subtitle:
+                  'Know if the app is ready, degraded, or blocked before connecting.',
               trailing: IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh readiness',
@@ -237,7 +242,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             label: 'Overall',
                             value: report.overallLevel.label,
                           ),
-                          KeyValuePair(label: 'Headline', value: report.headline),
+                          KeyValuePair(
+                              label: 'Headline', value: report.headline),
                           KeyValuePair(label: 'Summary', value: report.summary),
                           KeyValuePair(
                             label: 'Runtime Mode',
@@ -512,12 +518,13 @@ class _NextStepGuide extends StatelessWidget {
             ? (activeProfile ?? selectedProfile)
             : selectedProfile;
         if (currentProfile == null) return;
-        final readinessReport =
-            await services.readiness.buildReport(profileOverride: currentProfile);
+        final readinessReport = await services.readiness
+            .buildReport(profileOverride: currentProfile);
         if (!context.mounted) return;
         if (readinessReport.overallLevel == ReadinessLevel.blocked) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Connect blocked: ${readinessReport.summary}')),
+            SnackBar(
+                content: Text('Connect blocked: ${readinessReport.summary}')),
           );
           return;
         }
@@ -775,19 +782,26 @@ class _ConnectionHomeCard extends StatelessWidget {
                   runSpacing: 12,
                   children: <Widget>[
                     KeyValuePair(label: 'Lifecycle', value: lifecycle.label),
-                    KeyValuePair(label: 'Selected Profile', value: selectedProfile.name),
+                    KeyValuePair(
+                        label: 'Selected Profile', value: selectedProfile.name),
                     KeyValuePair(
                       label: 'Active Profile',
                       value: activeProfile?.name ??
                           lifecycle.activeProfileName ??
                           'None',
                     ),
-                    KeyValuePair(label: 'Status Note', value: lifecycle.statusSummary),
-                    KeyValuePair(label: 'Secret Storage', value: storageSummary),
+                    KeyValuePair(
+                        label: 'Status Note', value: lifecycle.statusSummary),
+                    KeyValuePair(
+                        label: 'Secret Storage', value: storageSummary),
                     KeyValuePair(label: 'Runtime Mode', value: runtimeMode),
-                    KeyValuePair(label: 'Execution Path', value: _executionPathLabel(runtimeMode)),
-                    KeyValuePair(label: 'Controller Backend', value: controllerBackend),
-                    KeyValuePair(label: 'Backend Version', value: controllerVersion),
+                    KeyValuePair(
+                        label: 'Execution Path',
+                        value: _executionPathLabel(runtimeMode)),
+                    KeyValuePair(
+                        label: 'Controller Backend', value: controllerBackend),
+                    KeyValuePair(
+                        label: 'Backend Version', value: controllerVersion),
                     KeyValuePair(label: 'Update Channel', value: updateChannel),
                   ],
                 ),
@@ -925,7 +939,8 @@ class _RuntimeSessionSummary extends StatelessWidget {
               spacing: 24,
               runSpacing: 12,
               children: <Widget>[
-                KeyValuePair(label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
+                KeyValuePair(
+                    label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
                 KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
                 KeyValuePair(
                   label: 'Stop Requested',
@@ -937,9 +952,11 @@ class _RuntimeSessionSummary extends StatelessWidget {
                       ? 'N/A'
                       : formatTimestamp(session.stopRequestedAt!),
                 ),
-                KeyValuePair(label: 'PID', value: session.pid?.toString() ?? 'N/A'),
                 KeyValuePair(
-                    label: 'Config Path', value: session.activeConfigPath ?? 'N/A'),
+                    label: 'PID', value: session.pid?.toString() ?? 'N/A'),
+                KeyValuePair(
+                    label: 'Config Path',
+                    value: session.activeConfigPath ?? 'N/A'),
                 KeyValuePair(
                   label: 'Config Provenance',
                   value: session.configProvenance ?? 'N/A',
@@ -952,9 +969,11 @@ class _RuntimeSessionSummary extends StatelessWidget {
                   label: 'Launch Plan',
                   value: session.launchPlan?.summary ?? 'N/A',
                 ),
-                KeyValuePair(label: 'Last Exit Code',
+                KeyValuePair(
+                    label: 'Last Exit Code',
                     value: session.lastExitCode?.toString() ?? 'N/A'),
-                KeyValuePair(label: 'Last Error', value: session.lastError ?? 'None'),
+                KeyValuePair(
+                    label: 'Last Error', value: session.lastError ?? 'None'),
               ],
             ),
             const SizedBox(height: 12),

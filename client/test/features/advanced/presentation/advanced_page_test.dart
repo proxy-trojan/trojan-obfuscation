@@ -25,6 +25,44 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
+class _AdvancedPageTestHost extends StatefulWidget {
+  const _AdvancedPageTestHost({required this.services});
+
+  final ClientServiceRegistry services;
+
+  @override
+  State<_AdvancedPageTestHost> createState() => _AdvancedPageTestHostState();
+}
+
+class _AdvancedPageTestHostState extends State<_AdvancedPageTestHost> {
+  AdvancedPageTab _requestedTab = AdvancedPageTab.problemReport;
+  int _requestId = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _requestedTab = AdvancedPageTab.updateStatus;
+              _requestId++;
+            });
+          },
+          child: const Text('Open update status'),
+        ),
+        Expanded(
+          child: AdvancedPage(
+            services: widget.services,
+            requestedTab: _requestedTab,
+            tabRequestId: _requestId,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 ClientServiceRegistry _buildServices({
   AppRuntimeErrorStore? appRuntimeErrors,
 }) {
@@ -134,5 +172,32 @@ void main() {
       find.textContaining('unhandled packaging stub issue'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('supports switching to a requested tab',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: _AdvancedPageTestHost(services: services),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+        find.widgetWithText(FilledButton, 'Generate preview'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
+        findsNothing);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Open update status'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
+        findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Generate preview'), findsNothing);
   });
 }

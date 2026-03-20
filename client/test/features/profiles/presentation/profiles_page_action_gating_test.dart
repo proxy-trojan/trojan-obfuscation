@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
 import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
@@ -25,7 +27,19 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
-ClientServiceRegistry _buildServices() {
+class _UnavailableRuntimeController extends FakeClientController {
+  @override
+  Future<ControllerRuntimeHealth> checkHealth() async {
+    return ControllerRuntimeHealth(
+      level: ControllerRuntimeHealthLevel.unavailable,
+      summary: 'runtime binary missing for this test',
+      updatedAt: DateTime.parse('2026-03-20T00:00:00.000Z'),
+    );
+  }
+}
+
+ClientServiceRegistry _buildServices(
+    {ClientControllerApi? controllerOverride}) {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
@@ -41,7 +55,7 @@ ClientServiceRegistry _buildServices() {
     localStateStore: localState,
     serialization: SettingsSerialization(),
   );
-  final controller = FakeClientController();
+  final controller = controllerOverride ?? FakeClientController();
 
   final packagingExport = PackagingExportService(
     packagingStore: packagingStore,
@@ -175,13 +189,99 @@ void main() {
     expect(find.text('Readiness: Blocked'), findsOneWidget);
     expect(
       find.textContaining('Check server host / server port / local SOCKS port'),
-      findsOneWidget,
+      findsWidgets,
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
+    final blockedButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Connect Blocked'),
+    );
+    expect(blockedButton.onPressed, isNull);
+
+    expect(
+        services.controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(find.textContaining('Recommended next step: Open Profiles'),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'readiness notice refreshes when selected profile changes in place',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
     await tester.pump();
 
-    expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
-    expect(find.textContaining('Connect blocked:'), findsOneWidget);
+    expect(find.text('Readiness: Blocked'), findsOneWidget);
+
+    final refreshed = services.profileStore.selectedProfile!.copyWith(
+      serverHost: 'hk-edge.example.com',
+      hasStoredPassword: true,
+      updatedAt: DateTime.now().add(const Duration(seconds: 1)),
+    );
+    services.profileStore.upsertProfile(refreshed);
+
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Readiness: Ready with warnings'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Connect'), findsOneWidget);
+  });
+
+  testWidgets('readiness recommendation button can route to troubleshooting',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(
+      controllerOverride: _UnavailableRuntimeController(),
+    );
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    var openedAdvanced = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfilesPage(
+            services: services,
+            onOpenAdvanced: (_) => openedAdvanced = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('Recommended next step: Open Troubleshooting'),
+        findsOneWidget);
+
+    await tester
+        .tap(find.widgetWithText(OutlinedButton, 'Open Troubleshooting'));
+    await tester.pump();
+
+    expect(openedAdvanced, isTrue);
   });
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/app/app_shell.dart';
+import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
@@ -24,7 +26,19 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
-ClientServiceRegistry _buildServices() {
+class _UnavailableRuntimeController extends FakeClientController {
+  @override
+  Future<ControllerRuntimeHealth> checkHealth() async {
+    return ControllerRuntimeHealth(
+      level: ControllerRuntimeHealthLevel.unavailable,
+      summary: 'runtime binary missing for this test',
+      updatedAt: DateTime.parse('2026-03-20T00:00:00.000Z'),
+    );
+  }
+}
+
+ClientServiceRegistry _buildServices(
+    {ClientControllerApi? controllerOverride}) {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
@@ -40,7 +54,7 @@ ClientServiceRegistry _buildServices() {
     localStateStore: localState,
     serialization: SettingsSerialization(),
   );
-  final controller = FakeClientController();
+  final controller = controllerOverride ?? FakeClientController();
 
   final packagingExport = PackagingExportService(
     packagingStore: packagingStore,
@@ -110,5 +124,49 @@ void main() {
 
     expect(find.text('Recent desktop activation'), findsOneWidget);
     expect(find.text('Desktop lifecycle policy'), findsNothing);
+  });
+
+  testWidgets('profiles readiness recommendation can open Advanced tab',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(
+      controllerOverride: _UnavailableRuntimeController(),
+    );
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TrojanClientAppShell(services: services),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.text('Profiles'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Recommended next step: Open Troubleshooting'),
+        findsOneWidget);
+
+    await tester
+        .tap(find.widgetWithText(OutlinedButton, 'Open Troubleshooting'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Troubleshooting Overview'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Generate preview'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
+        findsNothing);
   });
 }

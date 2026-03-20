@@ -11,10 +11,22 @@ import '../../diagnostics/application/support_issue_descriptor.dart';
 import '../../diagnostics/presentation/diagnostics_page.dart';
 import '../../packaging/presentation/packaging_page.dart';
 
+enum AdvancedPageTab {
+  problemReport,
+  updateStatus,
+}
+
 class AdvancedPage extends StatefulWidget {
-  const AdvancedPage({super.key, required this.services});
+  const AdvancedPage({
+    super.key,
+    required this.services,
+    this.requestedTab = AdvancedPageTab.problemReport,
+    this.tabRequestId = 0,
+  });
 
   final ClientServiceRegistry services;
+  final AdvancedPageTab requestedTab;
+  final int tabRequestId;
 
   @override
   State<AdvancedPage> createState() => _AdvancedPageState();
@@ -23,17 +35,40 @@ class AdvancedPage extends StatefulWidget {
 class _AdvancedPageState extends State<AdvancedPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  int? _lastHandledTabRequestId;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: _tabIndexFor(widget.requestedTab),
+    );
+    _lastHandledTabRequestId = widget.tabRequestId;
+  }
+
+  @override
+  void didUpdateWidget(covariant AdvancedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tabRequestId == _lastHandledTabRequestId) {
+      return;
+    }
+    _lastHandledTabRequestId = widget.tabRequestId;
+    _tabController.animateTo(_tabIndexFor(widget.requestedTab));
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  int _tabIndexFor(AdvancedPageTab tab) {
+    return switch (tab) {
+      AdvancedPageTab.problemReport => 0,
+      AdvancedPageTab.updateStatus => 1,
+    };
   }
 
   @override
@@ -68,8 +103,7 @@ class _AdvancedPageState extends State<AdvancedPage>
               endpointHint: runtimeConfig.endpointHint,
               backendKind: telemetry.backendKind,
               backendVersion: telemetry.backendVersion,
-              diagnosticsBackend:
-                  services.diagnosticsFileExporter.backendName,
+              diagnosticsBackend: services.diagnosticsFileExporter.backendName,
               lastRuntimeFailure: lastRuntimeFailure,
               appUnhandledError: appUnhandledError,
             ),
@@ -207,20 +241,32 @@ class _SupportOverviewCard extends StatelessWidget {
             spacing: 24,
             runSpacing: 12,
             children: <Widget>[
-              KeyValuePair(label: 'Connection phase', value: status.phase.name, width: 240),
-              KeyValuePair(label: 'Status note', value: status.message, width: 240),
-              KeyValuePair(label: 'Runtime mode', value: runtimeMode, width: 240),
+              KeyValuePair(
+                  label: 'Connection phase',
+                  value: status.phase.name,
+                  width: 240),
+              KeyValuePair(
+                  label: 'Status note', value: status.message, width: 240),
+              KeyValuePair(
+                  label: 'Runtime mode', value: runtimeMode, width: 240),
               KeyValuePair(
                 label: 'Execution path',
                 value: _executionPathLabel(runtimeMode),
                 width: 240,
               ),
-              KeyValuePair(label: 'Endpoint hint', value: endpointHint, width: 240),
+              KeyValuePair(
+                  label: 'Endpoint hint', value: endpointHint, width: 240),
               KeyValuePair(label: 'Backend', value: backendKind, width: 240),
-              KeyValuePair(label: 'Backend version', value: backendVersion, width: 240),
-              KeyValuePair(label: 'Diagnostics export', value: diagnosticsBackend, width: 240),
-              KeyValuePair(label: 'Issue category', value: issue.label, width: 240),
-              KeyValuePair(label: 'Support summary', value: issue.summary, width: 240),
+              KeyValuePair(
+                  label: 'Backend version', value: backendVersion, width: 240),
+              KeyValuePair(
+                  label: 'Diagnostics export',
+                  value: diagnosticsBackend,
+                  width: 240),
+              KeyValuePair(
+                  label: 'Issue category', value: issue.label, width: 240),
+              KeyValuePair(
+                  label: 'Support summary', value: issue.summary, width: 240),
             ],
           ),
         ],
@@ -419,4 +465,3 @@ class _SupportActionsCard extends StatelessWidget {
     );
   }
 }
-

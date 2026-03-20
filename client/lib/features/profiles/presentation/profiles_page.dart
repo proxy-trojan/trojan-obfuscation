@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../domain/client_profile.dart';
 import 'import_export_dialog.dart';
@@ -12,9 +13,16 @@ import 'profile_editor_dialog.dart';
 import 'profile_secret_dialog.dart';
 
 class ProfilesPage extends StatelessWidget {
-  const ProfilesPage({super.key, required this.services});
+  const ProfilesPage({
+    super.key,
+    required this.services,
+    this.onOpenAdvanced,
+    this.onOpenSettings,
+  });
 
   final ClientServiceRegistry services;
+  final ValueChanged<ReadinessAction>? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +108,8 @@ class ProfilesPage extends StatelessWidget {
                         services: services,
                         selected: selected,
                         status: status,
+                        onOpenAdvanced: onOpenAdvanced,
+                        onOpenSettings: onOpenSettings,
                       ),
               ),
             ],
@@ -214,16 +224,33 @@ class ProfilesPage extends StatelessWidget {
   }
 }
 
-class _SelectedProfileCard extends StatelessWidget {
+class _SelectedProfileCard extends StatefulWidget {
   const _SelectedProfileCard({
     required this.services,
     required this.selected,
     required this.status,
+    this.onOpenAdvanced,
+    this.onOpenSettings,
   });
 
   final ClientServiceRegistry services;
   final ClientProfile selected;
   final ClientConnectionStatus status;
+  final ValueChanged<ReadinessAction>? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
+
+  @override
+  State<_SelectedProfileCard> createState() => _SelectedProfileCardState();
+}
+
+class _SelectedProfileCardState extends State<_SelectedProfileCard> {
+  Future<ReadinessReport>? _readinessFuture;
+  ReadinessReport? _latestReadinessReport;
+  String? _lastRefreshFingerprint;
+
+  ClientServiceRegistry get services => widget.services;
+  ClientProfile get selected => widget.selected;
+  ClientConnectionStatus get status => widget.status;
 
   bool get _active => status.activeProfileId == selected.id;
 
@@ -236,15 +263,25 @@ class _SelectedProfileCard extends StatelessWidget {
   bool get _hasConnectedElsewhere =>
       !_active && status.phase == ClientConnectionPhase.connected;
 
+  bool get _connectBlockedByReadiness {
+    final report = _latestReadinessReport;
+    if (report == null) return false;
+    final isConnectAction =
+        !(_active && status.phase == ClientConnectionPhase.connected);
+    return isConnectAction && report.overallLevel == ReadinessLevel.blocked;
+  }
+
   bool get _canToggleConnection {
     if (!selected.hasStoredPassword) return false;
     if (status.isBusy) return false;
     if (_hasConnectedElsewhere) return false;
+    if (_connectBlockedByReadiness) return false;
     return true;
   }
 
   String get _connectActionLabel {
     if (!selected.hasStoredPassword) return 'Set Password First';
+    if (_connectBlockedByReadiness) return 'Connect Blocked';
     if (_active && status.phase == ClientConnectionPhase.connected) {
       return 'Disconnect';
     }
@@ -273,7 +310,24 @@ class _SelectedProfileCard extends StatelessWidget {
     if (_active && status.phase == ClientConnectionPhase.disconnecting) {
       return 'This profile is disconnecting now. Wait for the shutdown to finish.';
     }
+    if (_connectBlockedByReadiness) {
+      return 'Readiness blocked: ${_latestReadinessReport!.summary}';
+    }
     return status.message;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _lastRefreshFingerprint = _refreshFingerprint();
+    _restoreLastKnownReadiness();
+    _refreshReadiness();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SelectedProfileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _refreshReadinessIfInputsChanged();
   }
 
   String _executionPathLabel(String mode) {
@@ -293,6 +347,84 @@ class _SelectedProfileCard extends StatelessWidget {
       return 'Simulated runtime path';
     }
     return 'Unknown runtime path';
+  }
+
+  String _refreshFingerprint() {
+    return buildReadinessRefreshFingerprint(
+      profile: selected,
+      storageSummary: services.profileSecrets.storageSummary,
+      runtimeMode: services.controller.runtimeConfig.mode,
+      runtimeEndpointHint: services.controller.runtimeConfig.endpointHint,
+    );
+  }
+
+  void _refreshReadinessIfInputsChanged() {
+    final fingerprint = _refreshFingerprint();
+    if (_lastRefreshFingerprint == fingerprint) return;
+    _lastRefreshFingerprint = fingerprint;
+    _restoreLastKnownReadiness();
+    _refreshReadiness();
+  }
+
+  void _restoreLastKnownReadiness() {
+    services.readiness
+        .readLastKnownReport(profileOverride: selected)
+        .then((report) {
+      if (!mounted || report == null) return;
+      setState(() {
+        _latestReadinessReport = report;
+      });
+    });
+  }
+
+  void _refreshReadiness() {
+    final future = services.readiness.buildReport(profileOverride: selected);
+    setState(() {
+      _readinessFuture = future;
+    });
+    future.then((report) {
+      if (!mounted) return;
+      if (!identical(_readinessFuture, future)) return;
+      setState(() {
+        _latestReadinessReport = report;
+      });
+    });
+  }
+
+  void _runRecommendation(BuildContext context, ReadinessRecommendation rec) {
+    switch (rec.action) {
+      case ReadinessAction.openProfiles:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'You are already in Profiles. Update this profile directly.'),
+          ),
+        );
+        return;
+      case ReadinessAction.openTroubleshooting:
+        if (widget.onOpenAdvanced != null) {
+          widget.onOpenAdvanced!.call(rec.action);
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Troubleshooting page is unavailable in this surface.'),
+          ),
+        );
+        return;
+      case ReadinessAction.openSettings:
+        if (widget.onOpenSettings != null) {
+          widget.onOpenSettings!.call();
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Settings page is unavailable in this surface.'),
+          ),
+        );
+        return;
+    }
   }
 
   @override
@@ -357,12 +489,17 @@ class _SelectedProfileCard extends StatelessWidget {
             onPressed: _canToggleConnection
                 ? () async {
                     final messenger = ScaffoldMessenger.of(context);
-                    if (!(active &&
-                        status.phase == ClientConnectionPhase.connected)) {
+                    final isDisconnectAction = active &&
+                        status.phase == ClientConnectionPhase.connected;
+                    if (!isDisconnectAction) {
                       final readinessReport = await services.readiness
                           .buildReport(profileOverride: selected);
-                      if (!context.mounted) return;
-                      if (readinessReport.overallLevel == ReadinessLevel.blocked) {
+                      if (!mounted) return;
+                      setState(() {
+                        _latestReadinessReport = readinessReport;
+                      });
+                      if (readinessReport.overallLevel ==
+                          ReadinessLevel.blocked) {
                         messenger.showSnackBar(
                           SnackBar(
                             content: Text(
@@ -373,8 +510,8 @@ class _SelectedProfileCard extends StatelessWidget {
                         return;
                       }
                     }
-                    final result = active &&
-                            status.phase == ClientConnectionPhase.connected
+
+                    final result = isDisconnectAction
                         ? await services.controller.disconnect()
                         : await services.controller.connect(selected);
                     if (!context.mounted) return;
@@ -415,9 +552,21 @@ class _SelectedProfileCard extends StatelessWidget {
             _detail('Updated', selected.updatedAt.toIso8601String()),
             if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
             const SizedBox(height: 12),
-            _ProfileReadinessNotice(
-              services: services,
-              selected: selected,
+            FutureBuilder<ReadinessReport>(
+              future: _readinessFuture,
+              builder: (BuildContext context,
+                  AsyncSnapshot<ReadinessReport> snapshot) {
+                final report = snapshot.data ?? _latestReadinessReport;
+                return _ProfileReadinessNotice(
+                  report: report,
+                  onRecommendation: report?.recommendation == null
+                      ? null
+                      : () => _runRecommendation(
+                            context,
+                            report!.recommendation!,
+                          ),
+                );
+              },
             ),
             const SizedBox(height: 12),
             Text('Controller status: $_statusHint'),
@@ -645,64 +794,14 @@ class _SelectedProfileCard extends StatelessWidget {
   }
 }
 
-class _ProfileReadinessNotice extends StatefulWidget {
+class _ProfileReadinessNotice extends StatelessWidget {
   const _ProfileReadinessNotice({
-    required this.services,
-    required this.selected,
+    required this.report,
+    this.onRecommendation,
   });
 
-  final ClientServiceRegistry services;
-  final ClientProfile selected;
-
-  @override
-  State<_ProfileReadinessNotice> createState() => _ProfileReadinessNoticeState();
-}
-
-class _ProfileReadinessNoticeState extends State<_ProfileReadinessNotice> {
-  Future<ReadinessReport>? _future;
-  ReadinessReport? _latestReport;
-
-  @override
-  void initState() {
-    super.initState();
-    _restoreLastKnown();
-    _refresh();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ProfileReadinessNotice oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selected.id != widget.selected.id) {
-      _restoreLastKnown();
-      _refresh();
-    }
-  }
-
-  void _restoreLastKnown() {
-    widget.services.readiness
-        .readLastKnownReport(profileOverride: widget.selected)
-        .then((report) {
-      if (!mounted || report == null) return;
-      setState(() {
-        _latestReport = report;
-      });
-    });
-  }
-
-  void _refresh() {
-    final future =
-        widget.services.readiness.buildReport(profileOverride: widget.selected);
-    setState(() {
-      _future = future;
-    });
-    future.then((report) {
-      if (!mounted) return;
-      if (!identical(_future, future)) return;
-      setState(() {
-        _latestReport = report;
-      });
-    });
-  }
+  final ReadinessReport? report;
+  final VoidCallback? onRecommendation;
 
   Color _tone(ReadinessLevel level) {
     return switch (level) {
@@ -712,49 +811,57 @@ class _ProfileReadinessNoticeState extends State<_ProfileReadinessNotice> {
     };
   }
 
+  IconData _recommendationIcon(ReadinessAction action) {
+    return switch (action) {
+      ReadinessAction.openProfiles => Icons.storage_outlined,
+      ReadinessAction.openTroubleshooting => Icons.build_circle_outlined,
+      ReadinessAction.openSettings => Icons.settings_outlined,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<ReadinessReport>(
-      future: _future,
-      builder: (BuildContext context, AsyncSnapshot<ReadinessReport> snapshot) {
-        final report = snapshot.data ?? _latestReport;
-        if (report == null) {
-          return const SizedBox.shrink();
-        }
+    if (report == null) {
+      return const SizedBox.shrink();
+    }
 
-        final tone = _tone(report.overallLevel);
-        final recommendation = report.recommendation;
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: tone.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tone.withValues(alpha: 0.25)),
+    final tone = _tone(report!.overallLevel);
+    final recommendation = report!.recommendation;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Readiness: ${report!.overallLevel.label}',
+            style: TextStyle(
+              color: tone,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Readiness: ${report.overallLevel.label}',
-                style: TextStyle(
-                  color: tone,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(report.summary),
-              if (recommendation != null) ...<Widget>[
-                const SizedBox(height: 8),
-                Text(
-                  'Recommended next step: ${recommendation.label}',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
+          const SizedBox(height: 6),
+          Text(report!.summary),
+          if (recommendation != null) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              'Recommended next step: ${recommendation.label}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onRecommendation,
+              icon: Icon(_recommendationIcon(recommendation.action)),
+              label: Text(recommendation.label),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
