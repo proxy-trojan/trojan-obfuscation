@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
@@ -13,6 +15,7 @@ import 'package:trojan_pro_client/features/controller/domain/last_runtime_failur
 import 'package:trojan_pro_client/features/dashboard/presentation/dashboard_page.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
+import 'package:trojan_pro_client/features/readiness/domain/readiness_report.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_portability_service.dart';
@@ -22,10 +25,32 @@ import 'package:trojan_pro_client/features/profiles/application/profile_store.da
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
+import 'package:trojan_pro_client/platform/services/local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/service_registry.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
+
+class _DelayedReadLocalStateStore implements LocalStateStore {
+  static const Duration _readDelay = Duration(milliseconds: 200);
+
+  final MemoryLocalStateStore _delegate = MemoryLocalStateStore();
+
+  @override
+  String get backendName => _delegate.backendName;
+
+  @override
+  Future<void> delete(String key) => _delegate.delete(key);
+
+  @override
+  Future<String?> read(String key) async {
+    await Future<void>.delayed(_readDelay);
+    return _delegate.read(key);
+  }
+
+  @override
+  Future<void> write(String key, String value) => _delegate.write(key, value);
+}
 
 class _TestLifecycleController extends ClientControllerApi {
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
@@ -147,8 +172,11 @@ Future<void> _pumpUntilPhase(
   }
 }
 
-ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
-  final localState = MemoryLocalStateStore();
+ClientServiceRegistry _buildServices({
+  ClientControllerApi? controller,
+  LocalStateStore? localStateOverride,
+}) {
+  final localState = localStateOverride ?? MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
   final profileStore = ProfileStore.withSampleProfiles(
@@ -174,6 +202,7 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     profileSecrets: profileSecrets,
     secureStorage: secureStorage,
     controller: resolvedController,
+    localStateStore: localState,
   );
 
   final diagnostics = DiagnosticsExportService(
@@ -214,6 +243,46 @@ void main() {
     expect(find.text('Save the password before testing'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
     expect(find.text('Readiness Provenance'), findsOneWidget);
+  });
+
+  testWidgets('late cached snapshot does not overwrite live readiness',
+      (WidgetTester tester) async {
+    final localState = _DelayedReadLocalStateStore();
+    final services = _buildServices(localStateOverride: localState);
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+    await localState.write(
+      'client.readiness.last-known.${profile.id}',
+      jsonEncode(
+        ReadinessReport.fromChecks(
+          const <ReadinessCheck>[
+            ReadinessCheck(
+              domain: ReadinessDomain.config,
+              level: ReadinessLevel.blocked,
+              summary: 'stale invalid config snapshot',
+              detail: 'stale snapshot should not override live readiness',
+              action: ReadinessAction.openProfiles,
+              actionLabel: 'Open Profiles',
+            ),
+          ],
+          generatedAt: DateTime.now().subtract(const Duration(minutes: 10)),
+        ).toJson(),
+      ),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Live check'), findsOneWidget);
+    expect(find.text('Connect blocked'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Connect now'), findsOneWidget);
   });
 
   testWidgets('shows connection home CTAs when profile is ready',

@@ -247,6 +247,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   Future<ReadinessReport>? _readinessFuture;
   ReadinessReport? _latestReadinessReport;
   String? _lastRefreshFingerprint;
+  int _readinessRequestToken = 0;
+  int _lastAppliedLiveReadinessToken = -1;
 
   ClientServiceRegistry get services => widget.services;
   ClientProfile get selected => widget.selected;
@@ -320,8 +322,7 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   void initState() {
     super.initState();
     _lastRefreshFingerprint = _refreshFingerprint();
-    _restoreLastKnownReadiness();
-    _refreshReadiness();
+    _startReadinessCycle();
   }
 
   @override
@@ -362,30 +363,40 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     final fingerprint = _refreshFingerprint();
     if (_lastRefreshFingerprint == fingerprint) return;
     _lastRefreshFingerprint = fingerprint;
-    _restoreLastKnownReadiness();
-    _refreshReadiness();
+    _startReadinessCycle();
   }
 
-  void _restoreLastKnownReadiness() {
+  void _startReadinessCycle() {
+    _readinessRequestToken++;
+    final requestToken = _readinessRequestToken;
+    _restoreLastKnownReadiness(requestToken: requestToken);
+    _refreshReadiness(requestToken: requestToken);
+  }
+
+  void _restoreLastKnownReadiness({required int requestToken}) {
     services.readiness
         .readLastKnownReport(profileOverride: selected)
         .then((report) {
       if (!mounted || report == null) return;
+      if (requestToken != _readinessRequestToken) return;
+      if (_lastAppliedLiveReadinessToken == requestToken) return;
       setState(() {
         _latestReadinessReport = report;
       });
     });
   }
 
-  void _refreshReadiness() {
+  void _refreshReadiness({required int requestToken}) {
     final future = services.readiness.buildReport(profileOverride: selected);
     setState(() {
       _readinessFuture = future;
     });
     future.then((report) {
       if (!mounted) return;
+      if (requestToken != _readinessRequestToken) return;
       if (!identical(_readinessFuture, future)) return;
       setState(() {
+        _lastAppliedLiveReadinessToken = requestToken;
         _latestReadinessReport = report;
       });
     });

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
@@ -13,8 +15,10 @@ import 'package:trojan_pro_client/features/profiles/application/profile_serializ
 import 'package:trojan_pro_client/features/profiles/application/profile_store.dart';
 import 'package:trojan_pro_client/features/profiles/presentation/profiles_page.dart';
 import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
+import 'package:trojan_pro_client/features/readiness/domain/readiness_report.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
+import 'package:trojan_pro_client/platform/services/local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/service_registry.dart';
@@ -25,6 +29,27 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   addTearDown(() async {
     await tester.binding.setSurfaceSize(null);
   });
+}
+
+class _DelayedReadLocalStateStore implements LocalStateStore {
+  static const Duration _readDelay = Duration(milliseconds: 200);
+
+  final MemoryLocalStateStore _delegate = MemoryLocalStateStore();
+
+  @override
+  String get backendName => _delegate.backendName;
+
+  @override
+  Future<void> delete(String key) => _delegate.delete(key);
+
+  @override
+  Future<String?> read(String key) async {
+    await Future<void>.delayed(_readDelay);
+    return _delegate.read(key);
+  }
+
+  @override
+  Future<void> write(String key, String value) => _delegate.write(key, value);
 }
 
 class _UnavailableRuntimeController extends FakeClientController {
@@ -38,9 +63,11 @@ class _UnavailableRuntimeController extends FakeClientController {
   }
 }
 
-ClientServiceRegistry _buildServices(
-    {ClientControllerApi? controllerOverride}) {
-  final localState = MemoryLocalStateStore();
+ClientServiceRegistry _buildServices({
+  ClientControllerApi? controllerOverride,
+  LocalStateStore? localStateOverride,
+}) {
+  final localState = localStateOverride ?? MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
   final profileStore = ProfileStore.withSampleProfiles(
@@ -66,6 +93,7 @@ ClientServiceRegistry _buildServices(
     profileSecrets: profileSecrets,
     secureStorage: secureStorage,
     controller: controller,
+    localStateStore: localState,
   );
   final diagnostics = DiagnosticsExportService(
     profileStore: profileStore,
@@ -116,6 +144,52 @@ void main() {
           'Controller status: Save the Trojan password before trying this profile.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('late cached snapshot does not overwrite live profile readiness',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final localState = _DelayedReadLocalStateStore();
+    final services = _buildServices(localStateOverride: localState);
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+    await localState.write(
+      'client.readiness.last-known.${selected.id}',
+      jsonEncode(
+        ReadinessReport.fromChecks(
+          const <ReadinessCheck>[
+            ReadinessCheck(
+              domain: ReadinessDomain.config,
+              level: ReadinessLevel.blocked,
+              summary: 'stale invalid config snapshot',
+              detail: 'stale snapshot should not override live readiness',
+              action: ReadinessAction.openProfiles,
+              actionLabel: 'Open Profiles',
+            ),
+          ],
+          generatedAt: DateTime.now().subtract(const Duration(minutes: 10)),
+        ).toJson(),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Readiness: Ready with warnings'), findsOneWidget);
+    expect(find.textContaining('Readiness source: Live check'), findsOneWidget);
+    expect(find.text('Readiness: Blocked'), findsNothing);
   });
 
   testWidgets('disables connect on another profile while one is connected',

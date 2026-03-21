@@ -33,28 +33,51 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<ReadinessReport>? _readinessFuture;
   ReadinessReport? _latestReadinessReport;
   String? _lastReadinessRefreshKey;
+  int _readinessRequestToken = 0;
+  int _lastAppliedLiveReadinessToken = -1;
 
   @override
   void initState() {
     super.initState();
-    _lastReadinessRefreshKey = 'initial';
-    final profile = widget.services.profileStore.selectedProfile;
-    _restoreLastKnownReadiness(profile: profile);
-    _refreshReadiness(profile: profile);
+    final services = widget.services;
+    final profile = services.profileStore.selectedProfile;
+    _lastReadinessRefreshKey = _buildReadinessRefreshKey(
+      profile: profile,
+      activeProfileId: services.controller.status.activeProfileId,
+      storageSummary: services.profileSecrets.storageSummary,
+      runtimeMode: services.controller.runtimeConfig.mode,
+      runtimeEndpointHint: services.controller.runtimeConfig.endpointHint,
+    );
+    _startReadinessCycle(profile: profile);
   }
 
-  void _restoreLastKnownReadiness({ClientProfile? profile}) {
+  void _startReadinessCycle({ClientProfile? profile}) {
+    _readinessRequestToken++;
+    final requestToken = _readinessRequestToken;
+    _restoreLastKnownReadiness(profile: profile, requestToken: requestToken);
+    _refreshReadiness(profile: profile, requestToken: requestToken);
+  }
+
+  void _restoreLastKnownReadiness({
+    ClientProfile? profile,
+    required int requestToken,
+  }) {
     widget.services.readiness
         .readLastKnownReport(profileOverride: profile)
         .then((report) {
       if (!mounted || report == null) return;
+      if (requestToken != _readinessRequestToken) return;
+      if (_lastAppliedLiveReadinessToken == requestToken) return;
       setState(() {
         _latestReadinessReport = report;
       });
     });
   }
 
-  void _refreshReadiness({ClientProfile? profile}) {
+  void _refreshReadiness({
+    ClientProfile? profile,
+    required int requestToken,
+  }) {
     final future =
         widget.services.readiness.buildReport(profileOverride: profile);
     setState(() {
@@ -62,11 +85,31 @@ class _DashboardPageState extends State<DashboardPage> {
     });
     future.then((report) {
       if (!mounted) return;
+      if (requestToken != _readinessRequestToken) return;
       if (!identical(_readinessFuture, future)) return;
       setState(() {
+        _lastAppliedLiveReadinessToken = requestToken;
         _latestReadinessReport = report;
       });
     });
+  }
+
+  String _buildReadinessRefreshKey({
+    required ClientProfile? profile,
+    required String? activeProfileId,
+    required String storageSummary,
+    required String runtimeMode,
+    required String runtimeEndpointHint,
+  }) {
+    return [
+      buildReadinessRefreshFingerprint(
+        profile: profile,
+        storageSummary: storageSummary,
+        runtimeMode: runtimeMode,
+        runtimeEndpointHint: runtimeEndpointHint,
+      ),
+      'active:$activeProfileId',
+    ].join('|');
   }
 
   void _refreshReadinessIfInputsChanged(String key, {ClientProfile? profile}) {
@@ -74,8 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _lastReadinessRefreshKey = key;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _restoreLastKnownReadiness(profile: profile);
-      _refreshReadiness(profile: profile);
+      _startReadinessCycle(profile: profile);
     });
   }
 
@@ -110,15 +152,13 @@ class _DashboardPageState extends State<DashboardPage> {
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
         final desktopLifecycleStatus = services.desktopLifecycle.status;
-        final readinessRefreshKey = [
-          buildReadinessRefreshFingerprint(
-            profile: selectedProfile,
-            storageSummary: services.profileSecrets.storageSummary,
-            runtimeMode: runtimeConfig.mode,
-            runtimeEndpointHint: runtimeConfig.endpointHint,
-          ),
-          'active:${activeProfile?.id}',
-        ].join('|');
+        final readinessRefreshKey = _buildReadinessRefreshKey(
+          profile: selectedProfile,
+          activeProfileId: activeProfile?.id,
+          storageSummary: services.profileSecrets.storageSummary,
+          runtimeMode: runtimeConfig.mode,
+          runtimeEndpointHint: runtimeConfig.endpointHint,
+        );
         _refreshReadinessIfInputsChanged(
           readinessRefreshKey,
           profile: selectedProfile,
@@ -220,7 +260,7 @@ class _DashboardPageState extends State<DashboardPage> {
               trailing: IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh readiness',
-                onPressed: _refreshReadiness,
+                onPressed: () => _startReadinessCycle(profile: selectedProfile),
               ),
               child: FutureBuilder<ReadinessReport>(
                 future: _readinessFuture,
