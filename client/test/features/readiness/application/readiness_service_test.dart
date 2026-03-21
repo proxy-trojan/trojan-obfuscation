@@ -30,8 +30,9 @@ void main() {
     expect(report.overallLevel, ReadinessLevel.blocked);
     expect(report.headline, 'Connect blocked');
     expect(
-      report.checks.any(
-          (check) => check.domain == ReadinessDomain.profile && check.level == ReadinessLevel.blocked),
+      report.checks.any((check) =>
+          check.domain == ReadinessDomain.profile &&
+          check.level == ReadinessLevel.blocked),
       isTrue,
     );
   });
@@ -56,8 +57,9 @@ void main() {
 
     expect(report.overallLevel, ReadinessLevel.blocked);
     expect(
-      report.checks.any(
-          (check) => check.domain == ReadinessDomain.password && check.level == ReadinessLevel.blocked),
+      report.checks.any((check) =>
+          check.domain == ReadinessDomain.password &&
+          check.level == ReadinessLevel.blocked),
       isTrue,
     );
   });
@@ -72,7 +74,8 @@ void main() {
     final secureStorage = MemorySecureStorage();
     final profile = profileStore.selectedProfile!;
     final profileSecrets = ProfileSecretsService(secureStorage: secureStorage);
-    await profileSecrets.saveTrojanPassword(profileId: profile.id, password: 'pw');
+    await profileSecrets.saveTrojanPassword(
+        profileId: profile.id, password: 'pw');
     profileStore.upsertProfile(profile.copyWith(hasStoredPassword: true));
 
     final readiness = ReadinessService(
@@ -152,7 +155,8 @@ void main() {
     final secureStorage = MemorySecureStorage();
     final profile = profileStore.selectedProfile!;
     final profileSecrets = ProfileSecretsService(secureStorage: secureStorage);
-    await profileSecrets.saveTrojanPassword(profileId: profile.id, password: 'pw');
+    await profileSecrets.saveTrojanPassword(
+        profileId: profile.id, password: 'pw');
     profileStore.upsertProfile(profile.copyWith(hasStoredPassword: true));
 
     final readiness = ReadinessService(
@@ -167,8 +171,11 @@ void main() {
     final restored = await readiness.readLastKnownReport();
 
     expect(restored, isNotNull);
-    expect(restored!.overallLevel, built.overallLevel);
+    expect(built.isCachedSnapshot, isFalse);
+    expect(restored!.isCachedSnapshot, isTrue);
+    expect(restored.overallLevel, built.overallLevel);
     expect(restored.summary, built.summary);
     expect(restored.recommendation?.action, built.recommendation?.action);
+    expect(restored.sourceLabel, 'Cached snapshot');
   });
 }

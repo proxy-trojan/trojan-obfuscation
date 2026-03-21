@@ -29,6 +29,20 @@ enum ReadinessAction {
   openSettings,
 }
 
+enum ReadinessFreshness {
+  fresh,
+  aging,
+  stale,
+}
+
+extension ReadinessFreshnessLabel on ReadinessFreshness {
+  String get label => switch (this) {
+        ReadinessFreshness.fresh => 'Fresh',
+        ReadinessFreshness.aging => 'Aging',
+        ReadinessFreshness.stale => 'Stale',
+      };
+}
+
 class ReadinessCheck {
   const ReadinessCheck({
     required this.domain,
@@ -53,8 +67,9 @@ class ReadinessCheck {
       summary: summary,
       detail: value['detail'] is String ? value['detail'] as String : null,
       action: _enumByName(ReadinessAction.values, value['action']),
-      actionLabel:
-          value['actionLabel'] is String ? value['actionLabel'] as String : null,
+      actionLabel: value['actionLabel'] is String
+          ? value['actionLabel'] as String
+          : null,
     );
   }
 
@@ -102,11 +117,13 @@ class ReadinessReport {
     required this.overallLevel,
     required this.checks,
     required this.generatedAt,
+    this.isCachedSnapshot = false,
   });
 
   static ReadinessReport? fromJson(Object? value) {
     if (value is! Map) return null;
-    final overallLevel = _enumByName(ReadinessLevel.values, value['overallLevel']);
+    final overallLevel =
+        _enumByName(ReadinessLevel.values, value['overallLevel']);
     final generatedAtRaw = value['generatedAt'];
     final checksRaw = value['checks'];
     if (overallLevel == null ||
@@ -126,19 +143,26 @@ class ReadinessReport {
       overallLevel: overallLevel,
       checks: List<ReadinessCheck>.unmodifiable(checks),
       generatedAt: generatedAt,
+      isCachedSnapshot: value['isCachedSnapshot'] == true,
     );
   }
 
   final ReadinessLevel overallLevel;
   final List<ReadinessCheck> checks;
   final DateTime generatedAt;
+  final bool isCachedSnapshot;
 
-  static ReadinessReport fromChecks(List<ReadinessCheck> checks) {
+  static ReadinessReport fromChecks(
+    List<ReadinessCheck> checks, {
+    bool isCachedSnapshot = false,
+    DateTime? generatedAt,
+  }) {
     final overall = _calculateOverallLevel(checks);
     return ReadinessReport(
       overallLevel: overall,
       checks: List<ReadinessCheck>.unmodifiable(checks),
-      generatedAt: DateTime.now(),
+      generatedAt: generatedAt ?? DateTime.now(),
+      isCachedSnapshot: isCachedSnapshot,
     );
   }
 
@@ -174,8 +198,54 @@ class ReadinessReport {
         ReadinessLevel.ready => 'Ready for a quick test',
       };
 
+  Duration get age {
+    final now = DateTime.now();
+    return now.isAfter(generatedAt)
+        ? now.difference(generatedAt)
+        : Duration.zero;
+  }
+
+  ReadinessFreshness get freshness {
+    final reportAge = age;
+    if (reportAge >= const Duration(minutes: 5)) {
+      return ReadinessFreshness.stale;
+    }
+    if (reportAge >= const Duration(minutes: 1)) {
+      return ReadinessFreshness.aging;
+    }
+    return ReadinessFreshness.fresh;
+  }
+
+  String get sourceLabel => isCachedSnapshot ? 'Cached snapshot' : 'Live check';
+
+  String get freshnessLabel => switch (freshness) {
+        ReadinessFreshness.fresh =>
+          isCachedSnapshot ? 'Cached just now' : 'Fresh',
+        ReadinessFreshness.aging =>
+          isCachedSnapshot ? 'Cached a moment ago' : 'Aging',
+        ReadinessFreshness.stale =>
+          isCachedSnapshot ? 'Cached earlier' : 'Stale',
+      };
+
+  String get ageLabel {
+    final reportAge = age;
+    if (reportAge.inSeconds < 5) {
+      return 'just now';
+    }
+    if (reportAge.inMinutes < 1) {
+      return '${reportAge.inSeconds}s ago';
+    }
+    if (reportAge.inHours < 1) {
+      return '${reportAge.inMinutes}m ago';
+    }
+    return '${reportAge.inHours}h ago';
+  }
+
+  String get provenanceSummary => '$sourceLabel • $freshnessLabel • $ageLabel';
+
   String get summary {
-    final blocked = checks.where((check) => check.level == ReadinessLevel.blocked);
+    final blocked =
+        checks.where((check) => check.level == ReadinessLevel.blocked);
     if (blocked.isNotEmpty) {
       return blocked.first.detail ?? blocked.first.summary;
     }
@@ -187,14 +257,32 @@ class ReadinessReport {
     return 'All readiness checks look healthy.';
   }
 
+  ReadinessReport copyWith({
+    ReadinessLevel? overallLevel,
+    List<ReadinessCheck>? checks,
+    DateTime? generatedAt,
+    bool? isCachedSnapshot,
+  }) {
+    return ReadinessReport(
+      overallLevel: overallLevel ?? this.overallLevel,
+      checks: List<ReadinessCheck>.unmodifiable(checks ?? this.checks),
+      generatedAt: generatedAt ?? this.generatedAt,
+      isCachedSnapshot: isCachedSnapshot ?? this.isCachedSnapshot,
+    );
+  }
+
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'overallLevel': overallLevel.name,
       'headline': headline,
       'summary': summary,
       'generatedAt': generatedAt.toIso8601String(),
+      'isCachedSnapshot': isCachedSnapshot,
       'checks': checks.map((check) => check.toJson()).toList(),
       'recommendation': recommendation?.toJson(),
+      'sourceLabel': sourceLabel,
+      'freshnessLabel': freshnessLabel,
+      'ageLabel': ageLabel,
     };
   }
 

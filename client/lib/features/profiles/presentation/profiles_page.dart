@@ -559,6 +559,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                 final report = snapshot.data ?? _latestReadinessReport;
                 return _ProfileReadinessNotice(
                   report: report,
+                  showCachedRefreshHint: report?.isCachedSnapshot == true &&
+                      snapshot.connectionState != ConnectionState.done,
                   onRecommendation: report?.recommendation == null
                       ? null
                       : () => _runRecommendation(
@@ -797,10 +799,12 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
 class _ProfileReadinessNotice extends StatelessWidget {
   const _ProfileReadinessNotice({
     required this.report,
+    this.showCachedRefreshHint = false,
     this.onRecommendation,
   });
 
   final ReadinessReport? report;
+  final bool showCachedRefreshHint;
   final VoidCallback? onRecommendation;
 
   Color _tone(ReadinessLevel level) {
@@ -847,6 +851,17 @@ class _ProfileReadinessNotice extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(report!.summary),
+          const SizedBox(height: 8),
+          Text(
+            'Readiness source: ${report!.provenanceSummary}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          if (showCachedRefreshHint) ...<Widget>[
+            const SizedBox(height: 8),
+            const Text(
+              'Showing a cached snapshot while the live readiness refresh runs.',
+            ),
+          ],
           if (recommendation != null) ...<Widget>[
             const SizedBox(height: 8),
             Text(

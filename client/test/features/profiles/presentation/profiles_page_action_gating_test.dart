@@ -187,6 +187,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Readiness: Blocked'), findsOneWidget);
+    expect(find.textContaining('Readiness source:'), findsOneWidget);
     expect(
       find.textContaining('Check server host / server port / local SOCKS port'),
       findsWidgets,

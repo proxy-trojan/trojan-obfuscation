@@ -60,7 +60,8 @@ class ReadinessService {
     final raw = await localStateStore.read(_storageKeyFor(selectedProfile));
     if (raw == null || raw.trim().isEmpty) return null;
     try {
-      return ReadinessReport.fromJson(jsonDecode(raw));
+      final report = ReadinessReport.fromJson(jsonDecode(raw));
+      return report?.copyWith(isCachedSnapshot: true);
     } catch (_) {
       return null;
     }
@@ -191,7 +192,8 @@ class ReadinessService {
     }
 
     final invalidHost = profile.serverHost.trim().isEmpty;
-    final invalidServerPort = profile.serverPort <= 0 || profile.serverPort > 65535;
+    final invalidServerPort =
+        profile.serverPort <= 0 || profile.serverPort > 65535;
     final invalidLocalPort =
         profile.localSocksPort <= 0 || profile.localSocksPort > 65535;
 
@@ -270,7 +272,8 @@ class ReadinessService {
       return const ReadinessCheck(
         domain: ReadinessDomain.filesystem,
         level: ReadinessLevel.degraded,
-        summary: 'Filesystem layout is unavailable; runtime artifacts will use temp paths.',
+        summary:
+            'Filesystem layout is unavailable; runtime artifacts will use temp paths.',
         detail:
             'This can happen on unsupported platforms. It is OK for testing but not for persistent runtime use.',
       );

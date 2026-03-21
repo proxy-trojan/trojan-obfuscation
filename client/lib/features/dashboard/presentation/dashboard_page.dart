@@ -257,8 +257,21 @@ class _DashboardPageState extends State<DashboardPage> {
                             label: 'Secure Storage',
                             value: services.profileSecrets.storageSummary,
                           ),
+                          KeyValuePair(
+                            label: 'Readiness Provenance',
+                            value: report.provenanceSummary,
+                          ),
                         ],
                       ),
+                      if (report.isCachedSnapshot &&
+                          snapshot.connectionState !=
+                              ConnectionState.done) ...<Widget>[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Showing a cached snapshot while the live readiness refresh runs.',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
                       if (report.recommendation != null) ...<Widget>[
                         const SizedBox(height: 12),
                         Text(

@@ -213,6 +213,7 @@ void main() {
 
     expect(find.text('Save the password before testing'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
+    expect(find.text('Readiness Provenance'), findsOneWidget);
   });
 
   testWidgets('shows connection home CTAs when profile is ready',
