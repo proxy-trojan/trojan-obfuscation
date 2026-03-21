@@ -7,6 +7,7 @@ import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
+import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../domain/client_profile.dart';
 import 'import_export_dialog.dart';
 import 'profile_editor_dialog.dart';
@@ -244,11 +245,8 @@ class _SelectedProfileCard extends StatefulWidget {
 }
 
 class _SelectedProfileCardState extends State<_SelectedProfileCard> {
-  Future<ReadinessReport>? _readinessFuture;
-  ReadinessReport? _latestReadinessReport;
+  late final ReadinessSurfaceController _readinessController;
   String? _lastRefreshFingerprint;
-  int _readinessRequestToken = 0;
-  int _lastAppliedLiveReadinessToken = -1;
 
   ClientServiceRegistry get services => widget.services;
   ClientProfile get selected => widget.selected;
@@ -266,7 +264,7 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
       !_active && status.phase == ClientConnectionPhase.connected;
 
   bool get _connectBlockedByReadiness {
-    final report = _latestReadinessReport;
+    final report = _readinessController.latestReport;
     if (report == null) return false;
     final isConnectAction =
         !(_active && status.phase == ClientConnectionPhase.connected);
@@ -313,7 +311,7 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
       return 'This profile is disconnecting now. Wait for the shutdown to finish.';
     }
     if (_connectBlockedByReadiness) {
-      return 'Readiness blocked: ${_latestReadinessReport!.summary}';
+      return 'Readiness blocked: ${_readinessController.latestReport!.summary}';
     }
     return status.message;
   }
@@ -321,8 +319,20 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   @override
   void initState() {
     super.initState();
+    _readinessController = ReadinessSurfaceController(
+      isMounted: () => mounted,
+      applyState: setState,
+    );
     _lastRefreshFingerprint = _refreshFingerprint();
-    _startReadinessCycle();
+    _readinessController.initialize(
+      refreshKey: _lastRefreshFingerprint!,
+      restoreReport: () => services.readiness.readLastKnownReport(
+        profileOverride: selected,
+      ),
+      buildReport: () => services.readiness.buildReport(
+        profileOverride: selected,
+      ),
+    );
   }
 
   @override
@@ -363,43 +373,14 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     final fingerprint = _refreshFingerprint();
     if (_lastRefreshFingerprint == fingerprint) return;
     _lastRefreshFingerprint = fingerprint;
-    _startReadinessCycle();
-  }
-
-  void _startReadinessCycle() {
-    _readinessRequestToken++;
-    final requestToken = _readinessRequestToken;
-    _restoreLastKnownReadiness(requestToken: requestToken);
-    _refreshReadiness(requestToken: requestToken);
-  }
-
-  void _restoreLastKnownReadiness({required int requestToken}) {
-    services.readiness
-        .readLastKnownReport(profileOverride: selected)
-        .then((report) {
-      if (!mounted || report == null) return;
-      if (requestToken != _readinessRequestToken) return;
-      if (_lastAppliedLiveReadinessToken == requestToken) return;
-      setState(() {
-        _latestReadinessReport = report;
-      });
-    });
-  }
-
-  void _refreshReadiness({required int requestToken}) {
-    final future = services.readiness.buildReport(profileOverride: selected);
-    setState(() {
-      _readinessFuture = future;
-    });
-    future.then((report) {
-      if (!mounted) return;
-      if (requestToken != _readinessRequestToken) return;
-      if (!identical(_readinessFuture, future)) return;
-      setState(() {
-        _lastAppliedLiveReadinessToken = requestToken;
-        _latestReadinessReport = report;
-      });
-    });
+    _readinessController.startCycle(
+      restoreReport: () => services.readiness.readLastKnownReport(
+        profileOverride: selected,
+      ),
+      buildReport: () => services.readiness.buildReport(
+        profileOverride: selected,
+      ),
+    );
   }
 
   void _runRecommendation(BuildContext context, ReadinessRecommendation rec) {
@@ -506,9 +487,7 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                       final readinessReport = await services.readiness
                           .buildReport(profileOverride: selected);
                       if (!mounted) return;
-                      setState(() {
-                        _latestReadinessReport = readinessReport;
-                      });
+                      _readinessController.replaceLatestReport(readinessReport);
                       if (readinessReport.overallLevel ==
                           ReadinessLevel.blocked) {
                         messenger.showSnackBar(
@@ -564,10 +543,11 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
             const SizedBox(height: 12),
             FutureBuilder<ReadinessReport>(
-              future: _readinessFuture,
+              future: _readinessController.future,
               builder: (BuildContext context,
                   AsyncSnapshot<ReadinessReport> snapshot) {
-                final report = snapshot.data ?? _latestReadinessReport;
+                final report =
+                    snapshot.data ?? _readinessController.latestReport;
                 return _ProfileReadinessNotice(
                   report: report,
                   showCachedRefreshHint: report?.isCachedSnapshot == true &&
