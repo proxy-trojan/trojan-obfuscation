@@ -7,6 +7,7 @@ import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
 import '../../controller/domain/last_runtime_failure_summary.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../../diagnostics/application/support_issue_descriptor.dart';
 import '../../diagnostics/presentation/diagnostics_page.dart';
 import '../../packaging/presentation/packaging_page.dart';
@@ -193,27 +194,13 @@ class _SupportOverviewCard extends StatelessWidget {
     };
   }
 
-  String _executionPathLabel(String mode) {
-    if (mode.contains('real-runtime-boundary')) {
-      return 'Real runtime path';
-    }
-    if (mode.contains('stubbed-local-boundary-fallback')) {
-      return 'Fallback stub (real runtime unavailable)';
-    }
-    if (mode.contains('stubbed-local-boundary-explicit')) {
-      return 'Explicit stub mode';
-    }
-    if (mode.contains('stubbed-local-boundary-non-desktop')) {
-      return 'Stub mode (non-desktop target)';
-    }
-    if (mode.contains('stubbed-local-boundary')) {
-      return 'Simulated runtime path';
-    }
-    return 'Unknown runtime path';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final posture = describeRuntimePosture(
+      runtimeMode: runtimeMode,
+      backendKind: backendKind,
+    );
+
     return SectionCard(
       title: 'Troubleshooting Overview',
       subtitle:
@@ -254,8 +241,13 @@ class _SupportOverviewCard extends StatelessWidget {
               KeyValuePair(
                   label: 'Runtime mode', value: runtimeMode, width: 240),
               KeyValuePair(
+                label: 'Runtime posture',
+                value: posture.postureLabel,
+                width: 240,
+              ),
+              KeyValuePair(
                 label: 'Execution path',
-                value: _executionPathLabel(runtimeMode),
+                value: posture.executionPathLabel,
                 width: 240,
               ),
               KeyValuePair(
@@ -272,6 +264,11 @@ class _SupportOverviewCard extends StatelessWidget {
               KeyValuePair(
                   label: 'Support summary', value: issue.summary, width: 240),
             ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            posture.truthNote,
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),

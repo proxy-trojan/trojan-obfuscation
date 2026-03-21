@@ -177,6 +177,8 @@ void main() {
     expect(find.text('Profiles'), findsOneWidget);
     expect(find.text(selected.name), findsWidgets);
     expect(find.text('Server'), findsOneWidget);
+    expect(find.text('Runtime Posture'), findsOneWidget);
+    expect(find.text('Stub-only'), findsWidgets);
     expect(find.text('${selected.serverHost}:${selected.serverPort}'),
         findsWidgets);
     expect(tester.takeException(), isNull);

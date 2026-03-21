@@ -6,6 +6,7 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
@@ -734,27 +735,13 @@ class _ConnectionHomeCard extends StatelessWidget {
         ConnectionLifecycleStage.error => Colors.red,
       };
 
-  String _executionPathLabel(String mode) {
-    if (mode.contains('real-runtime-boundary')) {
-      return 'Real runtime path';
-    }
-    if (mode.contains('stubbed-local-boundary-fallback')) {
-      return 'Fallback stub (real runtime unavailable)';
-    }
-    if (mode.contains('stubbed-local-boundary-explicit')) {
-      return 'Explicit stub mode';
-    }
-    if (mode.contains('stubbed-local-boundary-non-desktop')) {
-      return 'Stub mode (non-desktop target)';
-    }
-    if (mode.contains('stubbed-local-boundary')) {
-      return 'Simulated runtime path';
-    }
-    return 'Unknown runtime path';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final posture = describeRuntimePosture(
+      runtimeMode: runtimeMode,
+      backendKind: controllerBackend,
+    );
+
     return SectionCard(
       title: 'Connection Home',
       subtitle:
@@ -819,14 +806,24 @@ class _ConnectionHomeCard extends StatelessWidget {
                         label: 'Secret Storage', value: storageSummary),
                     KeyValuePair(label: 'Runtime Mode', value: runtimeMode),
                     KeyValuePair(
-                        label: 'Execution Path',
-                        value: _executionPathLabel(runtimeMode)),
+                      label: 'Runtime Posture',
+                      value: posture.postureLabel,
+                    ),
+                    KeyValuePair(
+                      label: 'Execution Path',
+                      value: posture.executionPathLabel,
+                    ),
                     KeyValuePair(
                         label: 'Controller Backend', value: controllerBackend),
                     KeyValuePair(
                         label: 'Backend Version', value: controllerVersion),
                     KeyValuePair(label: 'Update Channel', value: updateChannel),
                   ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  posture.truthNote,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
                 Wrap(

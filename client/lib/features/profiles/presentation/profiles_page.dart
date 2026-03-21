@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../../readiness/presentation/readiness_surface_controller.dart';
@@ -350,25 +351,6 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     _refreshReadinessIfInputsChanged();
   }
 
-  String _executionPathLabel(String mode) {
-    if (mode.contains('real-runtime-boundary')) {
-      return 'Real runtime path';
-    }
-    if (mode.contains('stubbed-local-boundary-fallback')) {
-      return 'Fallback stub (real runtime unavailable)';
-    }
-    if (mode.contains('stubbed-local-boundary-explicit')) {
-      return 'Explicit stub mode';
-    }
-    if (mode.contains('stubbed-local-boundary-non-desktop')) {
-      return 'Stub mode (non-desktop target)';
-    }
-    if (mode.contains('stubbed-local-boundary')) {
-      return 'Simulated runtime path';
-    }
-    return 'Unknown runtime path';
-  }
-
   String _refreshFingerprint() {
     return buildReadinessRefreshFingerprint(
       profile: selected,
@@ -431,6 +413,10 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   @override
   Widget build(BuildContext context) {
     final active = _active;
+    final posture = describeRuntimePosture(
+      runtimeMode: services.controller.runtimeConfig.mode,
+      backendKind: services.controller.telemetry.backendKind,
+    );
 
     return SectionCard(
       title: selected.name,
@@ -533,10 +519,9 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             _detail('TLS Verification',
                 selected.verifyTls ? 'Enabled' : 'Disabled'),
             _detail('Runtime Mode', services.controller.runtimeConfig.mode),
-            _detail(
-              'Execution Path',
-              _executionPathLabel(services.controller.runtimeConfig.mode),
-            ),
+            _detail('Runtime Posture', posture.postureLabel),
+            _detail('Execution Path', posture.executionPathLabel),
+            _detail('Runtime Truth', posture.truthNote),
             _detail('Runtime Endpoint',
                 services.controller.runtimeConfig.endpointHint),
             _detail(

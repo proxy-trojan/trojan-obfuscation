@@ -140,6 +140,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Troubleshooting Overview'), findsOneWidget);
+    expect(find.text('Runtime posture'), findsOneWidget);
+    expect(find.text('Stub-only'), findsWidgets);
     expect(find.text('What to try next'), findsOneWidget);
     expect(
       find.widgetWithText(FilledButton, 'Open Problem Report'),

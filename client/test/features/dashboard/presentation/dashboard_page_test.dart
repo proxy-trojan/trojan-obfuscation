@@ -304,6 +304,8 @@ void main() {
     await _showDashboard(tester, services: services);
 
     expect(find.text('Connection Home'), findsOneWidget);
+    expect(find.text('Runtime Posture'), findsOneWidget);
+    expect(find.text('Stub-only'), findsWidgets);
     expect(find.text('Open Troubleshooting'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
     expect(find.text('Problem Report'), findsWidgets);
