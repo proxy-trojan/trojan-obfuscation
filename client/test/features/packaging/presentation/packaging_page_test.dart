@@ -25,6 +25,13 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
+Future<void> _setCompactSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(430, 1400));
+  addTearDown(() async {
+    await tester.binding.setSurfaceSize(null);
+  });
+}
+
 ClientServiceRegistry _buildServices() {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
@@ -82,6 +89,33 @@ ClientServiceRegistry _buildServices() {
 }
 
 void main() {
+  testWidgets('packaging page stays usable on compact width',
+      (WidgetTester tester) async {
+    await _setCompactSurface(tester);
+    final services = _buildServices();
+    services.packagingStore.startExport();
+    services.packagingStore.completeExport(
+      manifestTarget: '/tmp/manifest.json',
+      metadataTarget: '/tmp/update.json',
+      rollbackPlanTarget: '/tmp/rollback.json',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PackagingPage(services: services),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Update Status'), findsOneWidget);
+    expect(find.text('Export History'), findsOneWidget);
+    expect(find.textContaining('manifest=/tmp/manifest.json'), findsOneWidget);
+    expect(find.textContaining('Readiness: scaffolded'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows update skeleton contract and stub action',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
