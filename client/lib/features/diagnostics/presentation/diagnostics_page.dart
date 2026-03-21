@@ -15,45 +15,47 @@ class DiagnosticsPage extends StatefulWidget {
 }
 
 class _DiagnosticsPageState extends State<DiagnosticsPage> {
-  String _preview = 'Press “Generate preview” to build a support bundle payload.';
+  String _preview =
+      'Press “Generate preview” to build a support bundle payload.';
   String? _lastExportTarget;
   SupportIssueDescriptor? _lastExportIssue;
   bool _busy = false;
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      title: 'Problem Report',
-      subtitle:
-          'Create a support-ready snapshot when something goes wrong. Use this when you need to inspect a failure or share a support bundle. Export backend: ${widget.services.diagnosticsFileExporter.backendName}',
-      trailing: Wrap(
-        spacing: 8,
-        children: <Widget>[
-          OutlinedButton(
-            onPressed: _preview.startsWith('Press “Generate')
-                ? null
-                : () => showExportTextDialog(
-                      context,
-                      title: 'Diagnostics Preview JSON',
-                      text: _preview,
-                    ),
-            child: const Text('Open full JSON'),
-          ),
-          OutlinedButton.icon(
-            onPressed: _preview.startsWith('Press “Generate') || _busy
-                ? null
-                : _export,
-            icon: const Icon(Icons.save_alt),
-            label: const Text('Export bundle'),
-          ),
-          FilledButton.icon(
-            onPressed: _busy ? null : _generate,
-            icon: const Icon(Icons.download),
-            label: const Text('Generate preview'),
-          ),
-        ],
-      ),
-      child: SingleChildScrollView(
+    return SingleChildScrollView(
+      child: SectionCard(
+        title: 'Problem Report',
+        subtitle:
+            'Create a support-ready snapshot when something goes wrong. Use this when you need to inspect a failure or share a support bundle. Export backend: ${widget.services.diagnosticsFileExporter.backendName}',
+        trailing: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            OutlinedButton(
+              onPressed: _preview.startsWith('Press “Generate')
+                  ? null
+                  : () => showExportTextDialog(
+                        context,
+                        title: 'Diagnostics Preview JSON',
+                        text: _preview,
+                      ),
+              child: const Text('Open full JSON'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _preview.startsWith('Press “Generate') || _busy
+                  ? null
+                  : _export,
+              icon: const Icon(Icons.save_alt),
+              label: const Text('Export bundle'),
+            ),
+            FilledButton.icon(
+              onPressed: _busy ? null : _generate,
+              icon: const Icon(Icons.download),
+              label: const Text('Generate preview'),
+            ),
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[

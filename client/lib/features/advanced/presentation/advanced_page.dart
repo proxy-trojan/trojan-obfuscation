@@ -88,55 +88,59 @@ class _AdvancedPageState extends State<AdvancedPage>
         final lastRuntimeFailure = services.controller.lastRuntimeFailure;
         final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Use Advanced when you need a support-oriented overview, a problem report bundle, or update/package details.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            _SupportOverviewCard(
-              status: status,
-              issue: issue,
-              runtimeMode: runtimeConfig.mode,
-              endpointHint: runtimeConfig.endpointHint,
-              backendKind: telemetry.backendKind,
-              backendVersion: telemetry.backendVersion,
-              diagnosticsBackend: services.diagnosticsFileExporter.backendName,
-              lastRuntimeFailure: lastRuntimeFailure,
-              appUnhandledError: appUnhandledError,
-            ),
-            const SizedBox(height: 16),
-            _SupportActionsCard(
-              status: status,
-              onOpenProblemReport: () => _tabController.animateTo(0),
-              onOpenUpdateStatus: () => _tabController.animateTo(1),
-            ),
-            const SizedBox(height: 16),
-            TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: const <Widget>[
-                Tab(text: 'Problem Report'),
-                Tab(text: 'Update Status'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: <Widget>[
-                  SingleChildScrollView(
-                    child: DiagnosticsPage(services: services),
-                  ),
-                  SingleChildScrollView(
-                    child: PackagingPage(services: services),
-                  ),
-                ],
+        return NestedScrollView(
+          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+            return <Widget>[
+              SliverToBoxAdapter(
+                child: Text(
+                  'Use Advanced when you need a support-oriented overview, a problem report bundle, or update/package details.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
-          ],
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              SliverToBoxAdapter(
+                child: _SupportOverviewCard(
+                  status: status,
+                  issue: issue,
+                  runtimeMode: runtimeConfig.mode,
+                  endpointHint: runtimeConfig.endpointHint,
+                  backendKind: telemetry.backendKind,
+                  backendVersion: telemetry.backendVersion,
+                  diagnosticsBackend:
+                      services.diagnosticsFileExporter.backendName,
+                  lastRuntimeFailure: lastRuntimeFailure,
+                  appUnhandledError: appUnhandledError,
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: _SupportActionsCard(
+                  status: status,
+                  onOpenProblemReport: () => _tabController.animateTo(0),
+                  onOpenUpdateStatus: () => _tabController.animateTo(1),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabs: const <Widget>[
+                    Tab(text: 'Problem Report'),
+                    Tab(text: 'Update Status'),
+                  ],
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            ];
+          },
+          body: TabBarView(
+            controller: _tabController,
+            children: <Widget>[
+              DiagnosticsPage(services: services),
+              PackagingPage(services: services),
+            ],
+          ),
         );
       },
     );

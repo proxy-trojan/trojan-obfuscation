@@ -122,6 +122,17 @@ void main() {
 
     expect(find.text('Set Password First'), findsOneWidget);
     expect(find.textContaining('Controller status:'), findsOneWidget);
+
+    await tester.tap(find.text('Settings').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Window close behavior'), findsOneWidget);
+    expect(find.text('Diagnostics retention (days)'), findsOneWidget);
+
+    await tester.tap(find.text('Advanced').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Troubleshooting Overview'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

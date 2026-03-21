@@ -25,6 +25,13 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
+Future<void> _setCompactSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(430, 1400));
+  addTearDown(() async {
+    await tester.binding.setSurfaceSize(null);
+  });
+}
+
 ClientServiceRegistry _buildServices() {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
@@ -82,6 +89,26 @@ ClientServiceRegistry _buildServices() {
 }
 
 void main() {
+  testWidgets('settings page stays usable on compact width',
+      (WidgetTester tester) async {
+    await _setCompactSurface(tester);
+    final services = _buildServices();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(services: services),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Diagnostics retention (days)'), findsOneWidget);
+    expect(find.text('Window close behavior'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows desktop lifecycle semantics section',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
@@ -113,7 +140,8 @@ void main() {
     expect(find.textContaining('External activation:'), findsOneWidget);
   });
 
-  testWidgets('shows external activation summary after focus handoff is recorded',
+  testWidgets(
+      'shows external activation summary after focus handoff is recorded',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
     final services = _buildServices();
