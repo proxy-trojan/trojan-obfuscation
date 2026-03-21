@@ -31,6 +31,13 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
+Future<void> _setCompactSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(430, 1600));
+  addTearDown(() async {
+    await tester.binding.setSurfaceSize(null);
+  });
+}
+
 class _DelayedReadLocalStateStore implements LocalStateStore {
   static const Duration _readDelay = Duration(milliseconds: 200);
 
@@ -144,6 +151,35 @@ void main() {
           'Controller status: Save the Trojan password before trying this profile.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('profiles page stays usable on compact width',
+      (WidgetTester tester) async {
+    await _setCompactSurface(tester);
+    final services = _buildServices();
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profiles'), findsOneWidget);
+    expect(find.text(selected.name), findsWidgets);
+    expect(find.text('Server'), findsOneWidget);
+    expect(find.text('${selected.serverHost}:${selected.serverPort}'),
+        findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('late cached snapshot does not overwrite live profile readiness',

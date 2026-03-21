@@ -26,6 +26,13 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
+Future<void> _setCompactSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(430, 1400));
+  addTearDown(() async {
+    await tester.binding.setSurfaceSize(null);
+  });
+}
+
 class _UnavailableRuntimeController extends FakeClientController {
   @override
   Future<ControllerRuntimeHealth> checkHealth() async {
@@ -95,6 +102,29 @@ ClientServiceRegistry _buildServices(
 }
 
 void main() {
+  testWidgets('shell uses bottom navigation on compact width',
+      (WidgetTester tester) async {
+    await _setCompactSurface(tester);
+    final services = _buildServices();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TrojanClientAppShell(services: services),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+
+    await tester.tap(find.text('Profiles').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Set Password First'), findsOneWidget);
+    expect(find.textContaining('Controller status:'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('external activation switches shell back to Home tab',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);

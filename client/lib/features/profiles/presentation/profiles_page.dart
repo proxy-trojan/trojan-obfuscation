@@ -35,86 +35,95 @@ class ProfilesPage extends StatelessWidget {
         final selected = services.profileStore.selectedProfile;
         final status = services.controller.status;
 
-        return SingleChildScrollView(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        final listSection = SectionCard(
+          title: 'Profiles',
+          subtitle: 'Desktop-first profile management shell.',
+          trailing: Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
-              Expanded(
-                flex: 2,
-                child: SectionCard(
-                  title: 'Profiles',
-                  subtitle: 'Desktop-first profile management shell.',
-                  trailing: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: <Widget>[
-                      OutlinedButton.icon(
-                        onPressed: () => _importProfileFromFile(context),
-                        icon: const Icon(Icons.folder_open),
-                        label: const Text('Import File'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _importProfile(context),
-                        icon: const Icon(Icons.file_upload),
-                        label: const Text('Import Text'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: () => _createProfile(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create'),
-                      ),
-                    ],
-                  ),
-                  child: profiles.isEmpty
-                      ? const Text('No profiles yet.')
-                      : Column(
-                          children: profiles
-                              .map(
-                                (profile) => ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(
-                                    services.profileStore.selectedProfileId ==
-                                            profile.id
-                                        ? Icons.radio_button_checked
-                                        : Icons.radio_button_off,
-                                  ),
-                                  title: Text(profile.name),
-                                  subtitle: Text(
-                                      '${profile.serverHost}:${profile.serverPort}'),
-                                  trailing: status.activeProfileId ==
-                                              profile.id &&
-                                          status.phase ==
-                                              ClientConnectionPhase.connected
-                                      ? const Icon(Icons.link,
-                                          color: Colors.green)
-                                      : null,
-                                  onTap: () => services.profileStore
-                                      .selectProfile(profile.id),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                ),
+              OutlinedButton.icon(
+                onPressed: () => _importProfileFromFile(context),
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Import File'),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 3,
-                child: selected == null
-                    ? const SectionCard(
-                        title: 'Profile Details',
-                        child:
-                            Text('Select or create a profile to inspect it.'),
-                      )
-                    : _SelectedProfileCard(
-                        services: services,
-                        selected: selected,
-                        status: status,
-                        onOpenAdvanced: onOpenAdvanced,
-                        onOpenSettings: onOpenSettings,
-                      ),
+              OutlinedButton.icon(
+                onPressed: () => _importProfile(context),
+                icon: const Icon(Icons.file_upload),
+                label: const Text('Import Text'),
+              ),
+              FilledButton.icon(
+                onPressed: () => _createProfile(context),
+                icon: const Icon(Icons.add),
+                label: const Text('Create'),
               ),
             ],
           ),
+          child: profiles.isEmpty
+              ? const Text('No profiles yet.')
+              : Column(
+                  children: profiles
+                      .map(
+                        (profile) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            services.profileStore.selectedProfileId ==
+                                    profile.id
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                          ),
+                          title: Text(profile.name),
+                          subtitle: Text(
+                              '${profile.serverHost}:${profile.serverPort}'),
+                          trailing: status.activeProfileId == profile.id &&
+                                  status.phase ==
+                                      ClientConnectionPhase.connected
+                              ? const Icon(Icons.link, color: Colors.green)
+                              : null,
+                          onTap: () =>
+                              services.profileStore.selectProfile(profile.id),
+                        ),
+                      )
+                      .toList(),
+                ),
+        );
+
+        final detailSection = selected == null
+            ? const SectionCard(
+                title: 'Profile Details',
+                child: Text('Select or create a profile to inspect it.'),
+              )
+            : _SelectedProfileCard(
+                services: services,
+                selected: selected,
+                status: status,
+                onOpenAdvanced: onOpenAdvanced,
+                onOpenSettings: onOpenSettings,
+              );
+
+        return LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final useStackedLayout = constraints.maxWidth < 900;
+            return SingleChildScrollView(
+              child: useStackedLayout
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        listSection,
+                        const SizedBox(height: 16),
+                        detailSection,
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(flex: 2, child: listSection),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 3, child: detailSection),
+                      ],
+                    ),
+            );
+          },
         );
       },
     );
@@ -774,15 +783,32 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   }
 
   Widget _detail(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SizedBox(width: 140, child: Text(label)),
-          Expanded(child: Text(value)),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final useStackedLayout = constraints.maxWidth < 520;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: useStackedLayout
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(value),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    SizedBox(width: 140, child: Text(label)),
+                    Expanded(child: Text(value)),
+                  ],
+                ),
+        );
+      },
     );
   }
 }
