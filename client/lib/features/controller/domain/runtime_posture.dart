@@ -55,6 +55,20 @@ class RuntimePosture {
         RuntimePostureKind.unknown =>
           'The current runtime mode is not recognized by this shell yet.',
       };
+
+  String get actionQualifier => switch (kind) {
+        RuntimePostureKind.runtimeTrue => '',
+        RuntimePostureKind.stubFallback => ' (fallback stub)',
+        RuntimePostureKind.stubExplicit => ' (stub path)',
+        RuntimePostureKind.stubNonDesktop => ' (non-desktop stub)',
+        RuntimePostureKind.stubSimulated => ' (stub path)',
+        RuntimePostureKind.unknown => ' (unknown path)',
+      };
+
+  String qualifyAction(String baseLabel) {
+    final qualifier = actionQualifier;
+    return qualifier.isEmpty ? baseLabel : '$baseLabel$qualifier';
+  }
 }
 
 RuntimePosture describeRuntimePosture({

@@ -577,6 +577,11 @@ class _NextStepGuide extends StatelessWidget {
   }
 
   _GuideModel _model() {
+    final posture = describeRuntimePosture(
+      runtimeMode: services.controller.runtimeConfig.mode,
+      backendKind: services.controller.telemetry.backendKind,
+    );
+
     if (selectedProfile == null && activeProfile == null) {
       return const _GuideModel(
         title: 'Start by adding one profile',
@@ -619,7 +624,9 @@ class _NextStepGuide extends StatelessWidget {
       return _GuideModel(
         title: lifecycle.headline,
         body: lifecycle.detail,
-        primaryLabel: lifecycle.showRetry ? 'Retry now' : 'Open Profiles',
+        primaryLabel: lifecycle.showRetry
+            ? posture.qualifyAction('Retry now')
+            : 'Open Profiles',
         primaryAction: lifecycle.showRetry
             ? _GuideAction.retryNow
             : _GuideAction.openProfiles,
@@ -661,11 +668,11 @@ class _NextStepGuide extends StatelessWidget {
         secondaryAction: _GuideAction.openProfiles,
       );
     }
-    return const _GuideModel(
+    return _GuideModel(
       title: 'You are ready for a quick test',
       body:
           'Use one clear Connect action here, or open Profiles if you want to review the selected profile first.',
-      primaryLabel: 'Connect now',
+      primaryLabel: posture.qualifyAction('Connect now'),
       primaryAction: _GuideAction.connectNow,
       secondaryLabel: 'Open Profiles',
       secondaryAction: _GuideAction.openProfiles,

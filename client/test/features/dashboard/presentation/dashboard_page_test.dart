@@ -282,7 +282,10 @@ void main() {
 
     expect(find.textContaining('Live check'), findsOneWidget);
     expect(find.text('Connect blocked'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Connect now'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows connection home CTAs when profile is ready',
@@ -325,7 +328,8 @@ void main() {
 
     await _showDashboard(tester, services: services);
 
-    final connectFinder = find.widgetWithText(FilledButton, 'Connect now');
+    final connectFinder =
+        find.widgetWithText(FilledButton, 'Connect now (stub path)');
     expect(connectFinder, findsOneWidget);
     await tester.ensureVisible(connectFinder);
     await tester.pump();
@@ -360,7 +364,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Connect blocked'), findsWidgets);
-    expect(find.widgetWithText(FilledButton, 'Connect now'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsNothing,
+    );
     expect(find.widgetWithText(FilledButton, 'Open Profiles'), findsWidgets);
   });
 
@@ -384,7 +391,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Connect blocked'), findsWidgets);
-    expect(find.widgetWithText(FilledButton, 'Connect now'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsNothing,
+    );
 
     final refreshed = services.profileStore.selectedProfile!.copyWith(
       serverHost: 'hk-edge.example.com',
@@ -397,7 +407,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Connect blocked'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Connect now'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('dashboard distinguishes selected and active profile',
@@ -451,7 +464,8 @@ void main() {
 
     await _showDashboard(tester, services: services);
 
-    final retryFinder = find.widgetWithText(FilledButton, 'Retry now');
+    final retryFinder =
+        find.widgetWithText(FilledButton, 'Retry now (stub path)');
     expect(retryFinder, findsOneWidget);
     await tester.ensureVisible(retryFinder);
     await tester.pump();

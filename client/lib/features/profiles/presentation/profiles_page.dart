@@ -290,6 +290,10 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   }
 
   String get _connectActionLabel {
+    final posture = describeRuntimePosture(
+      runtimeMode: services.controller.runtimeConfig.mode,
+      backendKind: services.controller.telemetry.backendKind,
+    );
     if (!selected.hasStoredPassword) return 'Set Password First';
     if (_connectBlockedByReadiness) return 'Connect Blocked';
     if (_active && status.phase == ClientConnectionPhase.connected) {
@@ -304,7 +308,7 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     if (_hasConnectedElsewhere) {
       return 'Connected Elsewhere';
     }
-    return 'Connect';
+    return posture.qualifyAction('Connect');
   }
 
   String get _statusHint {

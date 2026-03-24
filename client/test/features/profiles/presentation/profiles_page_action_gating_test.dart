@@ -355,7 +355,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('Readiness: Ready with warnings'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Connect'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect (stub path)'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('readiness recommendation button can route to troubleshooting',

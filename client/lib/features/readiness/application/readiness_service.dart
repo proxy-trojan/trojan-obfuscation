@@ -9,6 +9,7 @@ import '../../profiles/domain/client_profile.dart';
 import '../../../platform/secure_storage/secure_storage.dart';
 import '../../../platform/services/client_filesystem_layout.dart';
 import '../../../platform/services/local_state_store.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../domain/readiness_report.dart';
 
 class ReadinessService {
@@ -217,14 +218,17 @@ class ReadinessService {
   }
 
   ReadinessCheck _checkRuntimePath() {
-    final mode = _controller.runtimeConfig.mode;
-    if (mode.startsWith('stubbed-local-boundary')) {
+    final posture = describeRuntimePosture(
+      runtimeMode: _controller.runtimeConfig.mode,
+      backendKind: _controller.telemetry.backendKind,
+    );
+    if (posture.isStubOnly) {
       return ReadinessCheck(
         domain: ReadinessDomain.runtimePath,
         level: ReadinessLevel.degraded,
-        summary: 'Runtime path is stubbed (${mode.replaceAll('-', ' ')}).',
-        detail:
-            'The app is not using a real runtime path yet. This is OK for product-shell testing but not a real execution proof.',
+        summary:
+            'Runtime posture is ${posture.postureLabel.toLowerCase()} (${posture.runtimeMode.replaceAll('-', ' ')}).',
+        detail: posture.truthNote,
         action: ReadinessAction.openTroubleshooting,
         actionLabel: 'Open Troubleshooting',
       );
