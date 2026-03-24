@@ -817,6 +817,10 @@ class _ConnectionHomeCard extends StatelessWidget {
                       value: posture.postureLabel,
                     ),
                     KeyValuePair(
+                      label: 'Evidence Grade',
+                      value: posture.evidenceGradeLabel,
+                    ),
+                    KeyValuePair(
                       label: 'Execution Path',
                       value: posture.executionPathLabel,
                     ),
@@ -829,7 +833,7 @@ class _ConnectionHomeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  posture.truthNote,
+                  '${posture.truthNote} ${posture.evidenceGradeNote}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),

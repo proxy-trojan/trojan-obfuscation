@@ -524,8 +524,12 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                 selected.verifyTls ? 'Enabled' : 'Disabled'),
             _detail('Runtime Mode', services.controller.runtimeConfig.mode),
             _detail('Runtime Posture', posture.postureLabel),
+            _detail('Evidence Grade', posture.evidenceGradeLabel),
             _detail('Execution Path', posture.executionPathLabel),
-            _detail('Runtime Truth', posture.truthNote),
+            _detail(
+              'Runtime Truth',
+              '${posture.truthNote} ${posture.evidenceGradeNote}',
+            ),
             _detail('Runtime Endpoint',
                 services.controller.runtimeConfig.endpointHint),
             _detail(

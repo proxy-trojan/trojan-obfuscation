@@ -308,7 +308,9 @@ void main() {
 
     expect(find.text('Connection Home'), findsOneWidget);
     expect(find.text('Runtime Posture'), findsOneWidget);
+    expect(find.text('Evidence Grade'), findsOneWidget);
     expect(find.text('Stub-only'), findsWidgets);
+    expect(find.text('Shell-grade only'), findsWidgets);
     expect(find.text('Open Troubleshooting'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
     expect(find.text('Problem Report'), findsWidgets);

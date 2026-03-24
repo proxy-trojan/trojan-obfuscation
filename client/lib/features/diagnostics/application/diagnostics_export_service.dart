@@ -4,6 +4,7 @@ import '../../../platform/secure_storage/secure_storage.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/diagnostics_file_exporter.dart';
 import '../../controller/application/client_controller_api.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
@@ -52,6 +53,10 @@ class DiagnosticsExportService {
     final keys = await secureStorage.listKeys();
     final controllerHealth = await controller.checkHealth();
     final readinessReport = await readiness.buildReport();
+    final runtimePosture = describeRuntimePosture(
+      runtimeMode: controller.runtimeConfig.mode,
+      backendKind: controller.telemetry.backendKind,
+    );
     final releaseManifest = packagingStore.buildReleaseManifest();
     final updateMetadata = packagingStore.buildUpdateMetadataSnapshot();
     final storageStatus = secureStorage.status;
@@ -92,6 +97,14 @@ class DiagnosticsExportService {
         'selection': {
           'expectedRealRuntimePath': expectedRealRuntimePath,
           'reason': adapterSelectionReason,
+        },
+        'runtimePosture': {
+          'kind': runtimePosture.kind.name,
+          'label': runtimePosture.postureLabel,
+          'evidenceGrade': runtimePosture.evidenceGradeLabel,
+          'executionPath': runtimePosture.executionPathLabel,
+          'truthNote': runtimePosture.truthNote,
+          'evidenceNote': runtimePosture.evidenceGradeNote,
         },
         'recentEvents': controller.recentEvents
             .map(

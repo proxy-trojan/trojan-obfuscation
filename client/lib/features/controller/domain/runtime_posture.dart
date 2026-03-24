@@ -7,6 +7,11 @@ enum RuntimePostureKind {
   unknown,
 }
 
+enum EvidenceGrade {
+  evidenceGrade,
+  shellGradeOnly,
+}
+
 class RuntimePosture {
   const RuntimePosture({
     required this.kind,
@@ -54,6 +59,22 @@ class RuntimePosture {
           'This path is simulated and is useful for shell validation, not real runtime proof.',
         RuntimePostureKind.unknown =>
           'The current runtime mode is not recognized by this shell yet.',
+      };
+
+  EvidenceGrade get evidenceGrade => isRuntimeTrue
+      ? EvidenceGrade.evidenceGrade
+      : EvidenceGrade.shellGradeOnly;
+
+  String get evidenceGradeLabel => switch (evidenceGrade) {
+        EvidenceGrade.evidenceGrade => 'Evidence-grade',
+        EvidenceGrade.shellGradeOnly => 'Shell-grade only',
+      };
+
+  String get evidenceGradeNote => switch (evidenceGrade) {
+        EvidenceGrade.evidenceGrade =>
+          'Artifacts from this path can be treated as runtime-true execution evidence on this device.',
+        EvidenceGrade.shellGradeOnly =>
+          'Artifacts from this path are useful for shell/support debugging, but they do not prove real runtime execution.',
       };
 
   String get actionQualifier => switch (kind) {

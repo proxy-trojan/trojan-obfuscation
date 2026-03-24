@@ -11,6 +11,7 @@ void main() {
     expect(posture.kind, RuntimePostureKind.runtimeTrue);
     expect(posture.isRuntimeTrue, isTrue);
     expect(posture.postureLabel, 'Runtime-true');
+    expect(posture.evidenceGradeLabel, 'Evidence-grade');
     expect(posture.executionPathLabel, 'Real runtime path');
   });
 
@@ -23,6 +24,7 @@ void main() {
     expect(posture.kind, RuntimePostureKind.stubFallback);
     expect(posture.isStubOnly, isTrue);
     expect(posture.postureLabel, 'Stub-only (fallback)');
+    expect(posture.evidenceGradeLabel, 'Shell-grade only');
     expect(
       posture.truthNote,
       contains('fell back to a stub boundary'),

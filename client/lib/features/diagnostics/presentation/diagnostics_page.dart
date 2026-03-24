@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../application/support_issue_descriptor.dart';
 import '../../profiles/presentation/import_export_dialog.dart';
 
@@ -23,6 +24,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final runtimePosture = describeRuntimePosture(
+      runtimeMode: widget.services.controller.runtimeConfig.mode,
+      backendKind: widget.services.controller.telemetry.backendKind,
+    );
+
     return SingleChildScrollView(
       child: SectionCard(
         title: 'Problem Report',
@@ -62,6 +68,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             _SupportBundleSummaryCard(
               exportBackend:
                   widget.services.diagnosticsFileExporter.backendName,
+              runtimePosture: runtimePosture,
             ),
             const SizedBox(height: 16),
             if (_lastExportTarget != null) ...<Widget>[
@@ -178,9 +185,13 @@ class _ExportIssueBanner extends StatelessWidget {
 }
 
 class _SupportBundleSummaryCard extends StatelessWidget {
-  const _SupportBundleSummaryCard({required this.exportBackend});
+  const _SupportBundleSummaryCard({
+    required this.exportBackend,
+    required this.runtimePosture,
+  });
 
   final String exportBackend;
+  final RuntimePosture runtimePosture;
 
   @override
   Widget build(BuildContext context) {
@@ -205,6 +216,13 @@ class _SupportBundleSummaryCard extends StatelessWidget {
           const Text(
             'Use this when a connection test fails, the runtime exits unexpectedly, or you want to share a support-ready snapshot.',
           ),
+          const SizedBox(height: 12),
+          Text(
+            'Current evidence grade: ${runtimePosture.evidenceGradeLabel}',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(runtimePosture.evidenceGradeNote),
           const SizedBox(height: 12),
           const Text('Includes'),
           const SizedBox(height: 4),

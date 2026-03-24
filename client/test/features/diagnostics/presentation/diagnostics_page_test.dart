@@ -109,6 +109,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('Before you export a support bundle'), findsOneWidget);
+    expect(
+      find.text('Current evidence grade: Shell-grade only'),
+      findsOneWidget,
+    );
     expect(find.text('Includes'), findsOneWidget);
     expect(find.text('Does not include'), findsOneWidget);
     expect(find.textContaining('raw Trojan password'), findsOneWidget);
@@ -142,6 +146,9 @@ void main() {
     );
     expect(exportButtonAfter.onPressed, isNotNull);
     expect(find.text('Preview excerpt'), findsOneWidget);
+    final preview = await services.diagnostics.buildPreviewBundle();
+    expect(preview, contains('"runtimePosture"'));
+    expect(preview, contains('"evidenceGrade": "Shell-grade only"'));
   });
 
   testWidgets('shows export success state after bundle write',
@@ -198,7 +205,8 @@ void main() {
       find.text('Detail: Bad state: permission denied for diagnostics export'),
       findsOneWidget,
     );
-    expect(find.text('The support bundle could not be written'), findsOneWidget);
+    expect(
+        find.text('The support bundle could not be written'), findsOneWidget);
     expect(find.textContaining('Check the export target path'), findsOneWidget);
   });
 }

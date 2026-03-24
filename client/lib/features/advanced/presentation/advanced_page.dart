@@ -246,6 +246,11 @@ class _SupportOverviewCard extends StatelessWidget {
                 width: 240,
               ),
               KeyValuePair(
+                label: 'Evidence grade',
+                value: posture.evidenceGradeLabel,
+                width: 240,
+              ),
+              KeyValuePair(
                 label: 'Execution path',
                 value: posture.executionPathLabel,
                 width: 240,
@@ -267,7 +272,7 @@ class _SupportOverviewCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            posture.truthNote,
+            '${posture.truthNote} ${posture.evidenceGradeNote}',
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
