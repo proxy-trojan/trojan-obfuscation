@@ -77,6 +77,17 @@ class RuntimePosture {
           'Artifacts from this path are useful for shell/support debugging, but they do not prove real runtime execution.',
       };
 
+  bool get canProduceRuntimeProofArtifact =>
+      evidenceGrade == EvidenceGrade.evidenceGrade;
+
+  String get artifactCapabilityLabel => canProduceRuntimeProofArtifact
+      ? 'Runtime-proof artifact available'
+      : 'Runtime-proof artifact unavailable on current posture';
+
+  String get artifactCapabilityNote => canProduceRuntimeProofArtifact
+      ? 'Problem Report exports from this posture can be treated as runtime-proof artifacts on this device.'
+      : 'Problem Report exports from this posture should be treated as support bundles only.';
+
   String get actionQualifier => switch (kind) {
         RuntimePostureKind.runtimeTrue => '',
         RuntimePostureKind.stubFallback => ' (fallback stub)',

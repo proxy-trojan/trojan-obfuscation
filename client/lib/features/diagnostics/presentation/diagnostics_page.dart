@@ -29,6 +29,13 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       backendKind: widget.services.controller.telemetry.backendKind,
     );
 
+    final previewLabel = runtimePosture.canProduceRuntimeProofArtifact
+        ? 'Generate preview'
+        : 'Generate support preview';
+    final exportLabel = runtimePosture.canProduceRuntimeProofArtifact
+        ? 'Export bundle'
+        : 'Export support bundle';
+
     return SingleChildScrollView(
       child: SectionCard(
         title: 'Problem Report',
@@ -53,12 +60,12 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                   ? null
                   : _export,
               icon: const Icon(Icons.save_alt),
-              label: const Text('Export bundle'),
+              label: Text(exportLabel),
             ),
             FilledButton.icon(
               onPressed: _busy ? null : _generate,
               icon: const Icon(Icons.download),
-              label: const Text('Generate preview'),
+              label: Text(previewLabel),
             ),
           ],
         ),
@@ -223,6 +230,13 @@ class _SupportBundleSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(runtimePosture.evidenceGradeNote),
+          const SizedBox(height: 12),
+          Text(
+            runtimePosture.artifactCapabilityLabel,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(runtimePosture.artifactCapabilityNote),
           const SizedBox(height: 12),
           const Text('Includes'),
           const SizedBox(height: 4),

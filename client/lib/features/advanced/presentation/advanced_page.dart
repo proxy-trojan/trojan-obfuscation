@@ -85,6 +85,10 @@ class _AdvancedPageState extends State<AdvancedPage>
         final status = services.controller.status;
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
+        final posture = describeRuntimePosture(
+          runtimeMode: runtimeConfig.mode,
+          backendKind: telemetry.backendKind,
+        );
         final issue = SupportIssueDescriptor.fromConnectionStatus(status);
         final lastRuntimeFailure = services.controller.lastRuntimeFailure;
         final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
@@ -117,6 +121,7 @@ class _AdvancedPageState extends State<AdvancedPage>
               SliverToBoxAdapter(
                 child: _SupportActionsCard(
                   status: status,
+                  runtimePosture: posture,
                   onOpenProblemReport: () => _tabController.animateTo(0),
                   onOpenUpdateStatus: () => _tabController.animateTo(1),
                 ),
@@ -416,11 +421,13 @@ class _IssueCategoryBanner extends StatelessWidget {
 class _SupportActionsCard extends StatelessWidget {
   const _SupportActionsCard({
     required this.status,
+    required this.runtimePosture,
     required this.onOpenProblemReport,
     required this.onOpenUpdateStatus,
   });
 
   final ClientConnectionStatus status;
+  final RuntimePosture runtimePosture;
   final VoidCallback onOpenProblemReport;
   final VoidCallback onOpenUpdateStatus;
 
@@ -449,6 +456,10 @@ class _SupportActionsCard extends StatelessWidget {
           const Text(
             'Problem Report is the export/share path. Update Status is for packaging and release context.',
           ),
+          const SizedBox(height: 8),
+          Text(runtimePosture.artifactCapabilityLabel),
+          const SizedBox(height: 4),
+          Text(runtimePosture.artifactCapabilityNote),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -457,7 +468,11 @@ class _SupportActionsCard extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onOpenProblemReport,
                 icon: const Icon(Icons.assignment_outlined),
-                label: const Text('Open Problem Report'),
+                label: Text(
+                  runtimePosture.canProduceRuntimeProofArtifact
+                      ? 'Open Problem Report'
+                      : 'Open Support Bundle',
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: onOpenUpdateStatus,

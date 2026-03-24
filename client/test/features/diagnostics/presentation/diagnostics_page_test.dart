@@ -113,6 +113,10 @@ void main() {
       find.text('Current evidence grade: Shell-grade only'),
       findsOneWidget,
     );
+    expect(
+      find.text('Runtime-proof artifact unavailable on current posture'),
+      findsOneWidget,
+    );
     expect(find.text('Includes'), findsOneWidget);
     expect(find.text('Does not include'), findsOneWidget);
     expect(find.textContaining('raw Trojan password'), findsOneWidget);
@@ -133,16 +137,17 @@ void main() {
     await tester.pump();
 
     final exportButtonBefore = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Export bundle'),
+      find.widgetWithText(OutlinedButton, 'Export support bundle'),
     );
     expect(exportButtonBefore.onPressed, isNull);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Generate preview'));
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Generate support preview'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     final exportButtonAfter = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Export bundle'),
+      find.widgetWithText(OutlinedButton, 'Export support bundle'),
     );
     expect(exportButtonAfter.onPressed, isNotNull);
     expect(find.text('Preview excerpt'), findsOneWidget);
@@ -165,11 +170,13 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Generate preview'));
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Generate support preview'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Export bundle'));
+    await tester
+        .tap(find.widgetWithText(OutlinedButton, 'Export support bundle'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -191,11 +198,13 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Generate preview'));
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Generate support preview'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Export bundle'));
+    await tester
+        .tap(find.widgetWithText(OutlinedButton, 'Export support bundle'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 

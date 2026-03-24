@@ -206,7 +206,9 @@ void main() {
 
     expect(find.text('Troubleshooting Overview'), findsOneWidget);
     expect(
-        find.widgetWithText(FilledButton, 'Generate preview'), findsOneWidget);
+      find.widgetWithText(FilledButton, 'Generate support preview'),
+      findsOneWidget,
+    );
     expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
         findsNothing);
   });

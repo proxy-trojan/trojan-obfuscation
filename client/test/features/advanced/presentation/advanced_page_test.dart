@@ -146,7 +146,11 @@ void main() {
     expect(find.text('Shell-grade only'), findsWidgets);
     expect(find.text('What to try next'), findsOneWidget);
     expect(
-      find.widgetWithText(FilledButton, 'Open Problem Report'),
+      find.text('Runtime-proof artifact unavailable on current posture'),
+      findsWidgets,
+    );
+    expect(
+      find.widgetWithText(FilledButton, 'Open Support Bundle'),
       findsOneWidget,
     );
   });
@@ -193,7 +197,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-        find.widgetWithText(FilledButton, 'Generate preview'), findsOneWidget);
+      find.widgetWithText(FilledButton, 'Generate support preview'),
+      findsOneWidget,
+    );
     expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
         findsNothing);
 
@@ -202,6 +208,9 @@ void main() {
 
     expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
         findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Generate preview'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Generate support preview'),
+      findsNothing,
+    );
   });
 }
