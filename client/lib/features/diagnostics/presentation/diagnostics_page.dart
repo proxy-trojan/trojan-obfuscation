@@ -17,8 +17,9 @@ class DiagnosticsPage extends StatefulWidget {
 
 class _DiagnosticsPageState extends State<DiagnosticsPage> {
   String _preview =
-      'Press “Generate preview” to build a support bundle payload.';
+      'Press “Generate support preview” to build a support bundle payload.';
   String? _lastExportTarget;
+  String? _lastExportKindLabel;
   SupportIssueDescriptor? _lastExportIssue;
   bool _busy = false;
 
@@ -28,13 +29,6 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       runtimeMode: widget.services.controller.runtimeConfig.mode,
       backendKind: widget.services.controller.telemetry.backendKind,
     );
-
-    final previewLabel = runtimePosture.canProduceRuntimeProofArtifact
-        ? 'Generate preview'
-        : 'Generate support preview';
-    final exportLabel = runtimePosture.canProduceRuntimeProofArtifact
-        ? 'Export bundle'
-        : 'Export support bundle';
 
     return SingleChildScrollView(
       child: SectionCard(
@@ -58,14 +52,22 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             OutlinedButton.icon(
               onPressed: _preview.startsWith('Press “Generate') || _busy
                   ? null
-                  : _export,
+                  : _exportSupportBundle,
               icon: const Icon(Icons.save_alt),
-              label: Text(exportLabel),
+              label: const Text('Export support bundle'),
             ),
+            if (runtimePosture.canProduceRuntimeProofArtifact)
+              OutlinedButton.icon(
+                onPressed: _preview.startsWith('Press “Generate') || _busy
+                    ? null
+                    : _exportRuntimeProofArtifact,
+                icon: const Icon(Icons.verified_outlined),
+                label: const Text('Export runtime-proof artifact'),
+              ),
             FilledButton.icon(
               onPressed: _busy ? null : _generate,
               icon: const Icon(Icons.download),
-              label: Text(previewLabel),
+              label: const Text('Generate support preview'),
             ),
           ],
         ),
@@ -79,7 +81,9 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             ),
             const SizedBox(height: 16),
             if (_lastExportTarget != null) ...<Widget>[
-              Text('Last export target: $_lastExportTarget'),
+              Text(
+                'Last export target (${_lastExportKindLabel ?? 'support bundle'}): $_lastExportTarget',
+              ),
               const SizedBox(height: 12),
             ],
             if (_lastExportIssue != null) ...<Widget>[
@@ -129,7 +133,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     }
   }
 
-  Future<void> _export() async {
+  Future<void> _exportSupportBundle() async {
     setState(() => _busy = true);
     try {
       final result = await widget.services.diagnostics.exportSupportBundle();
@@ -137,6 +141,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       setState(() {
         _preview = result.contents;
         _lastExportTarget = result.target;
+        _lastExportKindLabel = 'support bundle';
         _lastExportIssue = null;
       });
     } catch (error) {
@@ -147,6 +152,42 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to export diagnostics bundle: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _exportRuntimeProofArtifact() async {
+    setState(() => _busy = true);
+    try {
+      final result =
+          await widget.services.diagnostics.exportRuntimeProofArtifact();
+      if (!mounted) return;
+      setState(() {
+        _lastExportTarget = result.target;
+        _lastExportKindLabel = 'runtime-proof artifact';
+        _lastExportIssue = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Runtime-proof artifact exported to ${result.target}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final issue = SupportIssueDescriptor.fromExportError(error);
+      setState(() {
+        _lastExportIssue = issue;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to export runtime-proof artifact: $error'),
+        ),
       );
     } finally {
       if (mounted) {

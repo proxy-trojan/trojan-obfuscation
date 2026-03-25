@@ -48,7 +48,24 @@ class DiagnosticsExportService {
   final String? adapterSelectionReason;
   final bool? expectedRealRuntimePath;
 
-  Future<String> buildPreviewBundle() async {
+  Future<String> buildPreviewBundle() {
+    return _buildBundle(bundleKind: 'support-bundle');
+  }
+
+  Future<String> buildRuntimeProofArtifact() async {
+    final contents = await _buildBundle(bundleKind: 'runtime-proof-artifact');
+    final payload = jsonDecode(contents) as Map<String, dynamic>;
+    final runtimePosture = (payload['controller']
+        as Map<String, dynamic>)['runtimePosture'] as Map<String, dynamic>;
+    if (runtimePosture['evidenceGrade'] != 'Evidence-grade') {
+      throw StateError(
+        'Runtime-proof artifact export requires an Evidence-grade posture.',
+      );
+    }
+    return contents;
+  }
+
+  Future<String> _buildBundle({required String bundleKind}) async {
     final selected = profileStore.selectedProfile;
     final keys = await secureStorage.listKeys();
     final controllerHealth = await controller.checkHealth();
@@ -63,6 +80,7 @@ class DiagnosticsExportService {
     final appUnhandledError = appRuntimeErrors.lastUnhandledError;
 
     final payload = <String, Object?>{
+      'bundleKind': bundleKind,
       'generatedAt': DateTime.now().toIso8601String(),
       'profileCount': profileStore.profiles.length,
       'selectedProfile': selected == null
@@ -167,6 +185,16 @@ class DiagnosticsExportService {
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     final target = await fileExporter.exportText(
       fileName: 'trojan-pro-support-$timestamp.json',
+      contents: contents,
+    );
+    return DiagnosticsExportResult(target: target, contents: contents);
+  }
+
+  Future<DiagnosticsExportResult> exportRuntimeProofArtifact() async {
+    final contents = await buildRuntimeProofArtifact();
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final target = await fileExporter.exportText(
+      fileName: 'trojan-pro-runtime-proof-$timestamp.json',
       contents: contents,
     );
     return DiagnosticsExportResult(target: target, contents: contents);

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_config.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_portability_service.dart';
@@ -15,6 +17,23 @@ import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.
 import 'package:trojan_pro_client/platform/services/app_runtime_error_store.dart';
 import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
+
+class _RuntimeTrueController extends FakeClientController {
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'real-runtime-boundary',
+        endpointHint: 'unix:/tmp/trojan-runtime.sock',
+        enableVerboseTelemetry: false,
+      );
+
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'real-shell-controller',
+        backendVersion: 'test-runtime-true',
+        capabilities: const <String>['spawn', 'logs'],
+        lastUpdatedAt: DateTime.parse('2026-03-24T12:00:00.000Z'),
+      );
+}
 
 void main() {
   test('buildPreviewBundle includes app runtime summary and profiles bundle',
@@ -39,7 +58,8 @@ void main() {
       error: StateError('background task exploded'),
       stackTrace: StackTrace.current,
     );
-    await ProfileSecretsService(secureStorage: secureStorage).saveTrojanPassword(
+    await ProfileSecretsService(secureStorage: secureStorage)
+        .saveTrojanPassword(
       profileId: 'sample-hk-1',
       password: 'super-secret-password',
     );
@@ -66,6 +86,8 @@ void main() {
     final preview = await diagnostics.buildPreviewBundle();
     final payload = jsonDecode(preview) as Map<String, dynamic>;
 
+    expect(payload['bundleKind'], 'support-bundle');
+
     final appRuntime = payload['appRuntime'] as Map<String, dynamic>;
     final lastUnhandledError =
         appRuntime['lastUnhandledError'] as Map<String, dynamic>;
@@ -78,6 +100,93 @@ void main() {
     expect(profiles, hasLength(profileStore.profiles.length));
 
     expect(preview, isNot(contains('super-secret-password')));
+  });
+
+  test('runtime-proof artifact export requires evidence-grade posture',
+      () async {
+    final localState = MemoryLocalStateStore();
+    final diagnosticsExporter = MemoryDiagnosticsFileExporter();
+    final secureStorage = MemorySecureStorage();
+
+    final profileStore = ProfileStore.withSampleProfiles(
+      localStateStore: localState,
+      serialization: ProfileSerialization(),
+      saveDebounceDuration: Duration.zero,
+    );
+    final controller = FakeClientController();
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: ProfileSecretsService(secureStorage: secureStorage),
+      secureStorage: secureStorage,
+      controller: controller,
+    );
+
+    final diagnostics = DiagnosticsExportService(
+      profileStore: profileStore,
+      profilePortability: ProfilePortabilityService(),
+      settingsStore: SettingsStore(
+        localStateStore: localState,
+        serialization: SettingsSerialization(),
+      ),
+      packagingStore: PackagingStore(),
+      controller: controller,
+      secureStorage: secureStorage,
+      fileExporter: diagnosticsExporter,
+      readiness: readiness,
+      appRuntimeErrors: AppRuntimeErrorStore(localStateStore: localState),
+    );
+
+    await expectLater(
+      diagnostics.buildRuntimeProofArtifact(),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test(
+      'runtime-proof artifact export uses promoted file name on evidence-grade path',
+      () async {
+    final localState = MemoryLocalStateStore();
+    final diagnosticsExporter = MemoryDiagnosticsFileExporter();
+    final secureStorage = MemorySecureStorage();
+
+    final profileStore = ProfileStore.withSampleProfiles(
+      localStateStore: localState,
+      serialization: ProfileSerialization(),
+      saveDebounceDuration: Duration.zero,
+    );
+    final controller = _RuntimeTrueController();
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: ProfileSecretsService(secureStorage: secureStorage),
+      secureStorage: secureStorage,
+      controller: controller,
+    );
+
+    final diagnostics = DiagnosticsExportService(
+      profileStore: profileStore,
+      profilePortability: ProfilePortabilityService(),
+      settingsStore: SettingsStore(
+        localStateStore: localState,
+        serialization: SettingsSerialization(),
+      ),
+      packagingStore: PackagingStore(),
+      controller: controller,
+      secureStorage: secureStorage,
+      fileExporter: diagnosticsExporter,
+      readiness: readiness,
+      appRuntimeErrors: AppRuntimeErrorStore(localStateStore: localState),
+    );
+
+    final result = await diagnostics.exportRuntimeProofArtifact();
+    final payload = jsonDecode(result.contents) as Map<String, dynamic>;
+
+    expect(payload['bundleKind'], 'runtime-proof-artifact');
+    expect(result.target,
+        startsWith('memory://diagnostics/trojan-pro-runtime-proof-'));
+    expect(
+      diagnosticsExporter.exports.keys.single,
+      startsWith('trojan-pro-runtime-proof-'),
+    );
   });
 
   test('exportPreviewBundle delegates to support bundle export path', () async {
@@ -115,7 +224,8 @@ void main() {
 
     final result = await diagnostics.exportPreviewBundle();
 
-    expect(result.target, startsWith('memory://diagnostics/trojan-pro-support-'));
+    expect(
+        result.target, startsWith('memory://diagnostics/trojan-pro-support-'));
     expect(diagnosticsExporter.exports.keys.single,
         startsWith('trojan-pro-support-'));
     expect(result.contents, contains('"controller"'));

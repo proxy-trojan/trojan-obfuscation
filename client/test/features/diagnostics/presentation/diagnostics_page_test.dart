@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_config.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/diagnostics/presentation/diagnostics_page.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
@@ -25,6 +28,23 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
   });
 }
 
+class _RuntimeTrueController extends FakeClientController {
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'real-runtime-boundary',
+        endpointHint: 'unix:/tmp/trojan-runtime.sock',
+        enableVerboseTelemetry: false,
+      );
+
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'real-shell-controller',
+        backendVersion: 'test-runtime-true',
+        capabilities: const <String>['spawn', 'logs'],
+        lastUpdatedAt: DateTime.parse('2026-03-24T12:00:00.000Z'),
+      );
+}
+
 class _FailingDiagnosticsFileExporter implements DiagnosticsFileExporter {
   @override
   String get backendName => 'failing-test-exporter';
@@ -38,7 +58,10 @@ class _FailingDiagnosticsFileExporter implements DiagnosticsFileExporter {
   }
 }
 
-ClientServiceRegistry _buildServices({DiagnosticsFileExporter? exporter}) {
+ClientServiceRegistry _buildServices({
+  DiagnosticsFileExporter? exporter,
+  ClientControllerApi? controllerOverride,
+}) {
   final localState = MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = exporter ?? MemoryDiagnosticsFileExporter();
@@ -54,7 +77,7 @@ ClientServiceRegistry _buildServices({DiagnosticsFileExporter? exporter}) {
     localStateStore: localState,
     serialization: SettingsSerialization(),
   );
-  final controller = FakeClientController();
+  final controller = controllerOverride ?? FakeClientController();
 
   final packagingExport = PackagingExportService(
     packagingStore: packagingStore,
@@ -94,6 +117,38 @@ ClientServiceRegistry _buildServices({DiagnosticsFileExporter? exporter}) {
 }
 
 void main() {
+  testWidgets('shows runtime-proof export path on evidence-grade posture',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services =
+        _buildServices(controllerOverride: _RuntimeTrueController());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DiagnosticsPage(services: services),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Current evidence grade: Evidence-grade'),
+      findsOneWidget,
+    );
+    expect(find.text('Runtime-proof artifact available'), findsOneWidget);
+
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Generate support preview'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(
+      find.widgetWithText(OutlinedButton, 'Export runtime-proof artifact'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows support bundle summary before export',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
@@ -116,6 +171,10 @@ void main() {
     expect(
       find.text('Runtime-proof artifact unavailable on current posture'),
       findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'Export runtime-proof artifact'),
+      findsNothing,
     );
     expect(find.text('Includes'), findsOneWidget);
     expect(find.text('Does not include'), findsOneWidget);
@@ -180,7 +239,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('Last export target:'), findsOneWidget);
+    expect(
+      find.textContaining('Last export target (support bundle):'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows categorized export error guidance when export fails',
