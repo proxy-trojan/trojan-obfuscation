@@ -137,6 +137,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Runtime-proof artifact available'), findsOneWidget);
+    expect(find.text('How to use runtime-proof artifacts'), findsOneWidget);
 
     await tester
         .tap(find.widgetWithText(FilledButton, 'Generate support preview'));
@@ -170,6 +171,10 @@ void main() {
     );
     expect(
       find.text('Runtime-proof artifact unavailable on current posture'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('How to use support bundles on this posture'),
       findsOneWidget,
     );
     expect(

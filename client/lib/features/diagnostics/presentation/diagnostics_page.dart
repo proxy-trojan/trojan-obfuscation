@@ -279,6 +279,18 @@ class _SupportBundleSummaryCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(runtimePosture.artifactCapabilityNote),
           const SizedBox(height: 12),
+          Text(
+            runtimePosture.operatorGuidanceHeading,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          ...runtimePosture.operatorChecklist.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('• $item'),
+            ),
+          ),
+          const SizedBox(height: 12),
           const Text('Includes'),
           const SizedBox(height: 4),
           const Text(

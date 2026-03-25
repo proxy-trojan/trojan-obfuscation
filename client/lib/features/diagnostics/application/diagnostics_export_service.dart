@@ -123,6 +123,12 @@ class DiagnosticsExportService {
           'executionPath': runtimePosture.executionPathLabel,
           'truthNote': runtimePosture.truthNote,
           'evidenceNote': runtimePosture.evidenceGradeNote,
+          'artifactCapability': runtimePosture.artifactCapabilityLabel,
+          'artifactCapabilityNote': runtimePosture.artifactCapabilityNote,
+          'operatorGuidance': {
+            'heading': runtimePosture.operatorGuidanceHeading,
+            'checklist': runtimePosture.operatorChecklist,
+          },
         },
         'recentEvents': controller.recentEvents
             .map(

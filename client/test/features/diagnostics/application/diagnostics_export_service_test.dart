@@ -88,6 +88,16 @@ void main() {
 
     expect(payload['bundleKind'], 'support-bundle');
 
+    final controllerPayload = payload['controller'] as Map<String, dynamic>;
+    final runtimePosture =
+        controllerPayload['runtimePosture'] as Map<String, dynamic>;
+    final operatorGuidance =
+        runtimePosture['operatorGuidance'] as Map<String, dynamic>;
+
+    expect(operatorGuidance['heading'],
+        'How to use support bundles on this posture');
+    expect((operatorGuidance['checklist'] as List<dynamic>).isNotEmpty, isTrue);
+
     final appRuntime = payload['appRuntime'] as Map<String, dynamic>;
     final lastUnhandledError =
         appRuntime['lastUnhandledError'] as Map<String, dynamic>;
@@ -179,8 +189,14 @@ void main() {
 
     final result = await diagnostics.exportRuntimeProofArtifact();
     final payload = jsonDecode(result.contents) as Map<String, dynamic>;
+    final controllerPayload = payload['controller'] as Map<String, dynamic>;
+    final runtimePosture =
+        controllerPayload['runtimePosture'] as Map<String, dynamic>;
+    final operatorGuidance =
+        runtimePosture['operatorGuidance'] as Map<String, dynamic>;
 
     expect(payload['bundleKind'], 'runtime-proof-artifact');
+    expect(operatorGuidance['heading'], 'How to use runtime-proof artifacts');
     expect(result.target,
         startsWith('memory://diagnostics/trojan-pro-runtime-proof-'));
     expect(
