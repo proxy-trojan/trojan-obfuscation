@@ -6,6 +6,7 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/last_runtime_failure_summary.dart';
 import '../../controller/domain/runtime_posture.dart';
 import '../../diagnostics/application/support_issue_descriptor.dart';
@@ -92,6 +93,7 @@ class _AdvancedPageState extends State<AdvancedPage>
         final issue = SupportIssueDescriptor.fromConnectionStatus(status);
         final lastRuntimeFailure = services.controller.lastRuntimeFailure;
         final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
+        final runtimeSession = services.controller.session;
 
         return NestedScrollView(
           headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
@@ -128,6 +130,10 @@ class _AdvancedPageState extends State<AdvancedPage>
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
               SliverToBoxAdapter(
+                child: _RuntimeTruthRecoveryCard(session: runtimeSession),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
                 child: TabBar(
                   controller: _tabController,
                   isScrollable: true,
@@ -149,6 +155,46 @@ class _AdvancedPageState extends State<AdvancedPage>
           ),
         );
       },
+    );
+  }
+}
+
+class _RuntimeTruthRecoveryCard extends StatelessWidget {
+  const _RuntimeTruthRecoveryCard({required this.session});
+
+  final ControllerRuntimeSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'Runtime truth & recovery',
+      subtitle:
+          'Make stale, residual, and stopping runtime states obvious before they turn into ghost bugs.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: <Widget>[
+              KeyValuePair(label: 'Session Truth', value: session.truth.label),
+              KeyValuePair(label: 'Snapshot Age', value: session.ageLabel),
+              KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
+              KeyValuePair(
+                label: 'Needs attention',
+                value: session.needsAttention ? 'Yes' : 'No',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            session.truthNote,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(session.recoveryGuidance),
+        ],
+      ),
     );
   }
 }

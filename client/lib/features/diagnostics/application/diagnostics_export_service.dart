@@ -4,6 +4,7 @@ import '../../../platform/secure_storage/secure_storage.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/diagnostics_file_exporter.dart';
 import '../../controller/application/client_controller_api.dart';
+import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_posture.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
@@ -70,9 +71,13 @@ class DiagnosticsExportService {
     final keys = await secureStorage.listKeys();
     final controllerHealth = await controller.checkHealth();
     final readinessReport = await readiness.buildReport();
+    final controllerStatus = controller.status;
+    final controllerTelemetry = controller.telemetry;
+    final controllerRuntimeConfig = controller.runtimeConfig;
+    final runtimeSession = controller.session;
     final runtimePosture = describeRuntimePosture(
-      runtimeMode: controller.runtimeConfig.mode,
-      backendKind: controller.telemetry.backendKind,
+      runtimeMode: controllerRuntimeConfig.mode,
+      backendKind: controllerTelemetry.backendKind,
     );
     final releaseManifest = packagingStore.buildReleaseManifest();
     final updateMetadata = packagingStore.buildUpdateMetadataSnapshot();
@@ -95,23 +100,29 @@ class DiagnosticsExportService {
             },
       'readiness': readinessReport.toJson(),
       'controller': {
-        'phase': controller.status.phase.name,
-        'message': controller.status.message,
-        'activeProfileId': controller.status.activeProfileId,
-        'updatedAt': controller.status.updatedAt.toIso8601String(),
+        'phase': controllerStatus.phase.name,
+        'message': controllerStatus.message,
+        'activeProfileId': controllerStatus.activeProfileId,
+        'updatedAt': controllerStatus.updatedAt.toIso8601String(),
         'telemetry': {
-          'backendKind': controller.telemetry.backendKind,
-          'backendVersion': controller.telemetry.backendVersion,
-          'capabilities': controller.telemetry.capabilities,
-          'lastUpdatedAt': controller.telemetry.lastUpdatedAt.toIso8601String(),
+          'backendKind': controllerTelemetry.backendKind,
+          'backendVersion': controllerTelemetry.backendVersion,
+          'capabilities': controllerTelemetry.capabilities,
+          'lastUpdatedAt': controllerTelemetry.lastUpdatedAt.toIso8601String(),
         },
-        'runtimeConfig': controller.runtimeConfig.toJson(),
+        'runtimeConfig': controllerRuntimeConfig.toJson(),
         'runtimeHealth': {
           'level': controllerHealth.level.name,
           'summary': controllerHealth.summary,
           'updatedAt': controllerHealth.updatedAt.toIso8601String(),
         },
-        'runtimeSession': controller.session.toJson(),
+        'runtimeSession': {
+          ...runtimeSession.toJson(),
+          'truth': runtimeSession.truth.label,
+          'needsAttention': runtimeSession.needsAttention,
+          'truthNote': runtimeSession.truthNote,
+          'recoveryGuidance': runtimeSession.recoveryGuidance,
+        },
         'selection': {
           'expectedRealRuntimePath': expectedRealRuntimePath,
           'reason': adapterSelectionReason,

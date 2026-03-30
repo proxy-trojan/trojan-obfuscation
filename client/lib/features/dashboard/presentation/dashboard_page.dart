@@ -6,7 +6,12 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/runtime_action_feedback.dart';
+import '../../controller/domain/runtime_action_safety.dart';
+import '../../controller/domain/runtime_operator_advice.dart';
 import '../../controller/domain/runtime_posture.dart';
+import 'dashboard_guide_policy.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
@@ -504,6 +509,52 @@ class _NextStepGuide extends StatelessWidget {
         const SizedBox(height: 6),
         Text(model.body),
         const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.indigo.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'Action safety',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(model.actionSafety.label),
+              const SizedBox(height: 4),
+              Text(model.actionSafety.detail),
+            ],
+          ),
+        ),
+        if (model.operatorTitle != null && model.operatorBody != null) ...<Widget>[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  model.operatorTitle!,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(model.operatorBody!),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -554,26 +605,40 @@ class _NextStepGuide extends StatelessWidget {
         }
         final result = await services.controller.connect(currentProfile);
         if (!context.mounted) return;
+        final feedback = buildRuntimeActionFeedback(
+          action: action == _GuideAction.retryNow
+              ? RuntimeActionKind.retry
+              : RuntimeActionKind.connect,
+          result: result,
+          status: services.controller.status,
+          session: services.controller.session,
+          posture: describeRuntimePosture(
+            runtimeMode: services.controller.runtimeConfig.mode,
+            backendKind: services.controller.telemetry.backendKind,
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.summary)),
+          SnackBar(content: Text(feedback)),
         );
         return;
       case _GuideAction.disconnectNow:
         final result = await services.controller.disconnect();
         if (!context.mounted) return;
+        final feedback = buildRuntimeActionFeedback(
+          action: RuntimeActionKind.disconnect,
+          result: result,
+          status: services.controller.status,
+          session: services.controller.session,
+          posture: describeRuntimePosture(
+            runtimeMode: services.controller.runtimeConfig.mode,
+            backendKind: services.controller.telemetry.backendKind,
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.summary)),
+          SnackBar(content: Text(feedback)),
         );
         return;
     }
-  }
-
-  _GuideAction _guideActionFor(ReadinessAction action) {
-    return switch (action) {
-      ReadinessAction.openProfiles => _GuideAction.openProfiles,
-      ReadinessAction.openTroubleshooting => _GuideAction.openAdvanced,
-      ReadinessAction.openSettings => _GuideAction.openSettings,
-    };
   }
 
   _GuideModel _model() {
@@ -581,102 +646,49 @@ class _NextStepGuide extends StatelessWidget {
       runtimeMode: services.controller.runtimeConfig.mode,
       backendKind: services.controller.telemetry.backendKind,
     );
-
-    if (selectedProfile == null && activeProfile == null) {
-      return const _GuideModel(
-        title: 'Start by adding one profile',
-        body:
-            'Create or import a profile first. Once that exists, the rest of the flow becomes much simpler.',
-        primaryLabel: 'Open Profiles',
-        primaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (activeProfile == null &&
-        selectedProfile != null &&
-        !selectedProfile!.hasStoredPassword) {
-      return const _GuideModel(
-        title: 'Save the password before testing',
-        body:
-            'The selected profile still needs its Trojan password. Save it first, then try one connection attempt.',
-        primaryLabel: 'Open Profiles',
-        primaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (readiness != null &&
-        readiness!.overallLevel == ReadinessLevel.blocked &&
-        status.phase != ClientConnectionPhase.error &&
-        status.phase != ClientConnectionPhase.connected &&
-        status.phase != ClientConnectionPhase.connecting &&
-        status.phase != ClientConnectionPhase.disconnecting) {
-      final recommendation = readiness!.recommendation;
-      return _GuideModel(
-        title: readiness!.headline,
-        body: readiness!.summary,
-        primaryLabel: recommendation?.label ?? 'Open Troubleshooting',
-        primaryAction: recommendation == null
-            ? _GuideAction.openAdvanced
-            : _guideActionFor(recommendation.action),
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.error) {
-      return _GuideModel(
-        title: lifecycle.headline,
-        body: lifecycle.detail,
-        primaryLabel: lifecycle.showRetry
-            ? posture.qualifyAction('Retry now')
-            : 'Open Profiles',
-        primaryAction: lifecycle.showRetry
-            ? _GuideAction.retryNow
-            : _GuideAction.openProfiles,
-        secondaryLabel:
-            lifecycle.showOpenTroubleshooting ? 'Open Troubleshooting' : null,
-        secondaryAction: lifecycle.showOpenTroubleshooting
-            ? _GuideAction.openAdvanced
-            : null,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.connected) {
-      return const _GuideModel(
-        title: 'Connection is active',
-        body:
-            'You are already connected. Disconnect here if you want to end the current session, or open Profiles to switch context.',
-        primaryLabel: 'Disconnect now',
-        primaryAction: _GuideAction.disconnectNow,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.disconnecting) {
-      return _GuideModel(
-        title: lifecycle.headline,
-        body: lifecycle.detail,
-        primaryLabel: 'Open Troubleshooting',
-        primaryAction: _GuideAction.openAdvanced,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.connecting) {
-      return _GuideModel(
-        title: lifecycle.headline,
-        body: lifecycle.detail,
-        primaryLabel: 'Open Troubleshooting',
-        primaryAction: _GuideAction.openAdvanced,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    return _GuideModel(
-      title: 'You are ready for a quick test',
-      body:
-          'Use one clear Connect action here, or open Profiles if you want to review the selected profile first.',
-      primaryLabel: posture.qualifyAction('Connect now'),
-      primaryAction: _GuideAction.connectNow,
-      secondaryLabel: 'Open Profiles',
-      secondaryAction: _GuideAction.openProfiles,
+    final runtimeSession = services.controller.session;
+    final operatorAdvice = RuntimeOperatorAdvice.resolve(
+      status: status,
+      session: runtimeSession,
+      posture: posture,
+      troubleshootingAvailable: onOpenAdvanced != null,
     );
+
+    final policy = DashboardGuidePolicy.resolve(
+      lifecycle: lifecycle,
+      selectedProfile: selectedProfile,
+      activeProfile: activeProfile,
+      status: status,
+      posture: posture,
+      runtimeSession: runtimeSession,
+      operatorAdvice: operatorAdvice,
+      readiness: readiness,
+    );
+
+    return _GuideModel(
+      title: policy.title,
+      body: policy.body,
+      primaryLabel: policy.primaryLabel,
+      primaryAction: _mapGuideAction(policy.primaryAction),
+      secondaryLabel: policy.secondaryLabel,
+      secondaryAction: policy.secondaryAction == null
+          ? null
+          : _mapGuideAction(policy.secondaryAction!),
+      operatorTitle: policy.operatorTitle,
+      operatorBody: policy.operatorBody,
+      actionSafety: policy.actionSafety,
+    );
+  }
+
+  _GuideAction _mapGuideAction(DashboardGuideAction action) {
+    return switch (action) {
+      DashboardGuideAction.openProfiles => _GuideAction.openProfiles,
+      DashboardGuideAction.openAdvanced => _GuideAction.openAdvanced,
+      DashboardGuideAction.openSettings => _GuideAction.openSettings,
+      DashboardGuideAction.connectNow => _GuideAction.connectNow,
+      DashboardGuideAction.retryNow => _GuideAction.retryNow,
+      DashboardGuideAction.disconnectNow => _GuideAction.disconnectNow,
+    };
   }
 }
 
@@ -695,16 +707,22 @@ class _GuideModel {
     required this.body,
     required this.primaryLabel,
     required this.primaryAction,
+    required this.actionSafety,
     this.secondaryLabel,
     this.secondaryAction,
+    this.operatorTitle,
+    this.operatorBody,
   });
 
   final String title;
   final String body;
   final String primaryLabel;
   final _GuideAction primaryAction;
+  final RuntimeActionSafety actionSafety;
   final String? secondaryLabel;
   final _GuideAction? secondaryAction;
+  final String? operatorTitle;
+  final String? operatorBody;
 }
 
 class _ConnectionHomeCard extends StatelessWidget {
@@ -950,6 +968,40 @@ class _StateCalloutCard extends StatelessWidget {
   }
 }
 
+class _RuntimeTruthPill extends StatelessWidget {
+  const _RuntimeTruthPill({
+    required this.label,
+    required this.highlighted,
+  });
+
+  final String label;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlighted ? Colors.orange : Colors.blueGrey;
+
+    return Semantics(
+      label: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RuntimeSessionSummary extends StatelessWidget {
   const _RuntimeSessionSummary({required this.services});
 
@@ -966,12 +1018,57 @@ class _RuntimeSessionSummary extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: session.needsAttention
+                    ? Colors.orange.withValues(alpha: 0.08)
+                    : Colors.blue.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: session.needsAttention
+                      ? Colors.orange.withValues(alpha: 0.25)
+                      : Colors.blue.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      _RuntimeTruthPill(
+                        label: 'Session Truth: ${session.truth.label}',
+                        highlighted: session.needsAttention,
+                      ),
+                      _RuntimeTruthPill(
+                        label: 'Updated ${session.ageLabel}',
+                        highlighted: false,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    session.truthNote,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(session.recoveryGuidance),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 24,
               runSpacing: 12,
               children: <Widget>[
                 KeyValuePair(
                     label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
+                KeyValuePair(label: 'Runtime Truth', value: session.truth.label),
+                KeyValuePair(label: 'Snapshot Age', value: session.ageLabel),
                 KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
                 KeyValuePair(
                   label: 'Stop Requested',

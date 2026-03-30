@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
+import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/runtime_operator_advice.dart';
 import '../../controller/domain/runtime_posture.dart';
 import '../application/support_issue_descriptor.dart';
 import '../../profiles/presentation/import_export_dialog.dart';
+import 'diagnostics_support_policy.dart';
 
 class DiagnosticsPage extends StatefulWidget {
   const DiagnosticsPage({super.key, required this.services});
@@ -21,6 +24,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   String? _lastExportTarget;
   String? _lastExportKindLabel;
   SupportIssueDescriptor? _lastExportIssue;
+  ControllerRuntimeSession? _lastExportRuntimeSession;
+  DateTime? _lastExportCapturedAt;
   bool _busy = false;
 
   @override
@@ -28,6 +33,21 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     final runtimePosture = describeRuntimePosture(
       runtimeMode: widget.services.controller.runtimeConfig.mode,
       backendKind: widget.services.controller.telemetry.backendKind,
+    );
+    final runtimeSession = widget.services.controller.session;
+    final operatorAdvice = RuntimeOperatorAdvice.resolve(
+      status: widget.services.controller.status,
+      session: runtimeSession,
+      posture: runtimePosture,
+      troubleshootingAvailable: true,
+    );
+
+    final supportPolicy = DiagnosticsSupportPolicy.resolve(
+      runtimeSession: runtimeSession,
+      runtimePosture: runtimePosture,
+      operatorAdvice: operatorAdvice,
+      exportedRuntimeSession: _lastExportRuntimeSession,
+      exportedBundleKindLabel: _lastExportKindLabel,
     );
 
     return SingleChildScrollView(
@@ -80,6 +100,13 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               runtimePosture: runtimePosture,
             ),
             const SizedBox(height: 16),
+            _RuntimeTruthSupportCard(
+              runtimeSession: runtimeSession,
+              runtimePosture: runtimePosture,
+              supportPolicy: supportPolicy,
+              exportCapturedAt: _lastExportCapturedAt,
+            ),
+            const SizedBox(height: 16),
             if (_lastExportTarget != null) ...<Widget>[
               Text(
                 'Last export target (${_lastExportKindLabel ?? 'support bundle'}): $_lastExportTarget',
@@ -115,10 +142,14 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     setState(() => _busy = true);
     try {
       final preview = await widget.services.diagnostics.buildPreviewBundle();
+      final capturedSession = widget.services.controller.session;
       if (!mounted) return;
       setState(() {
         _preview = preview;
         _lastExportIssue = null;
+        _lastExportRuntimeSession = capturedSession;
+        _lastExportCapturedAt = DateTime.now();
+        _lastExportKindLabel = 'support preview';
       });
     } catch (error) {
       if (!mounted) return;
@@ -137,12 +168,15 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     setState(() => _busy = true);
     try {
       final result = await widget.services.diagnostics.exportSupportBundle();
+      final capturedSession = widget.services.controller.session;
       if (!mounted) return;
       setState(() {
         _preview = result.contents;
         _lastExportTarget = result.target;
         _lastExportKindLabel = 'support bundle';
         _lastExportIssue = null;
+        _lastExportRuntimeSession = capturedSession;
+        _lastExportCapturedAt = DateTime.now();
       });
     } catch (error) {
       if (!mounted) return;
@@ -165,11 +199,14 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     try {
       final result =
           await widget.services.diagnostics.exportRuntimeProofArtifact();
+      final capturedSession = widget.services.controller.session;
       if (!mounted) return;
       setState(() {
         _lastExportTarget = result.target;
         _lastExportKindLabel = 'runtime-proof artifact';
         _lastExportIssue = null;
+        _lastExportRuntimeSession = capturedSession;
+        _lastExportCapturedAt = DateTime.now();
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -226,6 +263,167 @@ class _ExportIssueBanner extends StatelessWidget {
           Text(issue.guidance),
           const SizedBox(height: 6),
           Text('Detail: ${issue.summary}'),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuntimeTruthSupportCard extends StatelessWidget {
+  const _RuntimeTruthSupportCard({
+    required this.runtimeSession,
+    required this.runtimePosture,
+    required this.supportPolicy,
+    this.exportCapturedAt,
+  });
+
+  final ControllerRuntimeSession runtimeSession;
+  final RuntimePosture runtimePosture;
+  final DiagnosticsSupportPolicy supportPolicy;
+  final DateTime? exportCapturedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final attentionColor = runtimeSession.needsAttention
+        ? Colors.orange
+        : Theme.of(context).colorScheme.primary;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: attentionColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: attentionColor.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Runtime truth & recovery',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Support output should explain whether the runtime looks live, stale, or residual before you export anything.',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            supportPolicy.currentTruthTitle,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text('Snapshot age: ${runtimeSession.ageLabel}'),
+          const SizedBox(height: 6),
+          Text('Needs attention: ${runtimeSession.needsAttention ? 'Yes' : 'No'}'),
+          if (supportPolicy.exportSnapshotLabel != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              'Last captured export snapshot',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: attentionColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(supportPolicy.exportSnapshotLabel!),
+            if (exportCapturedAt != null)
+              Text('Captured at: ${exportCapturedAt!.toIso8601String()}'),
+            const SizedBox(height: 6),
+            Text(supportPolicy.exportSnapshotDetail!),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            supportPolicy.currentTruthSubtitle,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(supportPolicy.currentTruthMessage),
+          if (supportPolicy.showExitConfirmationWarning) ...<Widget>[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.24)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    supportPolicy.exitConfirmationTitle ??
+                        'Exit confirmation pending',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(supportPolicy.exitConfirmationBody!),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.indigo.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'Action safety',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(supportPolicy.actionSafety.label),
+                const SizedBox(height: 4),
+                Text(supportPolicy.actionSafety.detail),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.18),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  supportPolicy.primaryOperatorTitle,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(supportPolicy.primaryOperatorBody),
+                if (supportPolicy.preferredEvidenceActionLabel != null) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Preferred evidence action: ${supportPolicy.preferredEvidenceActionLabel}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(supportPolicy.postureGuidance),
         ],
       ),
     );

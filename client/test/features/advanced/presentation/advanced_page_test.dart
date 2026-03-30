@@ -145,6 +145,8 @@ void main() {
     expect(find.text('Stub-only'), findsWidgets);
     expect(find.text('Shell-grade only'), findsWidgets);
     expect(find.text('What to try next'), findsOneWidget);
+    expect(find.text('Runtime truth & recovery'), findsWidgets);
+    expect(find.text('Session Truth'), findsOneWidget);
     expect(
       find.text('Runtime-proof artifact unavailable on current posture'),
       findsWidgets,

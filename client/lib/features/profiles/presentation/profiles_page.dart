@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/runtime_action_feedback.dart';
 import '../../controller/domain/runtime_posture.dart';
+import 'profile_connection_action_policy.dart';
 import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../../readiness/presentation/readiness_surface_controller.dart';
@@ -273,62 +276,24 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   bool get _hasConnectedElsewhere =>
       !_active && status.phase == ClientConnectionPhase.connected;
 
-  bool get _connectBlockedByReadiness {
-    final report = _readinessController.latestReport;
-    if (report == null) return false;
-    final isConnectAction =
-        !(_active && status.phase == ClientConnectionPhase.connected);
-    return isConnectAction && report.overallLevel == ReadinessLevel.blocked;
-  }
+  ControllerRuntimeSession get _runtimeSession => services.controller.session;
 
-  bool get _canToggleConnection {
-    if (!selected.hasStoredPassword) return false;
-    if (status.isBusy) return false;
-    if (_hasConnectedElsewhere) return false;
-    if (_connectBlockedByReadiness) return false;
-    return true;
-  }
+  RuntimePosture get _runtimePosture => describeRuntimePosture(
+        runtimeMode: services.controller.runtimeConfig.mode,
+        backendKind: services.controller.telemetry.backendKind,
+      );
 
-  String get _connectActionLabel {
-    final posture = describeRuntimePosture(
-      runtimeMode: services.controller.runtimeConfig.mode,
-      backendKind: services.controller.telemetry.backendKind,
-    );
-    if (!selected.hasStoredPassword) return 'Set Password First';
-    if (_connectBlockedByReadiness) return 'Connect Blocked';
-    if (_active && status.phase == ClientConnectionPhase.connected) {
-      return 'Disconnect';
-    }
-    if (_active && status.phase == ClientConnectionPhase.connecting) {
-      return 'Connecting...';
-    }
-    if (_active && status.phase == ClientConnectionPhase.disconnecting) {
-      return 'Disconnecting...';
-    }
-    if (_hasConnectedElsewhere) {
-      return 'Connected Elsewhere';
-    }
-    return posture.qualifyAction('Connect');
-  }
-
-  String get _statusHint {
-    if (!selected.hasStoredPassword) {
-      return 'Save the Trojan password before trying this profile.';
-    }
-    if (_hasConnectedElsewhere) {
-      return 'Another profile is already connected. Disconnect it before switching here.';
-    }
-    if (_active && status.phase == ClientConnectionPhase.connecting) {
-      return 'This profile is still establishing a runtime session.';
-    }
-    if (_active && status.phase == ClientConnectionPhase.disconnecting) {
-      return 'This profile is disconnecting now. Wait for the shutdown to finish.';
-    }
-    if (_connectBlockedByReadiness) {
-      return 'Readiness blocked: ${_readinessController.latestReport!.summary}';
-    }
-    return status.message;
-  }
+  ProfileConnectionActionPolicy get _connectionPolicy =>
+      ProfileConnectionActionPolicy.resolve(
+        hasStoredPassword: selected.hasStoredPassword,
+        active: _active,
+        status: status,
+        runtimePosture: _runtimePosture,
+        runtimeSession: _runtimeSession,
+        readinessReport: _readinessController.latestReport,
+        hasConnectedElsewhere: _hasConnectedElsewhere,
+        onOpenAdvancedAvailable: widget.onOpenAdvanced != null,
+      );
 
   @override
   void initState() {
@@ -416,11 +381,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
 
   @override
   Widget build(BuildContext context) {
-    final active = _active;
-    final posture = describeRuntimePosture(
-      runtimeMode: services.controller.runtimeConfig.mode,
-      backendKind: services.controller.telemetry.backendKind,
-    );
+    final posture = _runtimePosture;
+    final connectionPolicy = _connectionPolicy;
 
     return SectionCard(
       title: selected.name,
@@ -477,39 +439,57 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             child: const Text('Remove'),
           ),
           FilledButton(
-            onPressed: _canToggleConnection
-                ? () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    final isDisconnectAction = active &&
-                        status.phase == ClientConnectionPhase.connected;
-                    if (!isDisconnectAction) {
-                      final readinessReport = await services.readiness
-                          .buildReport(profileOverride: selected);
-                      if (!mounted) return;
-                      _readinessController.replaceLatestReport(readinessReport);
-                      if (readinessReport.overallLevel ==
-                          ReadinessLevel.blocked) {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Connect blocked: ${readinessReport.summary}',
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                    }
+            onPressed: !connectionPolicy.buttonEnabled
+                ? null
+                : connectionPolicy.primaryAction ==
+                        ProfileConnectionPrimaryAction.openTroubleshooting
+                    ? () => widget.onOpenAdvanced!(
+                        ReadinessAction.openTroubleshooting,
+                      )
+                    : connectionPolicy.canToggleConnection
+                        ? () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final isDisconnectAction =
+                                connectionPolicy.primaryAction ==
+                                    ProfileConnectionPrimaryAction.disconnect;
+                            if (!isDisconnectAction) {
+                              final readinessReport = await services.readiness
+                                  .buildReport(profileOverride: selected);
+                              if (!mounted) return;
+                              _readinessController
+                                  .replaceLatestReport(readinessReport);
+                              if (readinessReport.overallLevel ==
+                                  ReadinessLevel.blocked) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Connect blocked: ${readinessReport.summary}',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                            }
 
-                    final result = isDisconnectAction
-                        ? await services.controller.disconnect()
-                        : await services.controller.connect(selected);
-                    if (!context.mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(result.summary)),
-                    );
-                  }
-                : null,
-            child: Text(_connectActionLabel),
+                            final result = isDisconnectAction
+                                ? await services.controller.disconnect()
+                                : await services.controller.connect(selected);
+                            if (!context.mounted) return;
+                            final feedback = buildRuntimeActionFeedback(
+                              action: isDisconnectAction
+                                  ? RuntimeActionKind.disconnect
+                                  : RuntimeActionKind.connect,
+                              result: result,
+                              status: services.controller.status,
+                              session: services.controller.session,
+                              posture: _runtimePosture,
+                            );
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(feedback)),
+                            );
+                          }
+                        : null,
+            child: Text(connectionPolicy.buttonLabel),
           ),
         ],
       ),
@@ -564,7 +544,30 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
               },
             ),
             const SizedBox(height: 12),
-            Text('Controller status: $_statusHint'),
+            Text('Controller status: ${connectionPolicy.statusHint}'),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.indigo.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'Action safety',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(connectionPolicy.actionSafety.label),
+                  const SizedBox(height: 4),
+                  Text(connectionPolicy.actionSafety.detail),
+                ],
+              ),
+            ),
           ],
         ),
       ),

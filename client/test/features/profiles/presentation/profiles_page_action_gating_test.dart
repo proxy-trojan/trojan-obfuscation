@@ -6,6 +6,7 @@ import 'package:trojan_pro_client/features/controller/application/client_control
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
 import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_session.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
@@ -68,6 +69,28 @@ class _UnavailableRuntimeController extends FakeClientController {
       updatedAt: DateTime.parse('2026-03-20T00:00:00.000Z'),
     );
   }
+}
+
+class _StaleConnectedController extends FakeClientController {
+  ClientConnectionStatus statusOverride = ClientConnectionStatus(
+    phase: ClientConnectionPhase.connected,
+    message: 'Runtime session is ready.',
+    updatedAt: DateTime.parse('2026-03-20T00:00:00.000Z'),
+    activeProfileId: 'sample-hk-1',
+  );
+
+  ControllerRuntimeSession sessionOverride = ControllerRuntimeSession(
+    isRunning: true,
+    updatedAt: DateTime.now().subtract(const Duration(minutes: 3)),
+    phase: ControllerRuntimePhase.sessionReady,
+    expectedLocalSocksPort: 10808,
+  );
+
+  @override
+  ClientConnectionStatus get status => statusOverride;
+
+  @override
+  ControllerRuntimeSession get session => sessionOverride;
 }
 
 ClientServiceRegistry _buildServices({
@@ -398,6 +421,137 @@ void main() {
 
     await tester
         .tap(find.widgetWithText(OutlinedButton, 'Open Troubleshooting'));
+    await tester.pump();
+
+    expect(openedAdvanced, isTrue);
+  });
+
+  testWidgets('stale connected profile steers primary CTA to troubleshooting',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    var openedAdvanced = false;
+    final services = _buildServices(
+      controllerOverride: _StaleConnectedController(),
+    );
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfilesPage(
+            services: services,
+            onOpenAdvanced: (_) => openedAdvanced = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Action safety'), findsOneWidget);
+    expect(find.text('Revalidate before changing state'), findsOneWidget);
+    expect(find.text('Revalidate in Troubleshooting'), findsOneWidget);
+    expect(find.textContaining('Open Troubleshooting to revalidate the runtime'),
+        findsOneWidget);
+    expect(find.textContaining('disconnect and reconnect'), findsOneWidget);
+
+    await tester.tap(find.text('Revalidate in Troubleshooting'));
+    await tester.pump();
+
+    expect(openedAdvanced, isTrue);
+  });
+
+  testWidgets('connect feedback stays truthful on stub posture',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Connect (stub path)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Shell validation is ready'), findsOneWidget);
+  });
+
+  testWidgets('disconnecting stop-pending profile gates primary action to troubleshooting',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    var openedAdvanced = false;
+    final services = _buildServices(
+      controllerOverride: _StaleConnectedController(),
+    );
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    final controller = services.controller as _StaleConnectedController;
+    controller.statusOverride = ClientConnectionStatus(
+      phase: ClientConnectionPhase.disconnecting,
+      message: 'Disconnecting current session...',
+      updatedAt: DateTime.now(),
+      activeProfileId: 'sample-hk-1',
+    );
+    controller.sessionOverride = ControllerRuntimeSession(
+      isRunning: true,
+      updatedAt: DateTime.now().subtract(const Duration(seconds: 10)),
+      phase: ControllerRuntimePhase.alive,
+      stopRequested: true,
+      stopRequestedAt: DateTime.now().subtract(const Duration(seconds: 5)),
+      expectedLocalSocksPort: 10808,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfilesPage(
+            services: services,
+            onOpenAdvanced: (_) => openedAdvanced = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Action safety'), findsOneWidget);
+    expect(find.text('Wait for exit confirmation'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Open Troubleshooting'), findsOneWidget);
+    expect(find.textContaining('Primary state-changing action is temporarily withheld'),
+        findsNothing);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Open Troubleshooting'));
     await tester.pump();
 
     expect(openedAdvanced, isTrue);

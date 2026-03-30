@@ -42,7 +42,7 @@ void main() {
     final session = ControllerRuntimeSession(
       isRunning: true,
       updatedAt: DateTime.now().subtract(const Duration(seconds: 20)),
-      phase: ControllerRuntimePhase.stopping,
+      phase: ControllerRuntimePhase.alive,
       stopRequested: true,
       stopRequestedAt: DateTime.now().subtract(const Duration(seconds: 10)),
       expectedLocalSocksPort: 10808,
@@ -50,5 +50,33 @@ void main() {
 
     expect(session.truth, ControllerRuntimeSessionTruth.stopping);
     expect(session.truthNote, contains('stop request'));
+    expect(session.needsAttention, isTrue);
+    expect(session.recoveryGuidance, contains('exit confirmation'));
+  });
+
+  test('does not mark live session as needing attention', () {
+    final session = ControllerRuntimeSession(
+      isRunning: true,
+      updatedAt: DateTime.now().subtract(const Duration(seconds: 3)),
+      phase: ControllerRuntimePhase.sessionReady,
+      expectedLocalSocksPort: 10808,
+    );
+
+    expect(session.truth, ControllerRuntimeSessionTruth.live);
+    expect(session.needsAttention, isFalse);
+    expect(session.recoveryGuidance, contains('No recovery action'));
+  });
+
+  test('gives recovery guidance for residual snapshot state', () {
+    final session = ControllerRuntimeSession(
+      isRunning: false,
+      updatedAt: DateTime.now().subtract(const Duration(minutes: 1)),
+      phase: ControllerRuntimePhase.sessionReady,
+      expectedLocalSocksPort: 10808,
+    );
+
+    expect(session.truth, ControllerRuntimeSessionTruth.residual);
+    expect(session.needsAttention, isTrue);
+    expect(session.recoveryGuidance, contains('retry from Profiles'));
   });
 }

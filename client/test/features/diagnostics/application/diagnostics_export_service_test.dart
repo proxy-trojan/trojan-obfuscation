@@ -93,10 +93,15 @@ void main() {
         controllerPayload['runtimePosture'] as Map<String, dynamic>;
     final operatorGuidance =
         runtimePosture['operatorGuidance'] as Map<String, dynamic>;
+    final runtimeSession =
+        controllerPayload['runtimeSession'] as Map<String, dynamic>;
 
     expect(operatorGuidance['heading'],
         'How to use support bundles on this posture');
     expect((operatorGuidance['checklist'] as List<dynamic>).isNotEmpty, isTrue);
+    expect(runtimeSession['truth'], 'Residual snapshot');
+    expect(runtimeSession['needsAttention'], isTrue);
+    expect(runtimeSession['recoveryGuidance'], contains('retry from Profiles'));
 
     final appRuntime = payload['appRuntime'] as Map<String, dynamic>;
     final lastUnhandledError =

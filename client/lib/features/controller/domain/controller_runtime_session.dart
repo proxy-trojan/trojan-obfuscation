@@ -121,6 +121,15 @@ extension ControllerRuntimeSessionStateX on ControllerRuntimeSession {
     return ControllerRuntimeSessionTruth.live;
   }
 
+  bool get needsAttention => switch (truth) {
+        ControllerRuntimeSessionTruth.live => false,
+        ControllerRuntimeSessionTruth.stopped => false,
+        ControllerRuntimeSessionTruth.stopping => true,
+        ControllerRuntimeSessionTruth.aging => true,
+        ControllerRuntimeSessionTruth.stale => true,
+        ControllerRuntimeSessionTruth.residual => true,
+      };
+
   String get truthNote => switch (truth) {
         ControllerRuntimeSessionTruth.stopped =>
           'No managed runtime session is active right now.',
@@ -134,5 +143,20 @@ extension ControllerRuntimeSessionStateX on ControllerRuntimeSession {
           'The managed runtime session snapshot looks stale and should be revalidated before trusting it.',
         ControllerRuntimeSessionTruth.residual =>
           'The shell still has a non-stopped session record even though no runtime is marked as running. Treat this as residual state until recovery clears it.',
+      };
+
+  String get recoveryGuidance => switch (truth) {
+        ControllerRuntimeSessionTruth.stopped =>
+          'No recovery action is needed until you start a new runtime session.',
+        ControllerRuntimeSessionTruth.stopping =>
+          'Wait for exit confirmation before reconnecting or assuming cleanup has finished.',
+        ControllerRuntimeSessionTruth.live =>
+          'No recovery action is needed while the runtime keeps refreshing normally.',
+        ControllerRuntimeSessionTruth.aging =>
+          'If this state keeps aging, open Troubleshooting and confirm the runtime is still refreshing before treating it as fully live.',
+        ControllerRuntimeSessionTruth.stale =>
+          'Open Troubleshooting to revalidate the runtime. If the snapshot stays stale, disconnect and reconnect so the next session starts from clean evidence.',
+        ControllerRuntimeSessionTruth.residual =>
+          'Treat this as leftover session state. Open Troubleshooting for recent evidence, then retry from Profiles so the next session starts cleanly.',
       };
 }
