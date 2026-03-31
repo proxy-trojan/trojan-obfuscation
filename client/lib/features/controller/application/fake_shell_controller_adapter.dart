@@ -7,11 +7,24 @@ import '../domain/controller_telemetry_snapshot.dart';
 import 'shell_controller_adapter.dart';
 
 class FakeShellControllerAdapter implements ShellControllerAdapter {
+  FakeShellControllerAdapter({
+    this.backendKind = 'fake-shell-controller',
+    this.backendVersion = 'dev-shell',
+    this.runtimeMode = 'stubbed-local-boundary',
+    this.endpointHint = 'in-process://fake-shell-controller',
+  });
+
+  final String backendKind;
+  final String backendVersion;
+  final String runtimeMode;
+  final String endpointHint;
+
   final DateTime _sessionUpdatedAt = DateTime.now();
+
   @override
   ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
-        backendKind: 'fake-shell-controller',
-        backendVersion: 'dev-shell',
+        backendKind: backendKind,
+        backendVersion: backendVersion,
         capabilities: const <String>[
           'connect',
           'disconnect',
@@ -22,9 +35,9 @@ class FakeShellControllerAdapter implements ShellControllerAdapter {
       );
 
   @override
-  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
-        mode: 'stubbed-local-boundary',
-        endpointHint: 'in-process://fake-shell-controller',
+  ControllerRuntimeConfig get runtimeConfig => ControllerRuntimeConfig(
+        mode: runtimeMode,
+        endpointHint: endpointHint,
         enableVerboseTelemetry: true,
       );
 
@@ -32,6 +45,8 @@ class FakeShellControllerAdapter implements ShellControllerAdapter {
   ControllerRuntimeSession get session => ControllerRuntimeSession(
         isRunning: false,
         updatedAt: _sessionUpdatedAt,
+        phase: ControllerRuntimePhase.sessionReady,
+        configProvenance: 'simulated://fake-shell-controller',
         lastExitCode: 0,
         stdoutTail: const <String>['fake controller session active'],
       );
@@ -40,7 +55,8 @@ class FakeShellControllerAdapter implements ShellControllerAdapter {
   Future<ControllerRuntimeHealth> checkHealth() async {
     return ControllerRuntimeHealth(
       level: ControllerRuntimeHealthLevel.healthy,
-      summary: 'Fake shell controller adapter is available for product-layer validation.',
+      summary:
+          'Fake shell controller adapter is available for product-layer validation.',
       updatedAt: DateTime.now(),
     );
   }

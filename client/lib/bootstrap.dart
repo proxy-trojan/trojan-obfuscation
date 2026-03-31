@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'features/controller/application/adapter_backed_client_controller.dart';
 import 'features/controller/application/client_controller_api.dart';
-import 'features/controller/application/fake_shell_controller_adapter.dart';
-import 'features/controller/application/real_shell_controller_adapter.dart';
-import 'features/controller/application/shell_controller_adapter.dart';
+import 'features/controller/application/shell_controller_adapter_selector.dart';
 import 'features/controller/domain/client_connection_status.dart';
 import 'features/diagnostics/application/diagnostics_export_service.dart';
 import 'features/packaging/application/packaging_export_service.dart';
@@ -15,6 +12,7 @@ import 'features/profiles/application/profile_secrets_service.dart';
 import 'features/profiles/application/profile_serialization.dart';
 import 'features/profiles/application/profile_store.dart';
 import 'features/settings/application/settings_serialization.dart';
+import 'features/readiness/application/readiness_service.dart';
 import 'features/settings/application/settings_store.dart';
 import 'platform/secure_storage/fallback_secure_storage.dart';
 import 'platform/secure_storage/flutter_secure_storage_adapter.dart';
@@ -74,8 +72,10 @@ class ClientBootstrap {
       fileExporter: diagnosticsFileExporter,
     );
 
+    final adapterSelection = _selectShellControllerAdapter();
+
     final controller = AdapterBackedClientController(
-      adapter: _createShellControllerAdapter(),
+      adapter: adapterSelection.adapter,
       profileSecrets: profileSecrets,
       localStateStore: localStateStore,
       filesystemLayout: filesystemLayout,
@@ -128,6 +128,15 @@ class ClientBootstrap {
 
     await syncDesktopQuickActions();
 
+    final readiness = ReadinessService(
+      profileStore: profileStore,
+      profileSecrets: profileSecrets,
+      secureStorage: secureStorage,
+      controller: controller,
+      filesystemLayout: filesystemLayout,
+      localStateStore: localStateStore,
+    );
+
     final diagnostics = DiagnosticsExportService(
       profileStore: profileStore,
       profilePortability: profilePortability,
@@ -137,6 +146,9 @@ class ClientBootstrap {
       secureStorage: secureStorage,
       fileExporter: diagnosticsFileExporter,
       appRuntimeErrors: appRuntimeErrors,
+      adapterSelectionReason: adapterSelection.selectionReason,
+      expectedRealRuntimePath: adapterSelection.isRealRuntimePath,
+      readiness: readiness,
     );
 
     final registry = ClientServiceRegistry(
@@ -150,6 +162,7 @@ class ClientBootstrap {
       packagingExport: packagingExport,
       settingsStore: settingsStore,
       controller: controller,
+      readiness: readiness,
       diagnostics: diagnostics,
       desktopLifecycle: desktopLifecycle,
       appRuntimeErrors: appRuntimeErrors,
@@ -220,18 +233,8 @@ class ClientBootstrap {
     );
   }
 
-  static ShellControllerAdapter _createShellControllerAdapter() {
-    final env = Platform.environment;
-    final rawFlag =
-        (env['TROJAN_CLIENT_ENABLE_REAL_ADAPTER'] ?? '').trim().toLowerCase();
-    final enableRealAdapter = rawFlag == '1' || rawFlag == 'true';
-    final binaryOverride = (env['TROJAN_CLIENT_BINARY'] ?? '').trim();
-
-    if (enableRealAdapter) {
-      return RealShellControllerAdapter(
-        binaryPathHint: binaryOverride.isEmpty ? 'ENV_UNSET' : binaryOverride,
-      );
-    }
-    return FakeShellControllerAdapter();
+  static ShellControllerAdapterSelection _selectShellControllerAdapter() {
+    final selector = ShellControllerAdapterSelector();
+    return selector.selectForCurrentPlatform();
   }
 }

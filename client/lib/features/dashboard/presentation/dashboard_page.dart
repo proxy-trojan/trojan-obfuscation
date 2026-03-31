@@ -6,8 +6,16 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/desktop_lifecycle_models.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
-import '../../controller/domain/controller_runtime_health.dart';
+import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/runtime_action_feedback.dart';
+import '../../controller/domain/runtime_action_safety.dart';
+import '../../controller/domain/runtime_operator_advice.dart';
+import '../../controller/domain/runtime_posture.dart';
+import 'dashboard_guide_policy.dart';
 import '../../profiles/domain/client_profile.dart';
+import '../../readiness/domain/readiness_refresh_fingerprint.dart';
+import '../../readiness/domain/readiness_report.dart';
+import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../application/connection_lifecycle_view_model.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -29,18 +37,66 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  Future<ControllerRuntimeHealth>? _healthFuture;
+  late final ReadinessSurfaceController _readinessController;
 
   @override
   void initState() {
     super.initState();
-    _healthFuture = widget.services.controller.checkHealth();
+    _readinessController = ReadinessSurfaceController(
+      isMounted: () => mounted,
+      applyState: setState,
+    );
+    final services = widget.services;
+    final profile = services.profileStore.selectedProfile;
+    _readinessController.initialize(
+      refreshKey: _buildReadinessRefreshKey(
+        profile: profile,
+        activeProfileId: services.controller.status.activeProfileId,
+        storageSummary: services.profileSecrets.storageSummary,
+        runtimeMode: services.controller.runtimeConfig.mode,
+        runtimeEndpointHint: services.controller.runtimeConfig.endpointHint,
+      ),
+      restoreReport: () =>
+          services.readiness.readLastKnownReport(profileOverride: profile),
+      buildReport: () =>
+          services.readiness.buildReport(profileOverride: profile),
+    );
   }
 
-  void _refreshHealth() {
-    setState(() {
-      _healthFuture = widget.services.controller.checkHealth();
-    });
+  String _buildReadinessRefreshKey({
+    required ClientProfile? profile,
+    required String? activeProfileId,
+    required String storageSummary,
+    required String runtimeMode,
+    required String runtimeEndpointHint,
+  }) {
+    return [
+      buildReadinessRefreshFingerprint(
+        profile: profile,
+        storageSummary: storageSummary,
+        runtimeMode: runtimeMode,
+        runtimeEndpointHint: runtimeEndpointHint,
+      ),
+      'active:$activeProfileId',
+    ].join('|');
+  }
+
+  void _refreshReadinessIfInputsChanged(String key, {ClientProfile? profile}) {
+    _readinessController.refreshIfKeyChanged(
+      key,
+      restoreReport: () => widget.services.readiness
+          .readLastKnownReport(profileOverride: profile),
+      buildReport: () =>
+          widget.services.readiness.buildReport(profileOverride: profile),
+    );
+  }
+
+  VoidCallback? _actionHandlerFor(ReadinessAction action) {
+    return switch (action) {
+      ReadinessAction.openProfiles => widget.onOpenProfiles,
+      ReadinessAction.openTroubleshooting => widget.onOpenAdvanced,
+      ReadinessAction.openSettings => widget.onOpenSettings,
+    };
   }
 
   @override
@@ -66,10 +122,22 @@ class _DashboardPageState extends State<DashboardPage> {
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
         final desktopLifecycleStatus = services.desktopLifecycle.status;
+        final readinessRefreshKey = _buildReadinessRefreshKey(
+          profile: selectedProfile,
+          activeProfileId: activeProfile?.id,
+          storageSummary: services.profileSecrets.storageSummary,
+          runtimeMode: runtimeConfig.mode,
+          runtimeEndpointHint: runtimeConfig.endpointHint,
+        );
+        _refreshReadinessIfInputsChanged(
+          readinessRefreshKey,
+          profile: selectedProfile,
+        );
 
         return ListView(
           children: <Widget>[
-            if (desktopLifecycleStatus.isRecentExternalActivation()) ...<Widget>[
+            if (desktopLifecycleStatus
+                .isRecentExternalActivation()) ...<Widget>[
               _ExternalActivationCard(
                 status: desktopLifecycleStatus,
                 onDismiss: () {
@@ -125,8 +193,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 activeProfile: activeProfile,
                 status: status,
                 lifecycle: lifecycle,
+                readiness: _readinessController.latestReport,
                 onOpenProfiles: widget.onOpenProfiles,
                 onOpenAdvanced: widget.onOpenAdvanced,
+                onOpenSettings: widget.onOpenSettings,
               ),
             ),
             const SizedBox(height: 16),
@@ -154,38 +224,97 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 16),
             ],
             SectionCard(
-              title: 'Before you connect',
-              subtitle: 'Only the facts the user needs before trying one test.',
+              title: 'Readiness doctor',
+              subtitle:
+                  'Know if the app is ready, degraded, or blocked before connecting.',
               trailing: IconButton(
                 icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh health check',
-                onPressed: _refreshHealth,
+                tooltip: 'Refresh readiness',
+                onPressed: () => _readinessController.startCycle(
+                  restoreReport: () => widget.services.readiness
+                      .readLastKnownReport(profileOverride: selectedProfile),
+                  buildReport: () => widget.services.readiness
+                      .buildReport(profileOverride: selectedProfile),
+                ),
               ),
-              child: FutureBuilder<ControllerRuntimeHealth>(
-                future: _healthFuture,
+              child: FutureBuilder<ReadinessReport>(
+                future: _readinessController.future,
                 builder: (BuildContext context,
-                    AsyncSnapshot<ControllerRuntimeHealth> snapshot) {
-                  final health = snapshot.data;
-                  final levelName =
-                      health == null ? 'Checking…' : health.level.name;
-                  final summary =
-                      health == null ? 'Probing local runtime' : health.summary;
+                    AsyncSnapshot<ReadinessReport> snapshot) {
+                  final report =
+                      snapshot.data ?? _readinessController.latestReport;
+                  if (report == null) {
+                    return const Text('Checking readiness…');
+                  }
 
-                  return Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      KeyValuePair(label: 'Profile Ready',
-                          value: selectedProfile == null ? 'No' : 'Yes'),
-                      KeyValuePair(
-                        label: 'Password Ready',
-                        value: _passwordReadyLabel(selectedProfile ?? activeProfile),
+                      Wrap(
+                        spacing: 24,
+                        runSpacing: 12,
+                        children: <Widget>[
+                          KeyValuePair(
+                            label: 'Overall',
+                            value: report.overallLevel.label,
+                          ),
+                          KeyValuePair(
+                              label: 'Headline', value: report.headline),
+                          KeyValuePair(label: 'Summary', value: report.summary),
+                          KeyValuePair(
+                            label: 'Runtime Mode',
+                            value: runtimeConfig.mode,
+                          ),
+                          KeyValuePair(
+                            label: 'Runtime Endpoint',
+                            value: runtimeConfig.endpointHint,
+                          ),
+                          KeyValuePair(
+                            label: 'Secure Storage',
+                            value: services.profileSecrets.storageSummary,
+                          ),
+                          KeyValuePair(
+                            label: 'Readiness Provenance',
+                            value: report.provenanceSummary,
+                          ),
+                        ],
                       ),
-                      KeyValuePair(label: 'Secret Storage',
-                          value: services.profileSecrets.storageSummary),
-                      KeyValuePair(label: 'App Ready', value: levelName),
-                      KeyValuePair(label: 'Status Note', value: summary),
-                      KeyValuePair(label: 'Runtime Path', value: runtimeConfig.endpointHint),
+                      if (report.isCachedSnapshot &&
+                          snapshot.connectionState !=
+                              ConnectionState.done) ...<Widget>[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Showing a cached snapshot while the live readiness refresh runs.',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                      if (report.recommendation != null) ...<Widget>[
+                        const SizedBox(height: 12),
+                        Text(
+                          report.recommendation!.detail,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed:
+                              _actionHandlerFor(report.recommendation!.action),
+                          icon: const Icon(Icons.play_arrow),
+                          label: Text(report.recommendation!.label),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 24,
+                        runSpacing: 12,
+                        children: report.checks
+                            .map(
+                              (check) => KeyValuePair(
+                                label: check.domain.name,
+                                value: '${check.level.label}: ${check.summary}',
+                              ),
+                            )
+                            .toList(),
+                      ),
                     ],
                   );
                 },
@@ -206,11 +335,6 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       },
     );
-  }
-
-  String _passwordReadyLabel(ClientProfile? profile) {
-    if (profile == null) return 'N/A';
-    return profile.hasStoredPassword ? 'Yes' : 'No';
   }
 
   bool _showExperimentGuide(
@@ -358,8 +482,10 @@ class _NextStepGuide extends StatelessWidget {
     required this.activeProfile,
     required this.status,
     required this.lifecycle,
+    required this.readiness,
     required this.onOpenProfiles,
     required this.onOpenAdvanced,
+    this.onOpenSettings,
   });
 
   final ClientServiceRegistry services;
@@ -367,8 +493,10 @@ class _NextStepGuide extends StatelessWidget {
   final ClientProfile? activeProfile;
   final ClientConnectionStatus status;
   final ConnectionLifecycleViewModel lifecycle;
+  final ReadinessReport? readiness;
   final VoidCallback? onOpenProfiles;
   final VoidCallback? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -380,6 +508,52 @@ class _NextStepGuide extends StatelessWidget {
         Text(model.title, style: const TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         Text(model.body),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.indigo.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'Action safety',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(model.actionSafety.label),
+              const SizedBox(height: 4),
+              Text(model.actionSafety.detail),
+            ],
+          ),
+        ),
+        if (model.operatorTitle != null && model.operatorBody != null) ...<Widget>[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  model.operatorTitle!,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(model.operatorBody!),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -410,110 +584,118 @@ class _NextStepGuide extends StatelessWidget {
       case _GuideAction.openAdvanced:
         onOpenAdvanced?.call();
         return;
+      case _GuideAction.openSettings:
+        onOpenSettings?.call();
+        return;
       case _GuideAction.connectNow:
       case _GuideAction.retryNow:
         final currentProfile = action == _GuideAction.retryNow
             ? (activeProfile ?? selectedProfile)
             : selectedProfile;
         if (currentProfile == null) return;
+        final readinessReport = await services.readiness
+            .buildReport(profileOverride: currentProfile);
+        if (!context.mounted) return;
+        if (readinessReport.overallLevel == ReadinessLevel.blocked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Connect blocked: ${readinessReport.summary}')),
+          );
+          return;
+        }
         final result = await services.controller.connect(currentProfile);
         if (!context.mounted) return;
+        final feedback = buildRuntimeActionFeedback(
+          action: action == _GuideAction.retryNow
+              ? RuntimeActionKind.retry
+              : RuntimeActionKind.connect,
+          result: result,
+          status: services.controller.status,
+          session: services.controller.session,
+          posture: describeRuntimePosture(
+            runtimeMode: services.controller.runtimeConfig.mode,
+            backendKind: services.controller.telemetry.backendKind,
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.summary)),
+          SnackBar(content: Text(feedback)),
         );
         return;
       case _GuideAction.disconnectNow:
         final result = await services.controller.disconnect();
         if (!context.mounted) return;
+        final feedback = buildRuntimeActionFeedback(
+          action: RuntimeActionKind.disconnect,
+          result: result,
+          status: services.controller.status,
+          session: services.controller.session,
+          posture: describeRuntimePosture(
+            runtimeMode: services.controller.runtimeConfig.mode,
+            backendKind: services.controller.telemetry.backendKind,
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.summary)),
+          SnackBar(content: Text(feedback)),
         );
         return;
     }
   }
 
   _GuideModel _model() {
-    if (selectedProfile == null && activeProfile == null) {
-      return const _GuideModel(
-        title: 'Start by adding one profile',
-        body:
-            'Create or import a profile first. Once that exists, the rest of the flow becomes much simpler.',
-        primaryLabel: 'Open Profiles',
-        primaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (activeProfile == null &&
-        selectedProfile != null &&
-        !selectedProfile!.hasStoredPassword) {
-      return const _GuideModel(
-        title: 'Save the password before testing',
-        body:
-            'The selected profile still needs its Trojan password. Save it first, then try one connection attempt.',
-        primaryLabel: 'Open Profiles',
-        primaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.error) {
-      return _GuideModel(
-        title: lifecycle.headline,
-        body: lifecycle.detail,
-        primaryLabel: lifecycle.showRetry ? 'Retry now' : 'Open Profiles',
-        primaryAction: lifecycle.showRetry
-            ? _GuideAction.retryNow
-            : _GuideAction.openProfiles,
-        secondaryLabel:
-            lifecycle.showOpenTroubleshooting ? 'Open Troubleshooting' : null,
-        secondaryAction: lifecycle.showOpenTroubleshooting
-            ? _GuideAction.openAdvanced
-            : null,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.connected) {
-      return const _GuideModel(
-        title: 'Connection is active',
-        body:
-            'You are already connected. Disconnect here if you want to end the current session, or open Profiles to switch context.',
-        primaryLabel: 'Disconnect now',
-        primaryAction: _GuideAction.disconnectNow,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.disconnecting) {
-      return _GuideModel(
-        title: lifecycle.headline,
-        body: lifecycle.detail,
-        primaryLabel: 'Open Troubleshooting',
-        primaryAction: _GuideAction.openAdvanced,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    if (status.phase == ClientConnectionPhase.connecting) {
-      return _GuideModel(
-        title: lifecycle.headline,
-        body: lifecycle.detail,
-        primaryLabel: 'Open Troubleshooting',
-        primaryAction: _GuideAction.openAdvanced,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: _GuideAction.openProfiles,
-      );
-    }
-    return const _GuideModel(
-      title: 'You are ready for a quick test',
-      body:
-          'Use one clear Connect action here, or open Profiles if you want to review the selected profile first.',
-      primaryLabel: 'Connect now',
-      primaryAction: _GuideAction.connectNow,
-      secondaryLabel: 'Open Profiles',
-      secondaryAction: _GuideAction.openProfiles,
+    final posture = describeRuntimePosture(
+      runtimeMode: services.controller.runtimeConfig.mode,
+      backendKind: services.controller.telemetry.backendKind,
     );
+    final runtimeSession = services.controller.session;
+    final operatorAdvice = RuntimeOperatorAdvice.resolve(
+      status: status,
+      session: runtimeSession,
+      posture: posture,
+      troubleshootingAvailable: onOpenAdvanced != null,
+    );
+
+    final policy = DashboardGuidePolicy.resolve(
+      lifecycle: lifecycle,
+      selectedProfile: selectedProfile,
+      activeProfile: activeProfile,
+      status: status,
+      posture: posture,
+      runtimeSession: runtimeSession,
+      operatorAdvice: operatorAdvice,
+      readiness: readiness,
+    );
+
+    return _GuideModel(
+      title: policy.title,
+      body: policy.body,
+      primaryLabel: policy.primaryLabel,
+      primaryAction: _mapGuideAction(policy.primaryAction),
+      secondaryLabel: policy.secondaryLabel,
+      secondaryAction: policy.secondaryAction == null
+          ? null
+          : _mapGuideAction(policy.secondaryAction!),
+      operatorTitle: policy.operatorTitle,
+      operatorBody: policy.operatorBody,
+      actionSafety: policy.actionSafety,
+    );
+  }
+
+  _GuideAction _mapGuideAction(DashboardGuideAction action) {
+    return switch (action) {
+      DashboardGuideAction.openProfiles => _GuideAction.openProfiles,
+      DashboardGuideAction.openAdvanced => _GuideAction.openAdvanced,
+      DashboardGuideAction.openSettings => _GuideAction.openSettings,
+      DashboardGuideAction.connectNow => _GuideAction.connectNow,
+      DashboardGuideAction.retryNow => _GuideAction.retryNow,
+      DashboardGuideAction.disconnectNow => _GuideAction.disconnectNow,
+    };
   }
 }
 
 enum _GuideAction {
   openProfiles,
   openAdvanced,
+  openSettings,
   connectNow,
   retryNow,
   disconnectNow,
@@ -525,16 +707,22 @@ class _GuideModel {
     required this.body,
     required this.primaryLabel,
     required this.primaryAction,
+    required this.actionSafety,
     this.secondaryLabel,
     this.secondaryAction,
+    this.operatorTitle,
+    this.operatorBody,
   });
 
   final String title;
   final String body;
   final String primaryLabel;
   final _GuideAction primaryAction;
+  final RuntimeActionSafety actionSafety;
   final String? secondaryLabel;
   final _GuideAction? secondaryAction;
+  final String? operatorTitle;
+  final String? operatorBody;
 }
 
 class _ConnectionHomeCard extends StatelessWidget {
@@ -574,6 +762,11 @@ class _ConnectionHomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final posture = describeRuntimePosture(
+      runtimeMode: runtimeMode,
+      backendKind: controllerBackend,
+    );
+
     return SectionCard(
       title: 'Connection Home',
       subtitle:
@@ -624,20 +817,42 @@ class _ConnectionHomeCard extends StatelessWidget {
                   runSpacing: 12,
                   children: <Widget>[
                     KeyValuePair(label: 'Lifecycle', value: lifecycle.label),
-                    KeyValuePair(label: 'Selected Profile', value: selectedProfile.name),
+                    KeyValuePair(
+                        label: 'Selected Profile', value: selectedProfile.name),
                     KeyValuePair(
                       label: 'Active Profile',
                       value: activeProfile?.name ??
                           lifecycle.activeProfileName ??
                           'None',
                     ),
-                    KeyValuePair(label: 'Status Note', value: lifecycle.statusSummary),
-                    KeyValuePair(label: 'Secret Storage', value: storageSummary),
+                    KeyValuePair(
+                        label: 'Status Note', value: lifecycle.statusSummary),
+                    KeyValuePair(
+                        label: 'Secret Storage', value: storageSummary),
                     KeyValuePair(label: 'Runtime Mode', value: runtimeMode),
-                    KeyValuePair(label: 'Controller Backend', value: controllerBackend),
-                    KeyValuePair(label: 'Backend Version', value: controllerVersion),
+                    KeyValuePair(
+                      label: 'Runtime Posture',
+                      value: posture.postureLabel,
+                    ),
+                    KeyValuePair(
+                      label: 'Evidence Grade',
+                      value: posture.evidenceGradeLabel,
+                    ),
+                    KeyValuePair(
+                      label: 'Execution Path',
+                      value: posture.executionPathLabel,
+                    ),
+                    KeyValuePair(
+                        label: 'Controller Backend', value: controllerBackend),
+                    KeyValuePair(
+                        label: 'Backend Version', value: controllerVersion),
                     KeyValuePair(label: 'Update Channel', value: updateChannel),
                   ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '${posture.truthNote} ${posture.evidenceGradeNote}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -753,6 +968,40 @@ class _StateCalloutCard extends StatelessWidget {
   }
 }
 
+class _RuntimeTruthPill extends StatelessWidget {
+  const _RuntimeTruthPill({
+    required this.label,
+    required this.highlighted,
+  });
+
+  final String label;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlighted ? Colors.orange : Colors.blueGrey;
+
+    return Semantics(
+      label: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RuntimeSessionSummary extends StatelessWidget {
   const _RuntimeSessionSummary({required this.services});
 
@@ -769,17 +1018,90 @@ class _RuntimeSessionSummary extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: session.needsAttention
+                    ? Colors.orange.withValues(alpha: 0.08)
+                    : Colors.blue.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: session.needsAttention
+                      ? Colors.orange.withValues(alpha: 0.25)
+                      : Colors.blue.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      _RuntimeTruthPill(
+                        label: 'Session Truth: ${session.truth.label}',
+                        highlighted: session.needsAttention,
+                      ),
+                      _RuntimeTruthPill(
+                        label: 'Updated ${session.ageLabel}',
+                        highlighted: false,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    session.truthNote,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(session.recoveryGuidance),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 24,
               runSpacing: 12,
               children: <Widget>[
-                KeyValuePair(label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
-                KeyValuePair(label: 'PID', value: session.pid?.toString() ?? 'N/A'),
                 KeyValuePair(
-                    label: 'Config Path', value: session.activeConfigPath ?? 'N/A'),
-                KeyValuePair(label: 'Last Exit Code',
+                    label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
+                KeyValuePair(label: 'Runtime Truth', value: session.truth.label),
+                KeyValuePair(label: 'Snapshot Age', value: session.ageLabel),
+                KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
+                KeyValuePair(
+                  label: 'Stop Requested',
+                  value: session.stopRequested ? 'Yes' : 'No',
+                ),
+                KeyValuePair(
+                  label: 'Stop Requested At',
+                  value: session.stopRequestedAt == null
+                      ? 'N/A'
+                      : formatTimestamp(session.stopRequestedAt!),
+                ),
+                KeyValuePair(
+                    label: 'PID', value: session.pid?.toString() ?? 'N/A'),
+                KeyValuePair(
+                    label: 'Config Path',
+                    value: session.activeConfigPath ?? 'N/A'),
+                KeyValuePair(
+                  label: 'Config Provenance',
+                  value: session.configProvenance ?? 'N/A',
+                ),
+                KeyValuePair(
+                  label: 'Expected Local SOCKS Port',
+                  value: session.expectedLocalSocksPort?.toString() ?? 'N/A',
+                ),
+                KeyValuePair(
+                  label: 'Launch Plan',
+                  value: session.launchPlan?.summary ?? 'N/A',
+                ),
+                KeyValuePair(
+                    label: 'Last Exit Code',
                     value: session.lastExitCode?.toString() ?? 'N/A'),
-                KeyValuePair(label: 'Last Error', value: session.lastError ?? 'None'),
+                KeyValuePair(
+                    label: 'Last Error', value: session.lastError ?? 'None'),
               ],
             ),
             const SizedBox(height: 12),

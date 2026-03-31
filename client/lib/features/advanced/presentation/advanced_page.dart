@@ -6,15 +6,29 @@ import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/last_runtime_failure_summary.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../../diagnostics/application/support_issue_descriptor.dart';
 import '../../diagnostics/presentation/diagnostics_page.dart';
 import '../../packaging/presentation/packaging_page.dart';
 
+enum AdvancedPageTab {
+  problemReport,
+  updateStatus,
+}
+
 class AdvancedPage extends StatefulWidget {
-  const AdvancedPage({super.key, required this.services});
+  const AdvancedPage({
+    super.key,
+    required this.services,
+    this.requestedTab = AdvancedPageTab.problemReport,
+    this.tabRequestId = 0,
+  });
 
   final ClientServiceRegistry services;
+  final AdvancedPageTab requestedTab;
+  final int tabRequestId;
 
   @override
   State<AdvancedPage> createState() => _AdvancedPageState();
@@ -23,17 +37,40 @@ class AdvancedPage extends StatefulWidget {
 class _AdvancedPageState extends State<AdvancedPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  int? _lastHandledTabRequestId;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: _tabIndexFor(widget.requestedTab),
+    );
+    _lastHandledTabRequestId = widget.tabRequestId;
+  }
+
+  @override
+  void didUpdateWidget(covariant AdvancedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tabRequestId == _lastHandledTabRequestId) {
+      return;
+    }
+    _lastHandledTabRequestId = widget.tabRequestId;
+    _tabController.animateTo(_tabIndexFor(widget.requestedTab));
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  int _tabIndexFor(AdvancedPageTab tab) {
+    return switch (tab) {
+      AdvancedPageTab.problemReport => 0,
+      AdvancedPageTab.updateStatus => 1,
+    };
   }
 
   @override
@@ -49,62 +86,115 @@ class _AdvancedPageState extends State<AdvancedPage>
         final status = services.controller.status;
         final runtimeConfig = services.controller.runtimeConfig;
         final telemetry = services.controller.telemetry;
+        final posture = describeRuntimePosture(
+          runtimeMode: runtimeConfig.mode,
+          backendKind: telemetry.backendKind,
+        );
         final issue = SupportIssueDescriptor.fromConnectionStatus(status);
         final lastRuntimeFailure = services.controller.lastRuntimeFailure;
         final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
+        final runtimeSession = services.controller.session;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Use Advanced when you need a support-oriented overview, a problem report bundle, or update/package details.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            _SupportOverviewCard(
-              status: status,
-              issue: issue,
-              runtimeMode: runtimeConfig.mode,
-              endpointHint: runtimeConfig.endpointHint,
-              backendKind: telemetry.backendKind,
-              backendVersion: telemetry.backendVersion,
-              diagnosticsBackend:
-                  services.diagnosticsFileExporter.backendName,
-              lastRuntimeFailure: lastRuntimeFailure,
-              appUnhandledError: appUnhandledError,
-            ),
-            const SizedBox(height: 16),
-            _SupportActionsCard(
-              status: status,
-              onOpenProblemReport: () => _tabController.animateTo(0),
-              onOpenUpdateStatus: () => _tabController.animateTo(1),
-            ),
-            const SizedBox(height: 16),
-            TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: const <Widget>[
-                Tab(text: 'Problem Report'),
-                Tab(text: 'Update Status'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: <Widget>[
-                  SingleChildScrollView(
-                    child: DiagnosticsPage(services: services),
-                  ),
-                  SingleChildScrollView(
-                    child: PackagingPage(services: services),
-                  ),
-                ],
+        return NestedScrollView(
+          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+            return <Widget>[
+              SliverToBoxAdapter(
+                child: Text(
+                  'Use Advanced when you need a support-oriented overview, a problem report bundle, or update/package details.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
-          ],
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              SliverToBoxAdapter(
+                child: _SupportOverviewCard(
+                  status: status,
+                  issue: issue,
+                  runtimeMode: runtimeConfig.mode,
+                  endpointHint: runtimeConfig.endpointHint,
+                  backendKind: telemetry.backendKind,
+                  backendVersion: telemetry.backendVersion,
+                  diagnosticsBackend:
+                      services.diagnosticsFileExporter.backendName,
+                  lastRuntimeFailure: lastRuntimeFailure,
+                  appUnhandledError: appUnhandledError,
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: _SupportActionsCard(
+                  status: status,
+                  runtimePosture: posture,
+                  onOpenProblemReport: () => _tabController.animateTo(0),
+                  onOpenUpdateStatus: () => _tabController.animateTo(1),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: _RuntimeTruthRecoveryCard(session: runtimeSession),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabs: const <Widget>[
+                    Tab(text: 'Problem Report'),
+                    Tab(text: 'Update Status'),
+                  ],
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            ];
+          },
+          body: TabBarView(
+            controller: _tabController,
+            children: <Widget>[
+              DiagnosticsPage(services: services),
+              PackagingPage(services: services),
+            ],
+          ),
         );
       },
+    );
+  }
+}
+
+class _RuntimeTruthRecoveryCard extends StatelessWidget {
+  const _RuntimeTruthRecoveryCard({required this.session});
+
+  final ControllerRuntimeSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'Runtime truth & recovery',
+      subtitle:
+          'Make stale, residual, and stopping runtime states obvious before they turn into ghost bugs.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: <Widget>[
+              KeyValuePair(label: 'Session Truth', value: session.truth.label),
+              KeyValuePair(label: 'Snapshot Age', value: session.ageLabel),
+              KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
+              KeyValuePair(
+                label: 'Needs attention',
+                value: session.needsAttention ? 'Yes' : 'No',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            session.truthNote,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(session.recoveryGuidance),
+        ],
+      ),
     );
   }
 }
@@ -157,6 +247,11 @@ class _SupportOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final posture = describeRuntimePosture(
+      runtimeMode: runtimeMode,
+      backendKind: backendKind,
+    );
+
     return SectionCard(
       title: 'Troubleshooting Overview',
       subtitle:
@@ -188,16 +283,48 @@ class _SupportOverviewCard extends StatelessWidget {
             spacing: 24,
             runSpacing: 12,
             children: <Widget>[
-              KeyValuePair(label: 'Connection phase', value: status.phase.name, width: 240),
-              KeyValuePair(label: 'Status note', value: status.message, width: 240),
-              KeyValuePair(label: 'Runtime mode', value: runtimeMode, width: 240),
-              KeyValuePair(label: 'Endpoint hint', value: endpointHint, width: 240),
+              KeyValuePair(
+                  label: 'Connection phase',
+                  value: status.phase.name,
+                  width: 240),
+              KeyValuePair(
+                  label: 'Status note', value: status.message, width: 240),
+              KeyValuePair(
+                  label: 'Runtime mode', value: runtimeMode, width: 240),
+              KeyValuePair(
+                label: 'Runtime posture',
+                value: posture.postureLabel,
+                width: 240,
+              ),
+              KeyValuePair(
+                label: 'Evidence grade',
+                value: posture.evidenceGradeLabel,
+                width: 240,
+              ),
+              KeyValuePair(
+                label: 'Execution path',
+                value: posture.executionPathLabel,
+                width: 240,
+              ),
+              KeyValuePair(
+                  label: 'Endpoint hint', value: endpointHint, width: 240),
               KeyValuePair(label: 'Backend', value: backendKind, width: 240),
-              KeyValuePair(label: 'Backend version', value: backendVersion, width: 240),
-              KeyValuePair(label: 'Diagnostics export', value: diagnosticsBackend, width: 240),
-              KeyValuePair(label: 'Issue category', value: issue.label, width: 240),
-              KeyValuePair(label: 'Support summary', value: issue.summary, width: 240),
+              KeyValuePair(
+                  label: 'Backend version', value: backendVersion, width: 240),
+              KeyValuePair(
+                  label: 'Diagnostics export',
+                  value: diagnosticsBackend,
+                  width: 240),
+              KeyValuePair(
+                  label: 'Issue category', value: issue.label, width: 240),
+              KeyValuePair(
+                  label: 'Support summary', value: issue.summary, width: 240),
             ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '${posture.truthNote} ${posture.evidenceGradeNote}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -340,11 +467,13 @@ class _IssueCategoryBanner extends StatelessWidget {
 class _SupportActionsCard extends StatelessWidget {
   const _SupportActionsCard({
     required this.status,
+    required this.runtimePosture,
     required this.onOpenProblemReport,
     required this.onOpenUpdateStatus,
   });
 
   final ClientConnectionStatus status;
+  final RuntimePosture runtimePosture;
   final VoidCallback onOpenProblemReport;
   final VoidCallback onOpenUpdateStatus;
 
@@ -373,6 +502,10 @@ class _SupportActionsCard extends StatelessWidget {
           const Text(
             'Problem Report is the export/share path. Update Status is for packaging and release context.',
           ),
+          const SizedBox(height: 8),
+          Text(runtimePosture.artifactCapabilityLabel),
+          const SizedBox(height: 4),
+          Text(runtimePosture.artifactCapabilityNote),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -381,7 +514,11 @@ class _SupportActionsCard extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onOpenProblemReport,
                 icon: const Icon(Icons.assignment_outlined),
-                label: const Text('Open Problem Report'),
+                label: Text(
+                  runtimePosture.canProduceRuntimeProofArtifact
+                      ? 'Open Problem Report'
+                      : 'Open Support Bundle',
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: onOpenUpdateStatus,
@@ -395,4 +532,3 @@ class _SupportActionsCard extends StatelessWidget {
     );
   }
 }
-

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/advanced/presentation/advanced_page.dart';
 import '../features/dashboard/presentation/dashboard_page.dart';
 import '../features/profiles/presentation/profiles_page.dart';
+import '../features/readiness/domain/readiness_report.dart';
 import '../features/settings/presentation/settings_page.dart';
 import '../platform/services/service_registry.dart';
 
@@ -17,12 +18,15 @@ class TrojanClientAppShell extends StatefulWidget {
 
 class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
   int _selectedIndex = 0;
+  int _advancedTabRequestId = 0;
+  AdvancedPageTab _requestedAdvancedTab = AdvancedPageTab.problemReport;
   DateTime? _lastHandledExternalActivationAt;
 
   @override
   void initState() {
     super.initState();
-    widget.services.desktopLifecycle.addListener(_handleDesktopLifecycleChanged);
+    widget.services.desktopLifecycle
+        .addListener(_handleDesktopLifecycleChanged);
     // initialize() 已在 bootstrap 阶段完成，此处不再重复调用
   }
 
@@ -43,7 +47,8 @@ class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
     }
 
     final activatedAt = status.lastExternalActivationAt;
-    if (activatedAt == null || activatedAt == _lastHandledExternalActivationAt) {
+    if (activatedAt == null ||
+        activatedAt == _lastHandledExternalActivationAt) {
       return;
     }
 
@@ -51,6 +56,14 @@ class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
     if (_selectedIndex != 0 && mounted) {
       setState(() => _selectedIndex = 0);
     }
+  }
+
+  void _openAdvanced([AdvancedPageTab tab = AdvancedPageTab.problemReport]) {
+    setState(() {
+      _selectedIndex = 3;
+      _requestedAdvancedTab = tab;
+      _advancedTabRequestId++;
+    });
   }
 
   /// 窄屏断点：低于此宽度使用 BottomNavigationBar 代替 NavigationRail。
@@ -71,12 +84,32 @@ class _TrojanClientAppShellState extends State<TrojanClientAppShell> {
         key: _pageKeys[0],
         services: widget.services,
         onOpenProfiles: () => setState(() => _selectedIndex = 1),
-        onOpenAdvanced: () => setState(() => _selectedIndex = 3),
+        onOpenAdvanced: () => _openAdvanced(),
         onOpenSettings: () => setState(() => _selectedIndex = 2),
       ),
-      ProfilesPage(key: _pageKeys[1], services: widget.services),
+      ProfilesPage(
+        key: _pageKeys[1],
+        services: widget.services,
+        onOpenAdvanced: (ReadinessAction action) {
+          switch (action) {
+            case ReadinessAction.openTroubleshooting:
+              _openAdvanced(AdvancedPageTab.problemReport);
+              return;
+            case ReadinessAction.openProfiles:
+            case ReadinessAction.openSettings:
+              _openAdvanced();
+              return;
+          }
+        },
+        onOpenSettings: () => setState(() => _selectedIndex = 2),
+      ),
       SettingsPage(key: _pageKeys[2], services: widget.services),
-      AdvancedPage(key: _pageKeys[3], services: widget.services),
+      AdvancedPage(
+        key: _pageKeys[3],
+        services: widget.services,
+        requestedTab: _requestedAdvancedTab,
+        tabRequestId: _advancedTabRequestId,
+      ),
     ];
 
     return LayoutBuilder(

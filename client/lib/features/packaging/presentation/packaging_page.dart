@@ -205,16 +205,23 @@ class PackagingPage extends StatelessWidget {
   }
 
   Widget _kv(String label, String value) {
-    return SizedBox(
-      width: 240,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final maxWidth =
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 240.0;
+        final width = maxWidth < 520 ? maxWidth : 240.0;
+        return SizedBox(
+          width: width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(value),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -241,15 +248,47 @@ class _ExportHistoryRow extends StatelessWidget {
       PackagingExportStatus.failed => record.error ?? 'Unknown export failure',
     };
 
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
-      title: Text(record.status.name),
-      subtitle: Text(summary),
-      trailing: Text(
-        record.finishedAt?.toIso8601String() ??
-            record.startedAt.toIso8601String(),
-      ),
+    final timestamp = record.finishedAt?.toIso8601String() ??
+        record.startedAt.toIso8601String();
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final useStackedLayout = constraints.maxWidth < 560;
+        if (useStackedLayout) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(icon),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        record.status.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(summary),
+                const SizedBox(height: 8),
+                Text(timestamp),
+              ],
+            ),
+          );
+        }
+
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon),
+          title: Text(record.status.name),
+          subtitle: Text(summary),
+          trailing: Text(timestamp),
+        );
+      },
     );
   }
 }
@@ -267,12 +306,44 @@ class _PlatformPackageRow extends StatelessWidget {
       DesktopPackageReadiness.validated => Icons.verified,
     };
 
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
-      title: Text(status.platform.name),
-      subtitle: Text(status.notes),
-      trailing: Text(status.readiness.name),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final useStackedLayout = constraints.maxWidth < 560;
+        if (useStackedLayout) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(icon),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        status.platform.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(status.notes),
+                const SizedBox(height: 8),
+                Text('Readiness: ${status.readiness.name}'),
+              ],
+            ),
+          );
+        }
+
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon),
+          title: Text(status.platform.name),
+          subtitle: Text(status.notes),
+          trailing: Text(status.readiness.name),
+        );
+      },
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
@@ -12,6 +14,8 @@ import 'package:trojan_pro_client/features/controller/domain/controller_telemetr
 import 'package:trojan_pro_client/features/controller/domain/last_runtime_failure_summary.dart';
 import 'package:trojan_pro_client/features/dashboard/presentation/dashboard_page.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
+import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
+import 'package:trojan_pro_client/features/readiness/domain/readiness_report.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_portability_service.dart';
@@ -21,20 +25,48 @@ import 'package:trojan_pro_client/features/profiles/application/profile_store.da
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
+import 'package:trojan_pro_client/platform/services/local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_exporter.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/service_registry.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
 
+class _DelayedReadLocalStateStore implements LocalStateStore {
+  static const Duration _readDelay = Duration(milliseconds: 200);
+
+  final MemoryLocalStateStore _delegate = MemoryLocalStateStore();
+
+  @override
+  String get backendName => _delegate.backendName;
+
+  @override
+  Future<void> delete(String key) => _delegate.delete(key);
+
+  @override
+  Future<String?> read(String key) async {
+    await Future<void>.delayed(_readDelay);
+    return _delegate.read(key);
+  }
+
+  @override
+  Future<void> write(String key, String value) => _delegate.write(key, value);
+}
+
 class _TestLifecycleController extends ClientControllerApi {
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
   String? lastConnectedProfileId;
+  ControllerRuntimeSession? _sessionOverride;
 
   @override
   ClientConnectionStatus get status => _status;
 
   set statusForTest(ClientConnectionStatus value) {
     _status = value;
+    notifyListeners();
+  }
+
+  set sessionForTest(ControllerRuntimeSession value) {
+    _sessionOverride = value;
     notifyListeners();
   }
 
@@ -58,9 +90,13 @@ class _TestLifecycleController extends ClientControllerApi {
       );
 
   @override
-  ControllerRuntimeSession get session => ControllerRuntimeSession(
+  ControllerRuntimeSession get session => _sessionOverride ??
+      ControllerRuntimeSession(
         isRunning: _status.phase == ClientConnectionPhase.connected,
         updatedAt: DateTime.now(),
+        phase: _status.phase == ClientConnectionPhase.connected
+            ? ControllerRuntimePhase.sessionReady
+            : ControllerRuntimePhase.stopped,
       );
 
   @override
@@ -106,6 +142,23 @@ class _TestLifecycleController extends ClientControllerApi {
   }
 }
 
+class _RuntimeTrueLifecycleController extends _TestLifecycleController {
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'real-shell-controller',
+        backendVersion: 'test-runtime-true',
+        capabilities: const <String>['connect', 'disconnect', 'logs'],
+        lastUpdatedAt: DateTime.parse('2026-03-13T00:00:00.000Z'),
+      );
+
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'real-runtime-boundary',
+        endpointHint: 'unix:/tmp/trojan-runtime.sock',
+        enableVerboseTelemetry: true,
+      );
+}
+
 Future<void> _setDesktopSurface(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(1600, 1400));
   addTearDown(() async {
@@ -116,6 +169,7 @@ Future<void> _setDesktopSurface(WidgetTester tester) async {
 Future<void> _showDashboard(
   WidgetTester tester, {
   required ClientServiceRegistry services,
+  VoidCallback? onOpenAdvanced,
   VoidCallback? onOpenSettings,
 }) async {
   await _setDesktopSurface(tester);
@@ -124,6 +178,7 @@ Future<void> _showDashboard(
       home: Scaffold(
         body: DashboardPage(
           services: services,
+          onOpenAdvanced: onOpenAdvanced,
           onOpenSettings: onOpenSettings,
         ),
       ),
@@ -143,8 +198,11 @@ Future<void> _pumpUntilPhase(
   }
 }
 
-ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
-  final localState = MemoryLocalStateStore();
+ClientServiceRegistry _buildServices({
+  ClientControllerApi? controller,
+  LocalStateStore? localStateOverride,
+}) {
+  final localState = localStateOverride ?? MemoryLocalStateStore();
   final secureStorage = MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
   final profileStore = ProfileStore.withSampleProfiles(
@@ -165,6 +223,14 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     packagingStore: packagingStore,
     fileExporter: diagnosticsExporter,
   );
+  final readiness = ReadinessService(
+    profileStore: profileStore,
+    profileSecrets: profileSecrets,
+    secureStorage: secureStorage,
+    controller: resolvedController,
+    localStateStore: localState,
+  );
+
   final diagnostics = DiagnosticsExportService(
     profileStore: profileStore,
     profilePortability: profilePortability,
@@ -173,6 +239,7 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     controller: resolvedController,
     secureStorage: secureStorage,
     fileExporter: diagnosticsExporter,
+    readiness: readiness,
   );
 
   return ClientServiceRegistry(
@@ -186,6 +253,7 @@ ClientServiceRegistry _buildServices({ClientControllerApi? controller}) {
     packagingExport: packagingExport,
     settingsStore: settingsStore,
     controller: resolvedController,
+    readiness: readiness,
     diagnostics: diagnostics,
   );
 }
@@ -200,6 +268,50 @@ void main() {
 
     expect(find.text('Save the password before testing'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
+    expect(find.text('Readiness Provenance'), findsOneWidget);
+  });
+
+  testWidgets('late cached snapshot does not overwrite live readiness',
+      (WidgetTester tester) async {
+    final localState = _DelayedReadLocalStateStore();
+    final services = _buildServices(localStateOverride: localState);
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+    await localState.write(
+      'client.readiness.last-known.${profile.id}',
+      jsonEncode(
+        ReadinessReport.fromChecks(
+          const <ReadinessCheck>[
+            ReadinessCheck(
+              domain: ReadinessDomain.config,
+              level: ReadinessLevel.blocked,
+              summary: 'stale invalid config snapshot',
+              detail: 'stale snapshot should not override live readiness',
+              action: ReadinessAction.openProfiles,
+              actionLabel: 'Open Profiles',
+            ),
+          ],
+          generatedAt: DateTime.now().subtract(const Duration(minutes: 10)),
+        ).toJson(),
+      ),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Live check'), findsOneWidget);
+    expect(find.text('Connect blocked'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows connection home CTAs when profile is ready',
@@ -221,9 +333,27 @@ void main() {
     await _showDashboard(tester, services: services);
 
     expect(find.text('Connection Home'), findsOneWidget);
+    expect(find.text('Runtime Posture'), findsOneWidget);
+    expect(find.text('Evidence Grade'), findsOneWidget);
+    expect(find.text('Stub-only'), findsWidgets);
+    expect(find.text('Shell-grade only'), findsWidgets);
     expect(find.text('Open Troubleshooting'), findsWidgets);
     expect(find.text('Open Profiles'), findsWidgets);
     expect(find.text('Problem Report'), findsWidgets);
+  });
+
+  testWidgets('runtime session summary surfaces truth and recovery guidance',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+
+    await _showDashboard(tester, services: services);
+    await tester.tap(find.text('Advanced runtime session'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Session Truth:'), findsOneWidget);
+    expect(find.text('Runtime Truth'), findsOneWidget);
+    expect(find.text('Snapshot Age'), findsOneWidget);
+    expect(find.textContaining('leftover session state'), findsOneWidget);
   });
 
   testWidgets('connect now CTA triggers a connection attempt',
@@ -240,7 +370,8 @@ void main() {
 
     await _showDashboard(tester, services: services);
 
-    final connectFinder = find.widgetWithText(FilledButton, 'Connect now');
+    final connectFinder =
+        find.widgetWithText(FilledButton, 'Connect now (stub path)');
     expect(connectFinder, findsOneWidget);
     await tester.ensureVisible(connectFinder);
     await tester.pump();
@@ -254,6 +385,75 @@ void main() {
     );
 
     expect(services.controller.status.phase, ClientConnectionPhase.connected);
+    expect(find.textContaining('Shell validation is ready'), findsOneWidget);
+  });
+
+  testWidgets('dashboard gates connect when readiness is blocked',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsWidgets);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsNothing,
+    );
+    expect(find.widgetWithText(FilledButton, 'Open Profiles'), findsWidgets);
+  });
+
+  testWidgets(
+      'dashboard readiness refreshes when selected profile changes in place',
+      (WidgetTester tester) async {
+    final services = _buildServices();
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsWidgets);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsNothing,
+    );
+
+    final refreshed = services.profileStore.selectedProfile!.copyWith(
+      serverHost: 'hk-edge.example.com',
+      hasStoredPassword: true,
+      updatedAt: DateTime.now().add(const Duration(seconds: 1)),
+    );
+    services.profileStore.upsertProfile(refreshed);
+
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Connect now (stub path)'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('dashboard distinguishes selected and active profile',
@@ -291,6 +491,12 @@ void main() {
     final services = _buildServices(controller: controller);
     final first = services.profileStore.selectedProfile!;
     final second = services.profileStore.profiles[1];
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: first.id,
+      password: 'secret-first',
+    );
+    services.profileStore
+        .upsertProfile(first.copyWith(hasStoredPassword: true));
     services.profileStore.selectProfile(second.id);
     controller.statusForTest = ClientConnectionStatus(
       phase: ClientConnectionPhase.error,
@@ -298,10 +504,16 @@ void main() {
       updatedAt: DateTime.now(),
       activeProfileId: first.id,
     );
+    controller.sessionForTest = ControllerRuntimeSession(
+      isRunning: false,
+      updatedAt: DateTime.now(),
+      phase: ControllerRuntimePhase.stopped,
+    );
 
     await _showDashboard(tester, services: services);
 
-    final retryFinder = find.widgetWithText(FilledButton, 'Retry now');
+    final retryFinder =
+        find.widgetWithText(FilledButton, 'Retry now (stub path)');
     expect(retryFinder, findsOneWidget);
     await tester.ensureVisible(retryFinder);
     await tester.pump();
@@ -312,6 +524,52 @@ void main() {
     expect(controller.lastConnectedProfileId, first.id);
     expect(controller.status.activeProfileId, first.id);
     expect(controller.status.phase, ClientConnectionPhase.connected);
+  });
+
+  testWidgets('error with residual session steers user to troubleshooting before retry',
+      (WidgetTester tester) async {
+    final controller = _RuntimeTrueLifecycleController();
+    final services = _buildServices(controller: controller);
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+    controller.statusForTest = ClientConnectionStatus(
+      phase: ClientConnectionPhase.error,
+      message: 'Runtime session exited with code 7.',
+      updatedAt: DateTime.now(),
+      activeProfileId: profile.id,
+    );
+    controller.sessionForTest = ControllerRuntimeSession(
+      isRunning: false,
+      updatedAt: DateTime.now(),
+      phase: ControllerRuntimePhase.failed,
+      lastExitCode: 7,
+    );
+
+    var openedAdvanced = false;
+    await _showDashboard(
+      tester,
+      services: services,
+      onOpenAdvanced: () {
+        openedAdvanced = true;
+      },
+    );
+
+    final troubleshootingFinder = find.text('Open Troubleshooting');
+    expect(troubleshootingFinder, findsWidgets);
+    expect(find.text('Capture snapshot before retry'), findsOneWidget);
+    expect(find.textContaining('Preserve the current runtime evidence'),
+        findsOneWidget);
+
+    await tester.tap(troubleshootingFinder.first);
+    await tester.pump();
+
+    expect(openedAdvanced, isTrue);
   });
 
   testWidgets('disconnect now CTA tears down an active connection',
@@ -349,7 +607,92 @@ void main() {
     );
   });
 
-  testWidgets('shows recent desktop activation when duplicate launch focuses window',
+  testWidgets('connected stale runtime steers user to troubleshooting first',
+      (WidgetTester tester) async {
+    final controller = _TestLifecycleController();
+    final services = _buildServices(controller: controller);
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+    controller.statusForTest = ClientConnectionStatus(
+      phase: ClientConnectionPhase.connected,
+      message: 'Runtime session is ready.',
+      updatedAt: DateTime.now(),
+      activeProfileId: profile.id,
+    );
+    controller.sessionForTest = ControllerRuntimeSession(
+      isRunning: true,
+      updatedAt: DateTime.now().subtract(const Duration(minutes: 3)),
+      phase: ControllerRuntimePhase.sessionReady,
+      expectedLocalSocksPort: 10808,
+    );
+
+    await _showDashboard(tester, services: services);
+
+    expect(find.text('Connection state needs revalidation'), findsOneWidget);
+    expect(find.text('Open Troubleshooting'), findsWidgets);
+    expect(find.widgetWithText(OutlinedButton, 'Disconnect now'), findsOneWidget);
+    expect(find.textContaining('disconnect and reconnect'), findsOneWidget);
+    expect(find.text('Action safety'), findsOneWidget);
+    expect(find.text('Revalidate before changing state'), findsOneWidget);
+    expect(find.textContaining('Open Troubleshooting first'), findsWidgets);
+    expect(find.text('Recommended right now'), findsOneWidget);
+    expect(find.textContaining('Open Troubleshooting first'), findsWidgets);
+    expect(find.widgetWithText(OutlinedButton, 'Disconnect now'), findsOneWidget);
+    expect(
+      find.textContaining('Secondary state-changing actions are temporarily withheld'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('disconnecting session tells operator to wait for exit confirmation',
+      (WidgetTester tester) async {
+    final controller = _TestLifecycleController();
+    final services = _buildServices(controller: controller);
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+    controller.statusForTest = ClientConnectionStatus(
+      phase: ClientConnectionPhase.disconnecting,
+      message: 'Disconnecting current session...',
+      updatedAt: DateTime.now(),
+      activeProfileId: profile.id,
+    );
+    controller.sessionForTest = ControllerRuntimeSession(
+      isRunning: true,
+      updatedAt: DateTime.now().subtract(const Duration(seconds: 10)),
+      phase: ControllerRuntimePhase.alive,
+      stopRequested: true,
+      stopRequestedAt: DateTime.now().subtract(const Duration(seconds: 5)),
+      expectedLocalSocksPort: 10808,
+    );
+
+    await _showDashboard(tester, services: services);
+
+    expect(find.textContaining('exit confirmation'), findsWidgets);
+    expect(find.text('Open Troubleshooting'), findsWidgets);
+    expect(find.text('Action safety'), findsOneWidget);
+    expect(find.text('Wait for exit confirmation'), findsWidgets);
+    expect(
+      find.text('Recommended right now: capture a support snapshot first'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('capture the current support evidence'),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'shows recent desktop activation when duplicate launch focuses window',
       (WidgetTester tester) async {
     final services = _buildServices();
     await services.desktopLifecycle.recordExternalActivation(
@@ -407,7 +750,8 @@ void main() {
       },
     );
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Review desktop behavior'));
+    await tester
+        .tap(find.widgetWithText(OutlinedButton, 'Review desktop behavior'));
     await tester.pump();
 
     expect(openedSettings, isTrue);

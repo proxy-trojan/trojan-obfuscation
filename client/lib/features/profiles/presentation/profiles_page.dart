@@ -5,15 +5,29 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../platform/services/service_registry.dart';
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/runtime_action_feedback.dart';
+import '../../controller/domain/runtime_posture.dart';
+import 'profile_connection_action_policy.dart';
+import '../../readiness/domain/readiness_refresh_fingerprint.dart';
+import '../../readiness/domain/readiness_report.dart';
+import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../domain/client_profile.dart';
 import 'import_export_dialog.dart';
 import 'profile_editor_dialog.dart';
 import 'profile_secret_dialog.dart';
 
 class ProfilesPage extends StatelessWidget {
-  const ProfilesPage({super.key, required this.services});
+  const ProfilesPage({
+    super.key,
+    required this.services,
+    this.onOpenAdvanced,
+    this.onOpenSettings,
+  });
 
   final ClientServiceRegistry services;
+  final ValueChanged<ReadinessAction>? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -25,84 +39,95 @@ class ProfilesPage extends StatelessWidget {
         final selected = services.profileStore.selectedProfile;
         final status = services.controller.status;
 
-        return SingleChildScrollView(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        final listSection = SectionCard(
+          title: 'Profiles',
+          subtitle: 'Desktop-first profile management shell.',
+          trailing: Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
-              Expanded(
-                flex: 2,
-                child: SectionCard(
-                  title: 'Profiles',
-                  subtitle: 'Desktop-first profile management shell.',
-                  trailing: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: <Widget>[
-                      OutlinedButton.icon(
-                        onPressed: () => _importProfileFromFile(context),
-                        icon: const Icon(Icons.folder_open),
-                        label: const Text('Import File'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _importProfile(context),
-                        icon: const Icon(Icons.file_upload),
-                        label: const Text('Import Text'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: () => _createProfile(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create'),
-                      ),
-                    ],
-                  ),
-                  child: profiles.isEmpty
-                      ? const Text('No profiles yet.')
-                      : Column(
-                          children: profiles
-                              .map(
-                                (profile) => ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(
-                                    services.profileStore.selectedProfileId ==
-                                            profile.id
-                                        ? Icons.radio_button_checked
-                                        : Icons.radio_button_off,
-                                  ),
-                                  title: Text(profile.name),
-                                  subtitle: Text(
-                                      '${profile.serverHost}:${profile.serverPort}'),
-                                  trailing: status.activeProfileId ==
-                                              profile.id &&
-                                          status.phase ==
-                                              ClientConnectionPhase.connected
-                                      ? const Icon(Icons.link,
-                                          color: Colors.green)
-                                      : null,
-                                  onTap: () => services.profileStore
-                                      .selectProfile(profile.id),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                ),
+              OutlinedButton.icon(
+                onPressed: () => _importProfileFromFile(context),
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Import File'),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 3,
-                child: selected == null
-                    ? const SectionCard(
-                        title: 'Profile Details',
-                        child:
-                            Text('Select or create a profile to inspect it.'),
-                      )
-                    : _SelectedProfileCard(
-                        services: services,
-                        selected: selected,
-                        status: status,
-                      ),
+              OutlinedButton.icon(
+                onPressed: () => _importProfile(context),
+                icon: const Icon(Icons.file_upload),
+                label: const Text('Import Text'),
+              ),
+              FilledButton.icon(
+                onPressed: () => _createProfile(context),
+                icon: const Icon(Icons.add),
+                label: const Text('Create'),
               ),
             ],
           ),
+          child: profiles.isEmpty
+              ? const Text('No profiles yet.')
+              : Column(
+                  children: profiles
+                      .map(
+                        (profile) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            services.profileStore.selectedProfileId ==
+                                    profile.id
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                          ),
+                          title: Text(profile.name),
+                          subtitle: Text(
+                              '${profile.serverHost}:${profile.serverPort}'),
+                          trailing: status.activeProfileId == profile.id &&
+                                  status.phase ==
+                                      ClientConnectionPhase.connected
+                              ? const Icon(Icons.link, color: Colors.green)
+                              : null,
+                          onTap: () =>
+                              services.profileStore.selectProfile(profile.id),
+                        ),
+                      )
+                      .toList(),
+                ),
+        );
+
+        final detailSection = selected == null
+            ? const SectionCard(
+                title: 'Profile Details',
+                child: Text('Select or create a profile to inspect it.'),
+              )
+            : _SelectedProfileCard(
+                services: services,
+                selected: selected,
+                status: status,
+                onOpenAdvanced: onOpenAdvanced,
+                onOpenSettings: onOpenSettings,
+              );
+
+        return LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final useStackedLayout = constraints.maxWidth < 900;
+            return SingleChildScrollView(
+              child: useStackedLayout
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        listSection,
+                        const SizedBox(height: 16),
+                        detailSection,
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(flex: 2, child: listSection),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 3, child: detailSection),
+                      ],
+                    ),
+            );
+          },
         );
       },
     );
@@ -213,16 +238,32 @@ class ProfilesPage extends StatelessWidget {
   }
 }
 
-class _SelectedProfileCard extends StatelessWidget {
+class _SelectedProfileCard extends StatefulWidget {
   const _SelectedProfileCard({
     required this.services,
     required this.selected,
     required this.status,
+    this.onOpenAdvanced,
+    this.onOpenSettings,
   });
 
   final ClientServiceRegistry services;
   final ClientProfile selected;
   final ClientConnectionStatus status;
+  final ValueChanged<ReadinessAction>? onOpenAdvanced;
+  final VoidCallback? onOpenSettings;
+
+  @override
+  State<_SelectedProfileCard> createState() => _SelectedProfileCardState();
+}
+
+class _SelectedProfileCardState extends State<_SelectedProfileCard> {
+  late final ReadinessSurfaceController _readinessController;
+  String? _lastRefreshFingerprint;
+
+  ClientServiceRegistry get services => widget.services;
+  ClientProfile get selected => widget.selected;
+  ClientConnectionStatus get status => widget.status;
 
   bool get _active => status.activeProfileId == selected.id;
 
@@ -235,49 +276,113 @@ class _SelectedProfileCard extends StatelessWidget {
   bool get _hasConnectedElsewhere =>
       !_active && status.phase == ClientConnectionPhase.connected;
 
-  bool get _canToggleConnection {
-    if (!selected.hasStoredPassword) return false;
-    if (status.isBusy) return false;
-    if (_hasConnectedElsewhere) return false;
-    return true;
+  ControllerRuntimeSession get _runtimeSession => services.controller.session;
+
+  RuntimePosture get _runtimePosture => describeRuntimePosture(
+        runtimeMode: services.controller.runtimeConfig.mode,
+        backendKind: services.controller.telemetry.backendKind,
+      );
+
+  ProfileConnectionActionPolicy get _connectionPolicy =>
+      ProfileConnectionActionPolicy.resolve(
+        hasStoredPassword: selected.hasStoredPassword,
+        active: _active,
+        status: status,
+        runtimePosture: _runtimePosture,
+        runtimeSession: _runtimeSession,
+        readinessReport: _readinessController.latestReport,
+        hasConnectedElsewhere: _hasConnectedElsewhere,
+        onOpenAdvancedAvailable: widget.onOpenAdvanced != null,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _readinessController = ReadinessSurfaceController(
+      isMounted: () => mounted,
+      applyState: setState,
+    );
+    _lastRefreshFingerprint = _refreshFingerprint();
+    _readinessController.initialize(
+      refreshKey: _lastRefreshFingerprint!,
+      restoreReport: () => services.readiness.readLastKnownReport(
+        profileOverride: selected,
+      ),
+      buildReport: () => services.readiness.buildReport(
+        profileOverride: selected,
+      ),
+    );
   }
 
-  String get _connectActionLabel {
-    if (!selected.hasStoredPassword) return 'Set Password First';
-    if (_active && status.phase == ClientConnectionPhase.connected) {
-      return 'Disconnect';
-    }
-    if (_active && status.phase == ClientConnectionPhase.connecting) {
-      return 'Connecting...';
-    }
-    if (_active && status.phase == ClientConnectionPhase.disconnecting) {
-      return 'Disconnecting...';
-    }
-    if (_hasConnectedElsewhere) {
-      return 'Connected Elsewhere';
-    }
-    return 'Connect';
+  @override
+  void didUpdateWidget(covariant _SelectedProfileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _refreshReadinessIfInputsChanged();
   }
 
-  String get _statusHint {
-    if (!selected.hasStoredPassword) {
-      return 'Save the Trojan password before trying this profile.';
+  String _refreshFingerprint() {
+    return buildReadinessRefreshFingerprint(
+      profile: selected,
+      storageSummary: services.profileSecrets.storageSummary,
+      runtimeMode: services.controller.runtimeConfig.mode,
+      runtimeEndpointHint: services.controller.runtimeConfig.endpointHint,
+    );
+  }
+
+  void _refreshReadinessIfInputsChanged() {
+    final fingerprint = _refreshFingerprint();
+    if (_lastRefreshFingerprint == fingerprint) return;
+    _lastRefreshFingerprint = fingerprint;
+    _readinessController.startCycle(
+      restoreReport: () => services.readiness.readLastKnownReport(
+        profileOverride: selected,
+      ),
+      buildReport: () => services.readiness.buildReport(
+        profileOverride: selected,
+      ),
+    );
+  }
+
+  void _runRecommendation(BuildContext context, ReadinessRecommendation rec) {
+    switch (rec.action) {
+      case ReadinessAction.openProfiles:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'You are already in Profiles. Update this profile directly.'),
+          ),
+        );
+        return;
+      case ReadinessAction.openTroubleshooting:
+        if (widget.onOpenAdvanced != null) {
+          widget.onOpenAdvanced!.call(rec.action);
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Troubleshooting page is unavailable in this surface.'),
+          ),
+        );
+        return;
+      case ReadinessAction.openSettings:
+        if (widget.onOpenSettings != null) {
+          widget.onOpenSettings!.call();
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Settings page is unavailable in this surface.'),
+          ),
+        );
+        return;
     }
-    if (_hasConnectedElsewhere) {
-      return 'Another profile is already connected. Disconnect it before switching here.';
-    }
-    if (_active && status.phase == ClientConnectionPhase.connecting) {
-      return 'This profile is still establishing a runtime session.';
-    }
-    if (_active && status.phase == ClientConnectionPhase.disconnecting) {
-      return 'This profile is disconnecting now. Wait for the shutdown to finish.';
-    }
-    return status.message;
   }
 
   @override
   Widget build(BuildContext context) {
-    final active = _active;
+    final posture = _runtimePosture;
+    final connectionPolicy = _connectionPolicy;
 
     return SectionCard(
       title: selected.name,
@@ -334,20 +439,57 @@ class _SelectedProfileCard extends StatelessWidget {
             child: const Text('Remove'),
           ),
           FilledButton(
-            onPressed: _canToggleConnection
-                ? () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    final result = active &&
-                            status.phase == ClientConnectionPhase.connected
-                        ? await services.controller.disconnect()
-                        : await services.controller.connect(selected);
-                    if (!context.mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(result.summary)),
-                    );
-                  }
-                : null,
-            child: Text(_connectActionLabel),
+            onPressed: !connectionPolicy.buttonEnabled
+                ? null
+                : connectionPolicy.primaryAction ==
+                        ProfileConnectionPrimaryAction.openTroubleshooting
+                    ? () => widget.onOpenAdvanced!(
+                        ReadinessAction.openTroubleshooting,
+                      )
+                    : connectionPolicy.canToggleConnection
+                        ? () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final isDisconnectAction =
+                                connectionPolicy.primaryAction ==
+                                    ProfileConnectionPrimaryAction.disconnect;
+                            if (!isDisconnectAction) {
+                              final readinessReport = await services.readiness
+                                  .buildReport(profileOverride: selected);
+                              if (!mounted) return;
+                              _readinessController
+                                  .replaceLatestReport(readinessReport);
+                              if (readinessReport.overallLevel ==
+                                  ReadinessLevel.blocked) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Connect blocked: ${readinessReport.summary}',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                            }
+
+                            final result = isDisconnectAction
+                                ? await services.controller.disconnect()
+                                : await services.controller.connect(selected);
+                            if (!context.mounted) return;
+                            final feedback = buildRuntimeActionFeedback(
+                              action: isDisconnectAction
+                                  ? RuntimeActionKind.disconnect
+                                  : RuntimeActionKind.connect,
+                              result: result,
+                              status: services.controller.status,
+                              session: services.controller.session,
+                              posture: _runtimePosture,
+                            );
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(feedback)),
+                            );
+                          }
+                        : null,
+            child: Text(connectionPolicy.buttonLabel),
           ),
         ],
       ),
@@ -361,6 +503,13 @@ class _SelectedProfileCard extends StatelessWidget {
             _detail('TLS Verification',
                 selected.verifyTls ? 'Enabled' : 'Disabled'),
             _detail('Runtime Mode', services.controller.runtimeConfig.mode),
+            _detail('Runtime Posture', posture.postureLabel),
+            _detail('Evidence Grade', posture.evidenceGradeLabel),
+            _detail('Execution Path', posture.executionPathLabel),
+            _detail(
+              'Runtime Truth',
+              '${posture.truthNote} ${posture.evidenceGradeNote}',
+            ),
             _detail('Runtime Endpoint',
                 services.controller.runtimeConfig.endpointHint),
             _detail(
@@ -375,7 +524,50 @@ class _SelectedProfileCard extends StatelessWidget {
             _detail('Updated', selected.updatedAt.toIso8601String()),
             if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
             const SizedBox(height: 12),
-            Text('Controller status: $_statusHint'),
+            FutureBuilder<ReadinessReport>(
+              future: _readinessController.future,
+              builder: (BuildContext context,
+                  AsyncSnapshot<ReadinessReport> snapshot) {
+                final report =
+                    snapshot.data ?? _readinessController.latestReport;
+                return _ProfileReadinessNotice(
+                  report: report,
+                  showCachedRefreshHint: report?.isCachedSnapshot == true &&
+                      snapshot.connectionState != ConnectionState.done,
+                  onRecommendation: report?.recommendation == null
+                      ? null
+                      : () => _runRecommendation(
+                            context,
+                            report!.recommendation!,
+                          ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            Text('Controller status: ${connectionPolicy.statusHint}'),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.indigo.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'Action safety',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(connectionPolicy.actionSafety.label),
+                  const SizedBox(height: 4),
+                  Text(connectionPolicy.actionSafety.detail),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -587,13 +779,115 @@ class _SelectedProfileCard extends StatelessWidget {
   }
 
   Widget _detail(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final useStackedLayout = constraints.maxWidth < 520;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: useStackedLayout
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(value),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    SizedBox(width: 140, child: Text(label)),
+                    Expanded(child: Text(value)),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _ProfileReadinessNotice extends StatelessWidget {
+  const _ProfileReadinessNotice({
+    required this.report,
+    this.showCachedRefreshHint = false,
+    this.onRecommendation,
+  });
+
+  final ReadinessReport? report;
+  final bool showCachedRefreshHint;
+  final VoidCallback? onRecommendation;
+
+  Color _tone(ReadinessLevel level) {
+    return switch (level) {
+      ReadinessLevel.ready => Colors.green,
+      ReadinessLevel.degraded => Colors.orange,
+      ReadinessLevel.blocked => Colors.red,
+    };
+  }
+
+  IconData _recommendationIcon(ReadinessAction action) {
+    return switch (action) {
+      ReadinessAction.openProfiles => Icons.storage_outlined,
+      ReadinessAction.openTroubleshooting => Icons.build_circle_outlined,
+      ReadinessAction.openSettings => Icons.settings_outlined,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (report == null) {
+      return const SizedBox.shrink();
+    }
+
+    final tone = _tone(report!.overallLevel);
+    final recommendation = report!.recommendation;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.25)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          SizedBox(width: 140, child: Text(label)),
-          Expanded(child: Text(value)),
+          Text(
+            'Readiness: ${report!.overallLevel.label}',
+            style: TextStyle(
+              color: tone,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(report!.summary),
+          const SizedBox(height: 8),
+          Text(
+            'Readiness source: ${report!.provenanceSummary}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          if (showCachedRefreshHint) ...<Widget>[
+            const SizedBox(height: 8),
+            const Text(
+              'Showing a cached snapshot while the live readiness refresh runs.',
+            ),
+          ],
+          if (recommendation != null) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              'Recommended next step: ${recommendation.label}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onRecommendation,
+              icon: Icon(_recommendationIcon(recommendation.action)),
+              label: Text(recommendation.label),
+            ),
+          ],
         ],
       ),
     );

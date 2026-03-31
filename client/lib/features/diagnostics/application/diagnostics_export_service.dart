@@ -4,9 +4,12 @@ import '../../../platform/secure_storage/secure_storage.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/diagnostics_file_exporter.dart';
 import '../../controller/application/client_controller_api.dart';
+import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/runtime_posture.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
+import '../../readiness/application/readiness_service.dart';
 import '../../settings/application/settings_store.dart';
 
 class DiagnosticsExportResult {
@@ -28,7 +31,10 @@ class DiagnosticsExportService {
     required this.controller,
     required this.secureStorage,
     required this.fileExporter,
+    required this.readiness,
     AppRuntimeErrorStore? appRuntimeErrors,
+    this.adapterSelectionReason,
+    this.expectedRealRuntimePath,
   }) : appRuntimeErrors = appRuntimeErrors ?? AppRuntimeErrorStore();
 
   final ProfileStore profileStore;
@@ -38,18 +44,48 @@ class DiagnosticsExportService {
   final ClientControllerApi controller;
   final SecureStorage secureStorage;
   final DiagnosticsFileExporter fileExporter;
+  final ReadinessService readiness;
   final AppRuntimeErrorStore appRuntimeErrors;
+  final String? adapterSelectionReason;
+  final bool? expectedRealRuntimePath;
 
-  Future<String> buildPreviewBundle() async {
+  Future<String> buildPreviewBundle() {
+    return _buildBundle(bundleKind: 'support-bundle');
+  }
+
+  Future<String> buildRuntimeProofArtifact() async {
+    final contents = await _buildBundle(bundleKind: 'runtime-proof-artifact');
+    final payload = jsonDecode(contents) as Map<String, dynamic>;
+    final runtimePosture = (payload['controller']
+        as Map<String, dynamic>)['runtimePosture'] as Map<String, dynamic>;
+    if (runtimePosture['evidenceGrade'] != 'Evidence-grade') {
+      throw StateError(
+        'Runtime-proof artifact export requires an Evidence-grade posture.',
+      );
+    }
+    return contents;
+  }
+
+  Future<String> _buildBundle({required String bundleKind}) async {
     final selected = profileStore.selectedProfile;
     final keys = await secureStorage.listKeys();
     final controllerHealth = await controller.checkHealth();
+    final readinessReport = await readiness.buildReport();
+    final controllerStatus = controller.status;
+    final controllerTelemetry = controller.telemetry;
+    final controllerRuntimeConfig = controller.runtimeConfig;
+    final runtimeSession = controller.session;
+    final runtimePosture = describeRuntimePosture(
+      runtimeMode: controllerRuntimeConfig.mode,
+      backendKind: controllerTelemetry.backendKind,
+    );
     final releaseManifest = packagingStore.buildReleaseManifest();
     final updateMetadata = packagingStore.buildUpdateMetadataSnapshot();
     final storageStatus = secureStorage.status;
     final appUnhandledError = appRuntimeErrors.lastUnhandledError;
 
     final payload = <String, Object?>{
+      'bundleKind': bundleKind,
       'generatedAt': DateTime.now().toIso8601String(),
       'profileCount': profileStore.profiles.length,
       'selectedProfile': selected == null
@@ -62,24 +98,49 @@ class DiagnosticsExportService {
               'sni': selected.sni,
               'hasStoredPassword': selected.hasStoredPassword,
             },
+      'readiness': readinessReport.toJson(),
       'controller': {
-        'phase': controller.status.phase.name,
-        'message': controller.status.message,
-        'activeProfileId': controller.status.activeProfileId,
-        'updatedAt': controller.status.updatedAt.toIso8601String(),
+        'phase': controllerStatus.phase.name,
+        'message': controllerStatus.message,
+        'activeProfileId': controllerStatus.activeProfileId,
+        'updatedAt': controllerStatus.updatedAt.toIso8601String(),
         'telemetry': {
-          'backendKind': controller.telemetry.backendKind,
-          'backendVersion': controller.telemetry.backendVersion,
-          'capabilities': controller.telemetry.capabilities,
-          'lastUpdatedAt': controller.telemetry.lastUpdatedAt.toIso8601String(),
+          'backendKind': controllerTelemetry.backendKind,
+          'backendVersion': controllerTelemetry.backendVersion,
+          'capabilities': controllerTelemetry.capabilities,
+          'lastUpdatedAt': controllerTelemetry.lastUpdatedAt.toIso8601String(),
         },
-        'runtimeConfig': controller.runtimeConfig.toJson(),
+        'runtimeConfig': controllerRuntimeConfig.toJson(),
         'runtimeHealth': {
           'level': controllerHealth.level.name,
           'summary': controllerHealth.summary,
           'updatedAt': controllerHealth.updatedAt.toIso8601String(),
         },
-        'runtimeSession': controller.session.toJson(),
+        'runtimeSession': {
+          ...runtimeSession.toJson(),
+          'truth': runtimeSession.truth.label,
+          'needsAttention': runtimeSession.needsAttention,
+          'truthNote': runtimeSession.truthNote,
+          'recoveryGuidance': runtimeSession.recoveryGuidance,
+        },
+        'selection': {
+          'expectedRealRuntimePath': expectedRealRuntimePath,
+          'reason': adapterSelectionReason,
+        },
+        'runtimePosture': {
+          'kind': runtimePosture.kind.name,
+          'label': runtimePosture.postureLabel,
+          'evidenceGrade': runtimePosture.evidenceGradeLabel,
+          'executionPath': runtimePosture.executionPathLabel,
+          'truthNote': runtimePosture.truthNote,
+          'evidenceNote': runtimePosture.evidenceGradeNote,
+          'artifactCapability': runtimePosture.artifactCapabilityLabel,
+          'artifactCapabilityNote': runtimePosture.artifactCapabilityNote,
+          'operatorGuidance': {
+            'heading': runtimePosture.operatorGuidanceHeading,
+            'checklist': runtimePosture.operatorChecklist,
+          },
+        },
         'recentEvents': controller.recentEvents
             .map(
               (event) => <String, Object?>{
@@ -141,6 +202,16 @@ class DiagnosticsExportService {
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     final target = await fileExporter.exportText(
       fileName: 'trojan-pro-support-$timestamp.json',
+      contents: contents,
+    );
+    return DiagnosticsExportResult(target: target, contents: contents);
+  }
+
+  Future<DiagnosticsExportResult> exportRuntimeProofArtifact() async {
+    final contents = await buildRuntimeProofArtifact();
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final target = await fileExporter.exportText(
+      fileName: 'trojan-pro-runtime-proof-$timestamp.json',
       contents: contents,
     );
     return DiagnosticsExportResult(target: target, contents: contents);

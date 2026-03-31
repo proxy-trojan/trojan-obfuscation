@@ -8,6 +8,7 @@ import 'package:trojan_pro_client/features/profiles/application/profile_portabil
 import 'package:trojan_pro_client/features/profiles/application/profile_secrets_service.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_serialization.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_store.dart';
+import 'package:trojan_pro_client/features/readiness/application/readiness_service.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_serialization.dart';
 import 'package:trojan_pro_client/features/settings/application/settings_store.dart';
 import 'package:trojan_pro_client/features/settings/presentation/settings_page.dart';
@@ -19,6 +20,13 @@ import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.
 
 Future<void> _setDesktopSurface(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(1600, 1400));
+  addTearDown(() async {
+    await tester.binding.setSurfaceSize(null);
+  });
+}
+
+Future<void> _setCompactSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(430, 1400));
   addTearDown(() async {
     await tester.binding.setSurfaceSize(null);
   });
@@ -46,6 +54,12 @@ ClientServiceRegistry _buildServices() {
     packagingStore: packagingStore,
     fileExporter: diagnosticsExporter,
   );
+  final readiness = ReadinessService(
+    profileStore: profileStore,
+    profileSecrets: profileSecrets,
+    secureStorage: secureStorage,
+    controller: controller,
+  );
   final diagnostics = DiagnosticsExportService(
     profileStore: profileStore,
     profilePortability: profilePortability,
@@ -54,6 +68,7 @@ ClientServiceRegistry _buildServices() {
     controller: controller,
     secureStorage: secureStorage,
     fileExporter: diagnosticsExporter,
+    readiness: readiness,
   );
 
   return ClientServiceRegistry(
@@ -67,12 +82,33 @@ ClientServiceRegistry _buildServices() {
     packagingExport: packagingExport,
     settingsStore: settingsStore,
     controller: controller,
+    readiness: readiness,
     diagnostics: diagnostics,
     desktopLifecycle: NoopDesktopLifecycleService(),
   );
 }
 
 void main() {
+  testWidgets('settings page stays usable on compact width',
+      (WidgetTester tester) async {
+    await _setCompactSurface(tester);
+    final services = _buildServices();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(services: services),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Diagnostics retention (days)'), findsOneWidget);
+    expect(find.text('Window close behavior'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows desktop lifecycle semantics section',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
@@ -104,7 +140,8 @@ void main() {
     expect(find.textContaining('External activation:'), findsOneWidget);
   });
 
-  testWidgets('shows external activation summary after focus handoff is recorded',
+  testWidgets(
+      'shows external activation summary after focus handoff is recorded',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
     final services = _buildServices();

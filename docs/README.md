@@ -31,6 +31,15 @@ This directory only keeps the current, useful project documentation.
 - `v1.3.0-beta-handoff-notes-2026-03-16.md` — current handoff posture and tester-facing caveats for the desktop beta candidate
 - `v1.3.0-staging-release-checklist-2026-03-16.md` — current staging/commit/release checklist for the desktop beta candidate
 - `v1.3.0-linux-runtime-smoke-report-2026-03-16.md` — latest Linux runtime smoke result and blocker note
+- `v1.4.0-product-direction.md` — recommended product direction for the runtime-true desktop client milestone
+- `v1.4.0-backlog.md` — backlog for the runtime-true desktop client milestone
+- `v1.4.0-sprint-1-plan.md` — execution plan for the first real-runtime-path sprint
+- `v1.4.0-sprint-2-plan.md` — execution plan for the readiness doctor sprint
+- `v1.4.0-sprint-3-plan.md` — execution plan for the runtime truth & recovery sprint
+- `v1.4.0-sprint-4-plan.md` — execution plan for the runtime-aware supportability sprint
+- `v1.4.0-sprint-5-plan.md` — execution plan for the release truth & beta validation sprint
+- `v1.4.0-roadmap.md` — milestone sequence for the runtime-true desktop client line
+- `v1.4.0-release-gates.md` — completion and release gates for the v1.4.0 milestone
 - `../CHANGELOG.md` — versioned release history
 
 ## Decisions
