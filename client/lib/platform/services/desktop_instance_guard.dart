@@ -8,6 +8,8 @@ import 'desktop_lifecycle_models.dart';
 
 class DesktopInstanceGuard {
   static const String _focusMessage = 'focus';
+  static const String _defaultLockName = 'trojan_pro_client.desktop.lock';
+  static const String _lockNameEnvVar = 'TROJAN_CLIENT_SINGLE_INSTANCE_LOCK_NAME';
 
   static RandomAccessFile? _lockHandle;
   static ServerSocket? _focusServer;
@@ -16,7 +18,7 @@ class DesktopInstanceGuard {
   static Future<void> Function()? _focusRequestHandler;
 
   static Future<bool> tryAcquirePrimaryLock({
-    String lockName = 'trojan_pro_client.desktop.lock',
+    String? lockName,
   }) async {
     if (!isDesktopPlatform()) {
       return true;
@@ -25,21 +27,31 @@ class DesktopInstanceGuard {
       return true;
     }
 
-    final lockPath = _lockFilePath(lockName);
+    final effectiveLockName = _resolveEffectiveLockName(lockName);
+    final lockPath = _lockFilePath(effectiveLockName);
     final lockFile = File(lockPath);
     final handle = await lockFile.open(mode: FileMode.write);
 
     try {
       await handle.lock(FileLock.exclusive);
       _lockHandle = handle;
-      _lockName = lockName;
-      await _startFocusServer(lockName);
+      _lockName = effectiveLockName;
+      await _startFocusServer(effectiveLockName);
       return true;
     } catch (_) {
       await handle.close();
-      await _notifyPrimaryToFocus(lockName);
+      await _notifyPrimaryToFocus(effectiveLockName);
       return false;
     }
+  }
+
+  static String resolveLockName({Map<String, String>? environment}) {
+    final env = environment ?? Platform.environment;
+    final override = env[_lockNameEnvVar]?.trim();
+    if (override != null && override.isNotEmpty) {
+      return override;
+    }
+    return _defaultLockName;
   }
 
   static void setFocusRequestHandler(Future<void> Function() handler) {
@@ -181,6 +193,14 @@ class DesktopInstanceGuard {
         // ignore
       }
     }
+  }
+
+  static String _resolveEffectiveLockName(String? lockName) {
+    final candidate = lockName?.trim();
+    if (candidate != null && candidate.isNotEmpty) {
+      return candidate;
+    }
+    return resolveLockName();
   }
 
   static String _lockFilePath(String lockName) {
