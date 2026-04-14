@@ -253,6 +253,8 @@ void main() {
 
     expect(controller.status.phase, ClientConnectionPhase.error);
     expect(controller.status.message, contains('code 7'));
+    expect(controller.status.errorCode, 'RUNTIME_SESSION_EXIT_NONZERO');
+    expect(controller.status.failureFamilyHint, 'connect');
   });
 
   test('moves connected status to disconnected when runtime exits cleanly',
@@ -386,6 +388,8 @@ void main() {
     expect(firstResult.accepted, isFalse);
     expect(controller.status.phase, ClientConnectionPhase.error);
     expect(controller.status.message, 'MISSING_TROJAN_PASSWORD');
+    expect(controller.status.errorCode, 'MISSING_TROJAN_PASSWORD');
+    expect(controller.status.failureFamilyHint, 'user_input');
 
     await secrets.saveTrojanPassword(
       profileId: 'profile-demo',
@@ -404,6 +408,8 @@ void main() {
 
     expect(controller.status.phase, ClientConnectionPhase.connected);
     expect(controller.status.activeProfileId, 'profile-demo');
+    expect(controller.status.errorCode, isNull);
+    expect(controller.status.failureFamilyHint, isNull);
   });
 
   test('persists last runtime failure summary to local state store', () async {
@@ -438,6 +444,7 @@ void main() {
     expect(result.accepted, isFalse);
     expect(controller.lastRuntimeFailure, isNotNull);
     expect(controller.lastRuntimeFailure!.phase, 'launch');
+    expect(controller.status.failureFamilyHint, 'config');
 
     final persistedRaw =
         await localState.read('controller.lastRuntimeFailureSummary');
@@ -487,6 +494,9 @@ void main() {
       () => controller.status.phase == ClientConnectionPhase.error,
       description: 'status transitions to error after runtime exit',
     );
+
+    expect(controller.status.errorCode, 'RUNTIME_SESSION_EXIT_NONZERO');
+    expect(controller.status.failureFamilyHint, 'connect');
 
     final persistedRaw =
         await localState.read('controller.lastRuntimeFailureSummary');
@@ -589,6 +599,8 @@ void main() {
       controller.status.message,
       contains('Recovered from an interrupted runtime session'),
     );
+    expect(controller.status.errorCode, 'RUNTIME_RECOVERY_INTERRUPTED_SESSION');
+    expect(controller.status.failureFamilyHint, 'launch');
     expect(controller.status.activeProfileId, 'profile-demo');
     expect(controller.lastRuntimeFailure, isNotNull);
     expect(controller.lastRuntimeFailure!.phase, 'recovery');
@@ -770,6 +782,8 @@ void main() {
       isNull,
     );
     expect(controller.status.message, contains('disconnect request'));
+    expect(controller.status.errorCode, isNull);
+    expect(controller.status.failureFamilyHint, isNull);
   });
 
   test('does not recover when persisted snapshot is already disconnected',

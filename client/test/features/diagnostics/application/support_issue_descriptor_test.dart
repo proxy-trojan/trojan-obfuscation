@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
+import 'package:trojan_pro_client/features/controller/domain/failure_family.dart';
+import 'package:trojan_pro_client/features/controller/domain/last_runtime_failure_summary.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/support_issue_descriptor.dart';
 
 void main() {
@@ -46,7 +48,8 @@ void main() {
 
     expect(descriptor.category, SupportIssueCategory.runtime);
     expect(descriptor.familyLabel, 'environment');
-    expect(descriptor.headline, 'This environment cannot provide that runtime evidence');
+    expect(descriptor.headline,
+        'This environment cannot provide that runtime evidence');
   });
 
   test('classifies runtime exit as connect family', () {
@@ -72,5 +75,47 @@ void main() {
     expect(descriptor.category, SupportIssueCategory.osOrExport);
     expect(descriptor.familyLabel, 'export_os');
     expect(descriptor.headline, 'The support bundle could not be written');
+  });
+
+  test('prefers structured failure family hint from status', () {
+    final descriptor = SupportIssueDescriptor.fromConnectionStatus(
+      ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Runtime failed in a non-standard way',
+        updatedAt: DateTime.parse('2026-04-14T07:00:00.000Z'),
+        activeProfileId: 'profile-demo',
+        errorCode: 'RUNTIME_STOP_UNEXPECTED',
+        failureFamilyHint: FailureFamily.connect.label,
+      ),
+    );
+
+    expect(descriptor.category, SupportIssueCategory.runtime);
+    expect(descriptor.familyLabel, 'connect');
+    expect(descriptor.headline, 'The runtime session stopped unexpectedly');
+  });
+
+  test('falls back to last runtime failure family when status is ambiguous',
+      () {
+    final descriptor = SupportIssueDescriptor.fromConnectionStatus(
+      ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'The last connection needs runtime troubleshooting',
+        updatedAt: DateTime.parse('2026-04-14T07:00:00.000Z'),
+        activeProfileId: 'profile-demo',
+      ),
+      lastRuntimeFailure: LastRuntimeFailureSummary(
+        profileId: 'profile-demo',
+        phase: 'runtime',
+        family: FailureFamily.connect,
+        headline: 'The runtime session stopped unexpectedly',
+        detail: 'Exit code 7',
+        recordedAt: DateTime.parse('2026-04-14T06:59:59.000Z'),
+      ),
+    );
+
+    expect(descriptor.category, SupportIssueCategory.runtime);
+    expect(descriptor.familyLabel, 'connect');
+    expect(descriptor.summary,
+        'The last connection needs runtime troubleshooting');
   });
 }

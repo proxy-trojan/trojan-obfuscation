@@ -1,5 +1,6 @@
 import '../../controller/domain/client_connection_status.dart';
 import '../../controller/domain/failure_family.dart';
+import '../../controller/domain/last_runtime_failure_summary.dart';
 
 enum SupportIssueCategory {
   userInput,
@@ -29,8 +30,9 @@ class SupportIssueDescriptor {
   String get familyLabel => family.label;
 
   static SupportIssueDescriptor fromConnectionStatus(
-    ClientConnectionStatus status,
-  ) {
+    ClientConnectionStatus status, {
+    LastRuntimeFailureSummary? lastRuntimeFailure,
+  }) {
     final message = status.message.trim();
 
     if (status.phase != ClientConnectionPhase.error) {
@@ -45,11 +47,15 @@ class SupportIssueDescriptor {
       );
     }
 
-    final family = classifyFailureFamily(
-      errorCode: message,
-      summary: message,
-      detail: message,
-    );
+    final hintFamily = parseFailureFamily(status.failureFamilyHint);
+    final family = hintFamily != FailureFamily.unknown
+        ? hintFamily
+        : (lastRuntimeFailure?.family ??
+            classifyFailureFamily(
+              errorCode: status.errorCode,
+              summary: message,
+              detail: message,
+            ));
 
     return switch (family) {
       FailureFamily.userInput => const SupportIssueDescriptor(
@@ -86,7 +92,8 @@ class SupportIssueDescriptor {
           headline: 'The runtime session stopped unexpectedly',
           guidance:
               'Retry the connection if you want another attempt, or export a support bundle for investigation.',
-          summary: message.isEmpty ? 'Connect path failed after launch.' : message,
+          summary:
+              message.isEmpty ? 'Connect path failed after launch.' : message,
         ),
       FailureFamily.exportOs => SupportIssueDescriptor(
           category: SupportIssueCategory.osOrExport,
