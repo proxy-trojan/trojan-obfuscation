@@ -226,6 +226,41 @@ class ClientPackagedSmokeTest(unittest.TestCase):
             self.assertIsNotNone(lock_name)
             self.assertIn('packaged_smoke.linux', lock_name)
 
+    def test_overrides_inherited_single_instance_lock_name_for_smoke_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / 'trojan_pro_client'
+            binary.write_text('')
+            binary.chmod(0o755)
+            log_path = root / 'linux-smoke.log'
+
+            fake_process = mock.Mock()
+            fake_process.poll.return_value = 0
+
+            with mock.patch.dict(
+                os.environ,
+                {'TROJAN_CLIENT_SINGLE_INSTANCE_LOCK_NAME': 'sticky.lock'},
+                clear=False,
+            ):
+                with mock.patch(
+                    'scripts.client_packaged_smoke.subprocess.Popen',
+                    return_value=fake_process,
+                ) as popen:
+                    result = run_packaged_executable_smoke(
+                        'linux',
+                        binary,
+                        smoke_window_seconds=0,
+                        log_path=log_path,
+                        environment={'DISPLAY': ':99'},
+                    )
+
+            self.assertTrue(result.passed)
+            launch_env = popen.call_args.kwargs['env']
+            lock_name = launch_env.get('TROJAN_CLIENT_SINGLE_INSTANCE_LOCK_NAME')
+            self.assertIsNotNone(lock_name)
+            self.assertIn('packaged_smoke.linux', lock_name)
+            self.assertNotEqual(lock_name, 'sticky.lock')
+
     def test_captures_log_tail_when_packaged_executable_exits_early(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
