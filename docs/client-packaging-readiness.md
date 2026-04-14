@@ -19,12 +19,12 @@ The desktop packaging flow now also defines these gates:
 - checksum / artifact presence / package sanity validation
 
 Runner-backed evidence now in hand:
-- `Client Packaging` run `24393966681` (`headSha: 51283045bfc42141a86f840550036f5f9677d46e`) is green on desktop lanes
-- macOS lane `71246912751`: `Packaged smoke (macOS app zip)` passed
-- Linux lane `71246912761`: `Packaged smoke (Linux bundle)` passed
-- Windows lane `71246912805`: `Packaged smoke (Windows zip)` passed
+- `Client Packaging` run `24403624832` (`headSha: 2895aeb0ad3cf7106702eea35d4d1818ce01959f`) is green on desktop lanes
+- macOS lane `71280730618`: `Packaged smoke (macOS app zip)` passed
+- Linux lane `71280730640`: `Packaged smoke (Linux bundle)` passed
+- Windows lane `71280730626`: `Packaged smoke (Windows zip)` passed
 
-Reference: <https://github.com/proxy-trojan/trojan-obfuscation/actions/runs/24393966681>
+Reference: <https://github.com/proxy-trojan/trojan-obfuscation/actions/runs/24403624832>
 
 ## Current reality by platform
 

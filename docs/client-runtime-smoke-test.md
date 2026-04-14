@@ -179,7 +179,7 @@ Expected:
 For `v1.4.0-beta.3`, packaged smoke is intentionally narrower than the full manual runtime checklist above.
 
 Latest runner-backed result:
-- `Client Packaging` run `24393966681` is green on all desktop packaged smoke lanes (macOS/Linux/Windows)
+- `Client Packaging` run `24403624832` is green on all desktop packaged smoke lanes (macOS/Linux/Windows)
 - macOS no longer reproduces `another desktop instance is already running; secondary launch exits.` in packaged smoke
 
 Pass criteria for packaged smoke:
