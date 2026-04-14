@@ -63,12 +63,20 @@ class FakeShellControllerAdapter implements ShellControllerAdapter {
 
   @override
   Future<ControllerCommandResult> execute(ControllerCommand command) async {
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final bundleKind = command.arguments['bundleKind']?.toString();
     return ControllerCommandResult(
       commandId: command.id,
       accepted: true,
       completedAt: DateTime.now(),
       summary: 'Fake shell adapter accepted ${command.kind.name}.',
+      details: <String, Object?>{
+        'kind': command.kind.name,
+        if (bundleKind != null)
+          'details': <String, Object?>{
+            'bundleKind': bundleKind,
+            'evidenceClass': 'shell-demo-only',
+          },
+      },
     );
   }
 }

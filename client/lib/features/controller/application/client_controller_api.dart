@@ -27,4 +27,34 @@ abstract class ClientControllerApi extends ChangeNotifier {
   Future<ControllerCommandResult> connect(ClientProfile profile);
 
   Future<ControllerCommandResult> disconnect();
+
+  Future<ControllerCommandResult> collectDiagnostics({
+    required String bundleKind,
+  }) async {
+    return ControllerCommandResult(
+      commandId: 'collect-diagnostics-unsupported',
+      accepted: false,
+      completedAt: DateTime.now(),
+      summary: 'This controller boundary does not expose runtime diagnostics.',
+      error: 'UNSUPPORTED',
+      details: <String, Object?>{
+        'bundleKind': bundleKind,
+      },
+    );
+  }
+
+  Future<ControllerCommandResult> prepareExport({
+    required String bundleKind,
+  }) async {
+    return ControllerCommandResult(
+      commandId: 'prepare-export-unsupported',
+      accepted: false,
+      completedAt: DateTime.now(),
+      summary: 'This controller boundary does not expose export preparation.',
+      error: 'UNSUPPORTED',
+      details: <String, Object?>{
+        'bundleKind': bundleKind,
+      },
+    );
+  }
 }

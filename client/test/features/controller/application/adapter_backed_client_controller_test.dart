@@ -35,6 +35,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
   String commandSummary;
   String? commandError;
   Map<String, Object?> commandDetails;
+  ControllerCommand? lastCommand;
 
   ControllerRuntimeSession _session;
 
@@ -64,6 +65,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
 
   @override
   Future<ControllerCommandResult> execute(ControllerCommand command) async {
+    lastCommand = command;
     return ControllerCommandResult(
       commandId: command.id,
       accepted: commandAccepted,
@@ -128,6 +130,78 @@ Future<void> _waitFor(
 }
 
 void main() {
+  test('collectDiagnostics forwards bundle kind through adapter boundary',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Collect diagnostics accepted.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: ProfileSecretsService(secureStorage: MemorySecureStorage()),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final result = await controller.collectDiagnostics(
+      bundleKind: 'support-bundle',
+    );
+
+    expect(result.accepted, isTrue);
+    expect(adapter.lastCommand, isNotNull);
+    expect(
+      adapter.lastCommand!.kind,
+      ControllerCommandKind.collectDiagnostics,
+    );
+    expect(
+      adapter.lastCommand!.arguments['bundleKind'],
+      'support-bundle',
+    );
+  });
+
+  test('prepareExport forwards bundle kind through adapter boundary',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Prepare export accepted.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: ProfileSecretsService(secureStorage: MemorySecureStorage()),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final result = await controller.prepareExport(
+      bundleKind: 'runtime-proof-artifact',
+    );
+
+    expect(result.accepted, isTrue);
+    expect(adapter.lastCommand, isNotNull);
+    expect(
+      adapter.lastCommand!.kind,
+      ControllerCommandKind.prepareExport,
+    );
+    expect(
+      adapter.lastCommand!.arguments['bundleKind'],
+      'runtime-proof-artifact',
+    );
+  });
+
   test(
       'promotes connecting status to connected when runtime session starts running',
       () async {
