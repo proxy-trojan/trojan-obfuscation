@@ -120,7 +120,7 @@ class ConnectionLifecycleViewModel {
           showOpenTroubleshooting: true,
         );
       case ClientConnectionPhase.error:
-        final errorPresentation = _describeError(status.message, profileName);
+        final errorPresentation = _describeError(status, profileName);
         return ConnectionLifecycleViewModel(
           stage: ConnectionLifecycleStage.error,
           label: 'Needs attention',
@@ -138,16 +138,19 @@ class ConnectionLifecycleViewModel {
   }
 
   static _ConnectionErrorPresentation _describeError(
-    String message,
+    ClientConnectionStatus status,
     String? profileName,
   ) {
-    final normalized = message.trim();
+    final normalized = status.message.trim();
     final profileLabel = profileName ?? 'this profile';
-    final family = classifyFailureFamily(
-      errorCode: normalized,
-      summary: normalized,
-      detail: normalized,
-    );
+    final familyHint = parseFailureFamily(status.failureFamilyHint);
+    final family = familyHint != FailureFamily.unknown
+        ? familyHint
+        : classifyFailureFamily(
+            errorCode: status.errorCode,
+            summary: normalized,
+            detail: normalized,
+          );
 
     if (family == FailureFamily.userInput) {
       return _ConnectionErrorPresentation(
@@ -207,7 +210,8 @@ class ConnectionLifecycleViewModel {
         headline: 'This environment cannot complete that action',
         detail:
             'The current controller posture or host environment does not expose the required runtime evidence path yet.',
-        statusSummary: 'Environment cannot provide the requested runtime evidence.',
+        statusSummary:
+            'Environment cannot provide the requested runtime evidence.',
         canRetryFromProfiles: false,
         showOpenTroubleshooting: true,
       );
