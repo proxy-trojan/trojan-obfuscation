@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -80,8 +81,7 @@ def extract_packaged_artifact(platform: str, artifact_path: Path, extract_root: 
 
     with zipfile.ZipFile(artifact_path) as archive:
         for info in archive.infolist():
-            archive.extract(info, extract_root)
-            _restore_zip_permissions(info, extract_root / info.filename)
+            _extract_zip_member(archive, info, extract_root)
     return extract_root
 
 
@@ -182,9 +182,35 @@ def run_packaged_executable_smoke(
     )
 
 
+def _extract_zip_member(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    extract_root: Path,
+) -> None:
+    target = extract_root / info.filename
+    if info.is_dir():
+        target.mkdir(parents=True, exist_ok=True)
+        return
+
+    mode = info.external_attr >> 16
+    if stat.S_ISLNK(mode):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() or target.is_symlink():
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        link_target = archive.read(info).decode('utf-8')
+        os.symlink(link_target, target)
+        return
+
+    archive.extract(info, extract_root)
+    _restore_zip_permissions(info, target)
+
+
 def _restore_zip_permissions(info: zipfile.ZipInfo, target: Path) -> None:
     mode = info.external_attr >> 16
-    if mode and target.exists() and not target.is_dir():
+    if mode and target.exists() and not target.is_dir() and not target.is_symlink():
         target.chmod(mode)
 
 

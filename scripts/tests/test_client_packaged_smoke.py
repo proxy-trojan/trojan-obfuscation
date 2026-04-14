@@ -127,6 +127,36 @@ class ClientPackagedSmokeTest(unittest.TestCase):
             )
             self.assertTrue(os.access(executable, os.X_OK))
 
+    def test_extracts_macos_zip_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / 'trojan-pro-client_1.4.0-beta.3_macos-app.zip'
+            link_path = 'trojan_pro_client.app/Contents/Frameworks/App.framework/Versions/Current'
+            with zipfile.ZipFile(artifact, 'w') as archive:
+                app_binary = zipfile.ZipInfo(
+                    'trojan_pro_client.app/Contents/MacOS/trojan_pro_client',
+                )
+                app_binary.external_attr = 0o755 << 16
+                archive.writestr(app_binary, '')
+
+                framework_binary = zipfile.ZipInfo(
+                    'trojan_pro_client.app/Contents/Frameworks/App.framework/Versions/A/App',
+                )
+                framework_binary.external_attr = 0o755 << 16
+                archive.writestr(framework_binary, '')
+
+                symlink = zipfile.ZipInfo(link_path)
+                symlink.create_system = 3
+                symlink.external_attr = 0o120777 << 16
+                archive.writestr(symlink, 'A')
+
+            extracted_root = root / 'out-macos'
+            extract_packaged_artifact('macos', artifact, extracted_root)
+
+            current_link = extracted_root / link_path
+            self.assertTrue(current_link.is_symlink())
+            self.assertEqual(os.readlink(current_link), 'A')
+
     def test_runs_linux_packaged_executable_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
