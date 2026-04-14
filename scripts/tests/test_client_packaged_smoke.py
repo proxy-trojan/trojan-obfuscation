@@ -197,6 +197,30 @@ class ClientPackagedSmokeTest(unittest.TestCase):
             self.assertTrue(result.skipped)
             self.assertIn('requires DISPLAY', result.summary)
 
+    def test_captures_log_tail_when_packaged_executable_exits_early(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / 'Trojan Pro Client.exe'
+            binary.write_text(
+                '#!/usr/bin/env python3\n'
+                'print("line-1")\n'
+                'print("line-2")\n'
+            )
+            binary.chmod(0o755)
+            log_path = root / 'windows-smoke.log'
+
+            result = run_packaged_executable_smoke(
+                'windows',
+                binary,
+                smoke_window_seconds=1,
+                log_path=log_path,
+            )
+
+            self.assertFalse(result.passed)
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn('exited early with code 0', result.summary)
+            self.assertEqual(result.log_tail, ('line-1', 'line-2'))
+
     def test_raises_when_packaged_artifact_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

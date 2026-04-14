@@ -34,6 +34,7 @@ class PackagedSmokeResult:
     skipped: bool = False
     exit_code: int | None = None
     command: tuple[str, ...] = ()
+    log_tail: tuple[str, ...] = ()
 
 
 _ARTIFACT_PATTERNS = {
@@ -158,6 +159,7 @@ def run_packaged_executable_smoke(
                         summary=f'packaged executable exited early with code {exit_code}',
                         exit_code=exit_code,
                         command=tuple(command),
+                        log_tail=_read_log_tail(resolved_log_path),
                     )
                 time.sleep(0.2)
             _terminate_process(process)
@@ -167,12 +169,14 @@ def run_packaged_executable_smoke(
             skipped=True,
             summary=str(exc),
             command=tuple(command),
+            log_tail=_read_log_tail(resolved_log_path),
         )
     except OSError as exc:
         return PackagedSmokeResult(
             passed=False,
             summary=f'failed to launch packaged executable: {exc}',
             command=tuple(command),
+            log_tail=_read_log_tail(resolved_log_path),
         )
 
     return PackagedSmokeResult(
@@ -212,6 +216,18 @@ def _restore_zip_permissions(info: zipfile.ZipInfo, target: Path) -> None:
     mode = info.external_attr >> 16
     if mode and target.exists() and not target.is_dir() and not target.is_symlink():
         target.chmod(mode)
+
+
+
+def _read_log_tail(log_path: Path, *, max_lines: int = 40) -> tuple[str, ...]:
+    try:
+        with Path(log_path).open('r', encoding='utf-8', errors='replace') as handle:
+            lines = handle.read().splitlines()
+    except FileNotFoundError:
+        return ()
+    if max_lines <= 0:
+        return ()
+    return tuple(lines[-max_lines:])
 
 
 
@@ -299,6 +315,10 @@ def main() -> int:
         print(f'- result: {result.summary}')
         if result.command:
             print(f"- command: {' '.join(result.command)}")
+        if result.log_tail:
+            print('- log tail:')
+            for line in result.log_tail:
+                print(f'  {line}')
         if result.passed:
             return 0
         if result.skipped and args.allow_skip:
