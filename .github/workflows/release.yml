@@ -17,6 +17,8 @@ on:
 
 env:
   BUILD_TYPE: Release
+  # Prefer Node.js 24 for JavaScript actions ahead of platform default switch
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ============================================
@@ -503,7 +505,7 @@ jobs:
           EOF
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Trojan-Pro ${{ github.ref_name }}

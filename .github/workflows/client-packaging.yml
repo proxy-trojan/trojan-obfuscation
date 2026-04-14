@@ -1,5 +1,9 @@
 name: Client Packaging
 
+env:
+  # Prefer Node.js 24 for JavaScript actions ahead of platform default switch
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   workflow_call:
     inputs:
@@ -316,7 +320,7 @@ jobs:
           cache: false
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Ensure Android scaffolding exists
         run: |
