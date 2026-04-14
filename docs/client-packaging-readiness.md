@@ -18,16 +18,20 @@ The desktop packaging flow now also defines these gates:
 - packaged smoke via `scripts/client_packaged_smoke.py`
 - checksum / artifact presence / package sanity validation
 
-What is **not** claimed yet:
-- fresh runner-backed evidence for every current desktop lane in this exact `beta.3` iteration
-- blanket “fully CI-validated” language beyond the evidence currently in hand
+Runner-backed evidence now in hand:
+- `Client Packaging` run `24393966681` (`headSha: 51283045bfc42141a86f840550036f5f9677d46e`) is green on desktop lanes
+- macOS lane `71246912751`: `Packaged smoke (macOS app zip)` passed
+- Linux lane `71246912761`: `Packaged smoke (Linux bundle)` passed
+- Windows lane `71246912805`: `Packaged smoke (Windows zip)` passed
+
+Reference: <https://github.com/proxy-trojan/trojan-obfuscation/actions/runs/24393966681>
 
 ## Current reality by platform
 
-1. **Linux**: locally buildable and locally smoke-checked at the artifact level; GUI launch may be environment-limited on headless hosts
-2. **Windows**: packaging lane exists in GitHub Actions and now includes packaged smoke gating
-3. **macOS**: packaging lane exists in GitHub Actions and now includes packaged smoke gating
-4. **Android**: supported in release flow
+1. **Linux**: packaging + release-truth + packaged smoke are green in runner lane `71246912761`
+2. **Windows**: packaging + release-truth + packaged smoke are green in runner lane `71246912805`
+3. **macOS**: packaging + release-truth + packaged smoke are green in runner lane `71246912751`
+4. **Android**: supported in release flow (this run kept `build_android=false`, lane skipped by design)
 
 ## Local validation
 
