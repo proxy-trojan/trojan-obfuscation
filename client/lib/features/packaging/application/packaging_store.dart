@@ -28,19 +28,21 @@ class PackagingStore extends ChangeNotifier {
       <DesktopPackageStatus>[
     const DesktopPackageStatus(
       platform: DesktopPackagePlatform.windows,
-      readiness: DesktopPackageReadiness.planned,
-      notes: 'Windows installer/update workflow not scaffolded yet.',
+      readiness: DesktopPackageReadiness.scaffolded,
+      notes:
+          'Windows packaging lane exists and packaged smoke gate is wired in CI; runner-backed evidence should continue to accumulate.',
     ),
     const DesktopPackageStatus(
       platform: DesktopPackagePlatform.macos,
-      readiness: DesktopPackageReadiness.planned,
-      notes: 'macOS app bundle/notarization flow not scaffolded yet.',
+      readiness: DesktopPackageReadiness.scaffolded,
+      notes:
+          'macOS app packaging lane exists and packaged smoke gate is wired in CI; notarization/release confidence still needs ongoing evidence.',
     ),
     const DesktopPackageStatus(
       platform: DesktopPackagePlatform.linux,
-      readiness: DesktopPackageReadiness.scaffolded,
+      readiness: DesktopPackageReadiness.validated,
       notes:
-          'Linux desktop shell path exists; packaging workflow still missing.',
+          'Validated locally; packaged smoke gate is in place for the Linux bundle lane.',
     ),
   ];
 
@@ -100,7 +102,7 @@ class PackagingStore extends ChangeNotifier {
     _state = _state.copyWith(
       installerSkeletonReady: true,
       lastCheckSummary:
-          'Packaging skeleton drafted; runtime validation still pending.',
+          'Packaging skeleton drafted; release truth + packaged smoke gates are now part of the current beta.3 posture.',
     );
     notifyListeners();
   }

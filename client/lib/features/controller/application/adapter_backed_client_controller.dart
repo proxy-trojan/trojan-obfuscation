@@ -14,6 +14,7 @@ import '../domain/controller_runtime_config.dart';
 import '../domain/controller_runtime_health.dart';
 import '../domain/controller_runtime_session.dart';
 import '../domain/controller_telemetry_snapshot.dart';
+import '../domain/failure_family.dart';
 import '../domain/last_runtime_failure_summary.dart';
 import 'client_controller_api.dart';
 import 'shell_controller_adapter.dart';
@@ -123,6 +124,7 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'recovery',
         headline: 'Recovered from interrupted runtime state',
         detail: recoveryMessage,
+        summary: recoveryMessage,
       );
       await _persistRuntimeSnapshot();
       changed = true;
@@ -248,6 +250,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'launch',
         headline: 'The connection could not start',
         detail: commandResult.error ?? commandResult.summary,
+        errorCode: commandResult.error,
+        summary: commandResult.summary,
       );
       await _persistRuntimeSnapshot();
       _notifyIfActive();
@@ -329,6 +333,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'disconnect',
         headline: 'The session could not be disconnected cleanly',
         detail: commandResult.error ?? commandResult.summary,
+        errorCode: commandResult.error,
+        summary: commandResult.summary,
       );
       await _persistRuntimeSnapshot();
       _notifyIfActive();
@@ -586,6 +592,7 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'runtime',
         headline: 'The runtime session stopped unexpectedly',
         detail: lastError,
+        summary: summary,
       );
       _persistRuntimeSnapshotSoon();
       return;
@@ -612,6 +619,7 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'runtime',
         headline: 'The runtime session exited unexpectedly',
         detail: 'Exit code $lastExitCode',
+        summary: summary,
       );
       _persistRuntimeSnapshotSoon();
       return;
@@ -642,10 +650,18 @@ class AdapterBackedClientController extends ClientControllerApi {
     required String phase,
     required String headline,
     required String detail,
+    String? errorCode,
+    String? summary,
   }) async {
     _lastRuntimeFailure = LastRuntimeFailureSummary(
       profileId: profileId,
       phase: phase,
+      family: classifyFailureFamily(
+        errorCode: errorCode,
+        summary: summary,
+        detail: detail,
+        phase: phase,
+      ),
       headline: headline,
       detail: detail,
       recordedAt: DateTime.now(),
@@ -658,6 +674,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     required String phase,
     required String headline,
     required String detail,
+    String? errorCode,
+    String? summary,
   }) {
     unawaited(
       _recordLastRuntimeFailure(
@@ -665,6 +683,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: phase,
         headline: headline,
         detail: detail,
+        errorCode: errorCode,
+        summary: summary,
       ).then((_) => _notifyIfActive()),
     );
   }

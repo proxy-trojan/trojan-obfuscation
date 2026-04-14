@@ -444,7 +444,56 @@ void main() {
     expect(persistedRaw, isNotNull);
     final persisted = jsonDecode(persistedRaw!) as Map<String, Object?>;
     expect(persisted['phase'], 'launch');
+    expect(persisted['family'], 'config');
     expect(persisted['profileId'], 'profile-demo');
+  });
+
+  test('classifies runtime exit failure as connect family', () async {
+    final localState = MemoryLocalStateStore();
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      localStateStore: localState,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.connect(_demoProfile());
+    adapter.setSession(_session(isRunning: true, pid: 4321));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected before exit family check',
+    );
+
+    adapter.setSession(_session(isRunning: false, lastExitCode: 7));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.error,
+      description: 'status transitions to error after runtime exit',
+    );
+
+    final persistedRaw =
+        await localState.read('controller.lastRuntimeFailureSummary');
+    expect(persistedRaw, isNotNull);
+    final persisted = jsonDecode(persistedRaw!) as Map<String, Object?>;
+    expect(persisted['phase'], 'runtime');
+    expect(persisted['family'], 'connect');
   });
 
   test('reaches disconnected state after disconnecting session fully stops',

@@ -127,6 +127,17 @@ class DiagnosticsExportService {
           'expectedRealRuntimePath': expectedRealRuntimePath,
           'reason': adapterSelectionReason,
         },
+        'runtimeEvidence': {
+          'collectDiagnostics': _normalizeRuntimeEvidence(
+            command: diagnosticsCommand,
+            commandName: 'collectDiagnostics',
+          ),
+          'prepareExport': _normalizeRuntimeEvidence(
+            command: exportPreparationCommand,
+            commandName: 'prepareExport',
+          ),
+        },
+        'lastRuntimeFailure': controller.lastRuntimeFailure?.toJson(),
         'runtimePosture': {
           'kind': runtimePosture.kind.name,
           'label': runtimePosture.postureLabel,

@@ -352,6 +352,7 @@ void main() {
     );
     expect(
         find.text('The support bundle could not be written'), findsOneWidget);
+    expect(find.text('Failure family: export_os'), findsOneWidget);
     expect(find.textContaining('Check the export target path'), findsOneWidget);
   });
 }

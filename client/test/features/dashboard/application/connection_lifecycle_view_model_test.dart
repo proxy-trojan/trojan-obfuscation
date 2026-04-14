@@ -80,6 +80,25 @@ void main() {
     expect(model.stage, ConnectionLifecycleStage.error);
     expect(model.showRetry, isTrue);
     expect(model.canConnect, isTrue);
-    expect(model.statusSummary, 'Runtime exited unexpectedly (code 7).');
+    expect(model.statusSummary, 'Connect path failed after launch (code 7).');
+  });
+
+  test('maps invalid config error to config-preparation guidance', () {
+    final model = ConnectionLifecycleViewModel.fromStatus(
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'config invalid for runtime launch',
+        updatedAt: _fixedTime,
+        activeProfileId: 'profile-1',
+      ),
+      selectedProfile: _profile(),
+    );
+
+    expect(model.stage, ConnectionLifecycleStage.error);
+    expect(model.headline, 'The runtime config needs attention');
+    expect(model.detail, contains('before the runtime could launch'));
+    expect(model.showRetry, isFalse);
+    expect(model.showOpenTroubleshooting, isTrue);
+    expect(model.statusSummary, 'Config preparation failed before launch.');
   });
 }

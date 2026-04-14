@@ -1,7 +1,10 @@
+import 'failure_family.dart';
+
 class LastRuntimeFailureSummary {
   const LastRuntimeFailureSummary({
     required this.profileId,
     required this.phase,
+    required this.family,
     required this.headline,
     required this.detail,
     required this.recordedAt,
@@ -9,6 +12,7 @@ class LastRuntimeFailureSummary {
 
   final String? profileId;
   final String phase;
+  final FailureFamily family;
   final String headline;
   final String detail;
   final DateTime recordedAt;
@@ -17,6 +21,7 @@ class LastRuntimeFailureSummary {
     return <String, Object?>{
       'profileId': profileId,
       'phase': phase,
+      'family': family.label,
       'headline': headline,
       'detail': detail,
       'recordedAt': recordedAt.toIso8601String(),
@@ -27,6 +32,7 @@ class LastRuntimeFailureSummary {
     if (value is! Map) return null;
     final profileId = value['profileId'];
     final phase = value['phase'];
+    final family = value['family'];
     final headline = value['headline'];
     final detail = value['detail'];
     final recordedAt = value['recordedAt'];
@@ -43,6 +49,7 @@ class LastRuntimeFailureSummary {
     return LastRuntimeFailureSummary(
       profileId: profileId is String ? profileId : null,
       phase: phase,
+      family: parseFailureFamily(family),
       headline: headline,
       detail: detail,
       recordedAt: parsedRecordedAt,

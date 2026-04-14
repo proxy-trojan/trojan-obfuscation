@@ -152,23 +152,23 @@ class PackagingPage extends StatelessWidget {
               const SectionCard(
                 title: 'Planned Workflow Skeleton',
                 subtitle:
-                    'Product-side delivery shape before CI/runtime validation exists.',
+                    'Product-side delivery shape with release truth + packaged smoke gates in the loop.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text('1. Build desktop artifacts per release channel.'),
                     SizedBox(height: 8),
                     Text(
-                        '2. Produce installer/update metadata bundles and release manifests.'),
+                        '2. Validate pubspec / packaging metadata / product-visible version truth before artifact upload.'),
                     SizedBox(height: 8),
                     Text(
-                        '3. Validate diagnostics/export/update surfaces in a desktop runtime.'),
+                        '3. Run packaged smoke against the desktop artifact on the target platform runner.'),
                     SizedBox(height: 8),
                     Text(
-                        '4. Roll out stable/beta/nightly lanes with explicit rollback posture.'),
+                        '4. Produce installer/update metadata bundles and release manifests.'),
                     SizedBox(height: 8),
                     Text(
-                        '5. Treat update checks as stub-only until a real release feed is wired.'),
+                        '5. Roll out stable/beta/nightly lanes with explicit rollback posture while update checks stay stub-only until a real release feed is wired.'),
                   ],
                 ),
               ),

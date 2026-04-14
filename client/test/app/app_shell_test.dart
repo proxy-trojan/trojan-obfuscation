@@ -205,10 +205,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Troubleshooting Overview'), findsOneWidget);
-    expect(
-      find.widgetWithText(FilledButton, 'Generate support preview'),
-      findsOneWidget,
-    );
+
+    final supportPreviewFinder =
+        find.text('Generate support preview', skipOffstage: false);
+    expect(supportPreviewFinder, findsOneWidget);
+    await tester.ensureVisible(supportPreviewFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Generate support preview'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Check for Updates (Stub)'),
         findsNothing);
   });
