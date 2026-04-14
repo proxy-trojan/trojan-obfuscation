@@ -44,8 +44,11 @@ Before tagging:
 - no known blocker in packaging / validation
 - release candidate checklist reviewed: `docs/v1.2.0-release-candidate-checklist.md`
 - checksum helper passes: `scripts/verify-artifact-checksums.sh artifacts`
+- release truth helper passes: `python3 scripts/validate_client_release_truth.py`
 - desktop artifact smoke helper passes: `scripts/smoke-check-client-artifacts.sh artifacts --platforms linux,windows,macos`
-  - in headless Linux environments, a GUI start check may legitimately report `headless-skipped`
+- desktop packaged smoke helper is wired into `client-packaging` CI before artifact upload:
+  - `python3 scripts/client_packaged_smoke.py --platform <linux|windows|macos> --artifact-root <...> --mode smoke`
+  - in headless Linux environments, GUI launch still depends on `DISPLAY` / `WAYLAND_DISPLAY` or `xvfb-run`
 
 ---
 
@@ -76,6 +79,8 @@ Expected:
 - core multi-platform artifacts
 - client multi-platform artifacts
 - Android APK on tagged releases
+- per-platform client release-truth validation passes
+- per-platform client packaged smoke passes
 - `validate-artifacts` passes before release publish
 
 ### 4. Verify release page

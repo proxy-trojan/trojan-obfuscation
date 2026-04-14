@@ -55,6 +55,8 @@ void main() {
         message: 'MISSING_TROJAN_PASSWORD',
         updatedAt: _fixedTime,
         activeProfileId: 'profile-1',
+        errorCode: 'MISSING_TROJAN_PASSWORD',
+        failureFamilyHint: 'user_input',
       ),
       selectedProfile: _profile(),
     );
@@ -73,6 +75,8 @@ void main() {
         message: 'Runtime session exited with code 7.',
         updatedAt: _fixedTime,
         activeProfileId: 'profile-1',
+        errorCode: 'RUNTIME_SESSION_EXIT_NONZERO',
+        failureFamilyHint: 'connect',
       ),
       selectedProfile: _profile(),
     );
@@ -80,6 +84,47 @@ void main() {
     expect(model.stage, ConnectionLifecycleStage.error);
     expect(model.showRetry, isTrue);
     expect(model.canConnect, isTrue);
-    expect(model.statusSummary, 'Runtime exited unexpectedly (code 7).');
+    expect(model.statusSummary, 'Connect path failed after launch (code 7).');
+  });
+
+  test('maps invalid config error to config-preparation guidance', () {
+    final model = ConnectionLifecycleViewModel.fromStatus(
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'config invalid for runtime launch',
+        updatedAt: _fixedTime,
+        activeProfileId: 'profile-1',
+        errorCode: 'CONFIG_INVALID_FOR_RUNTIME_LAUNCH',
+        failureFamilyHint: 'config',
+      ),
+      selectedProfile: _profile(),
+    );
+
+    expect(model.stage, ConnectionLifecycleStage.error);
+    expect(model.headline, 'The runtime config needs attention');
+    expect(model.detail, contains('before the runtime could launch'));
+    expect(model.showRetry, isFalse);
+    expect(model.showOpenTroubleshooting, isTrue);
+    expect(model.statusSummary, 'Config preparation failed before launch.');
+  });
+
+  test('honors structured hint when message cannot be classified by keywords',
+      () {
+    final model = ConnectionLifecycleViewModel.fromStatus(
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Unexpected runtime state without keyword markers.',
+        updatedAt: _fixedTime,
+        activeProfileId: 'profile-1',
+        errorCode: 'RUNTIME_UNSPECIFIED',
+        failureFamilyHint: 'connect',
+      ),
+      selectedProfile: _profile(),
+    );
+
+    expect(model.stage, ConnectionLifecycleStage.error);
+    expect(model.showRetry, isTrue);
+    expect(model.showOpenTroubleshooting, isTrue);
+    expect(model.headline, 'The last connection for HK Edge needs attention');
   });
 }

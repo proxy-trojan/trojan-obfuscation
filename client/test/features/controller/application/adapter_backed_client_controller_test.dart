@@ -35,6 +35,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
   String commandSummary;
   String? commandError;
   Map<String, Object?> commandDetails;
+  ControllerCommand? lastCommand;
 
   ControllerRuntimeSession _session;
 
@@ -64,6 +65,7 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
 
   @override
   Future<ControllerCommandResult> execute(ControllerCommand command) async {
+    lastCommand = command;
     return ControllerCommandResult(
       commandId: command.id,
       accepted: commandAccepted,
@@ -128,6 +130,78 @@ Future<void> _waitFor(
 }
 
 void main() {
+  test('collectDiagnostics forwards bundle kind through adapter boundary',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Collect diagnostics accepted.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: ProfileSecretsService(secureStorage: MemorySecureStorage()),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final result = await controller.collectDiagnostics(
+      bundleKind: 'support-bundle',
+    );
+
+    expect(result.accepted, isTrue);
+    expect(adapter.lastCommand, isNotNull);
+    expect(
+      adapter.lastCommand!.kind,
+      ControllerCommandKind.collectDiagnostics,
+    );
+    expect(
+      adapter.lastCommand!.arguments['bundleKind'],
+      'support-bundle',
+    );
+  });
+
+  test('prepareExport forwards bundle kind through adapter boundary',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Prepare export accepted.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: ProfileSecretsService(secureStorage: MemorySecureStorage()),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final result = await controller.prepareExport(
+      bundleKind: 'runtime-proof-artifact',
+    );
+
+    expect(result.accepted, isTrue);
+    expect(adapter.lastCommand, isNotNull);
+    expect(
+      adapter.lastCommand!.kind,
+      ControllerCommandKind.prepareExport,
+    );
+    expect(
+      adapter.lastCommand!.arguments['bundleKind'],
+      'runtime-proof-artifact',
+    );
+  });
+
   test(
       'promotes connecting status to connected when runtime session starts running',
       () async {
@@ -253,6 +327,8 @@ void main() {
 
     expect(controller.status.phase, ClientConnectionPhase.error);
     expect(controller.status.message, contains('code 7'));
+    expect(controller.status.errorCode, 'RUNTIME_SESSION_EXIT_NONZERO');
+    expect(controller.status.failureFamilyHint, 'connect');
   });
 
   test('moves connected status to disconnected when runtime exits cleanly',
@@ -386,6 +462,8 @@ void main() {
     expect(firstResult.accepted, isFalse);
     expect(controller.status.phase, ClientConnectionPhase.error);
     expect(controller.status.message, 'MISSING_TROJAN_PASSWORD');
+    expect(controller.status.errorCode, 'MISSING_TROJAN_PASSWORD');
+    expect(controller.status.failureFamilyHint, 'user_input');
 
     await secrets.saveTrojanPassword(
       profileId: 'profile-demo',
@@ -404,6 +482,8 @@ void main() {
 
     expect(controller.status.phase, ClientConnectionPhase.connected);
     expect(controller.status.activeProfileId, 'profile-demo');
+    expect(controller.status.errorCode, isNull);
+    expect(controller.status.failureFamilyHint, isNull);
   });
 
   test('persists last runtime failure summary to local state store', () async {
@@ -438,13 +518,66 @@ void main() {
     expect(result.accepted, isFalse);
     expect(controller.lastRuntimeFailure, isNotNull);
     expect(controller.lastRuntimeFailure!.phase, 'launch');
+    expect(controller.status.failureFamilyHint, 'config');
 
     final persistedRaw =
         await localState.read('controller.lastRuntimeFailureSummary');
     expect(persistedRaw, isNotNull);
     final persisted = jsonDecode(persistedRaw!) as Map<String, Object?>;
     expect(persisted['phase'], 'launch');
+    expect(persisted['family'], 'config');
     expect(persisted['profileId'], 'profile-demo');
+  });
+
+  test('classifies runtime exit failure as connect family', () async {
+    final localState = MemoryLocalStateStore();
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      localStateStore: localState,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.connect(_demoProfile());
+    adapter.setSession(_session(isRunning: true, pid: 4321));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'status transitions to connected before exit family check',
+    );
+
+    adapter.setSession(_session(isRunning: false, lastExitCode: 7));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.error,
+      description: 'status transitions to error after runtime exit',
+    );
+
+    expect(controller.status.errorCode, 'RUNTIME_SESSION_EXIT_NONZERO');
+    expect(controller.status.failureFamilyHint, 'connect');
+
+    final persistedRaw =
+        await localState.read('controller.lastRuntimeFailureSummary');
+    expect(persistedRaw, isNotNull);
+    final persisted = jsonDecode(persistedRaw!) as Map<String, Object?>;
+    expect(persisted['phase'], 'runtime');
+    expect(persisted['family'], 'connect');
   });
 
   test('reaches disconnected state after disconnecting session fully stops',
@@ -540,6 +673,8 @@ void main() {
       controller.status.message,
       contains('Recovered from an interrupted runtime session'),
     );
+    expect(controller.status.errorCode, 'RUNTIME_RECOVERY_INTERRUPTED_SESSION');
+    expect(controller.status.failureFamilyHint, 'launch');
     expect(controller.status.activeProfileId, 'profile-demo');
     expect(controller.lastRuntimeFailure, isNotNull);
     expect(controller.lastRuntimeFailure!.phase, 'recovery');
@@ -721,6 +856,8 @@ void main() {
       isNull,
     );
     expect(controller.status.message, contains('disconnect request'));
+    expect(controller.status.errorCode, isNull);
+    expect(controller.status.failureFamilyHint, isNull);
   });
 
   test('does not recover when persisted snapshot is already disconnected',

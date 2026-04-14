@@ -90,8 +90,11 @@ class _AdvancedPageState extends State<AdvancedPage>
           runtimeMode: runtimeConfig.mode,
           backendKind: telemetry.backendKind,
         );
-        final issue = SupportIssueDescriptor.fromConnectionStatus(status);
         final lastRuntimeFailure = services.controller.lastRuntimeFailure;
+        final issue = SupportIssueDescriptor.fromConnectionStatus(
+          status,
+          lastRuntimeFailure: lastRuntimeFailure,
+        );
         final appUnhandledError = services.appRuntimeErrors.lastUnhandledError;
         final runtimeSession = services.controller.session;
 

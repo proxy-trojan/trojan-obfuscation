@@ -112,7 +112,8 @@ void main() {
     expect(find.text('Update Status'), findsOneWidget);
     expect(find.text('Export History'), findsOneWidget);
     expect(find.textContaining('manifest=/tmp/manifest.json'), findsOneWidget);
-    expect(find.textContaining('Readiness: scaffolded'), findsOneWidget);
+    expect(find.textContaining('Readiness: scaffolded'), findsNWidgets(2));
+    expect(find.textContaining('Readiness: validated'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -133,5 +134,29 @@ void main() {
     expect(find.text('Check for Updates (Stub)'), findsOneWidget);
     expect(find.textContaining('Metadata Contract'), findsOneWidget);
     expect(find.textContaining('Contract Version'), findsOneWidget);
+    expect(find.text('1.4.0-beta.3'), findsOneWidget);
+    expect(find.text('beta'), findsWidgets);
+  });
+
+  testWidgets('packaging page reflects packaged smoke and release truth posture',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PackagingPage(services: services),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('release truth + packaged smoke gates'),
+        findsOneWidget);
+    expect(find.textContaining('Validated locally; packaged smoke gate is in place'),
+        findsOneWidget);
+    expect(find.textContaining('packaged smoke gate is wired in CI'), findsNWidgets(2));
+    expect(find.textContaining('before CI/runtime validation exists'), findsNothing);
   });
 }

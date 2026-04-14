@@ -262,6 +262,8 @@ class _ExportIssueBanner extends StatelessWidget {
           const SizedBox(height: 6),
           Text(issue.guidance),
           const SizedBox(height: 6),
+          Text('Failure family: ${issue.familyLabel}'),
+          const SizedBox(height: 6),
           Text('Detail: ${issue.summary}'),
         ],
       ),

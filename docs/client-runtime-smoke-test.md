@@ -28,20 +28,33 @@ export TROJAN_CLIENT_BINARY=/absolute/path/to/trojan
 export KEEP_SMOKE_ARTIFACTS=1
 ```
 
-Automation helper:
+Automation helpers:
 
 ```bash
+# source/build-time runtime smoke
 ./scripts/run-client-runtime-smoke.sh
+
+# packaged desktop smoke (artifact-first)
+python3 scripts/client_packaged_smoke.py \
+  --platform linux \
+  --artifact-root packaging/linux/artifacts/v1.4.0-beta.3 \
+  --mode smoke
 ```
 
-What the helper currently verifies:
-- `flutter analyze`
-- `flutter test`
-- `flutter build linux --debug`
-- real `trojan` client preflight with a generated config
-- desktop app launch smoke when a GUI is available
+What the helpers currently verify:
+- `./scripts/run-client-runtime-smoke.sh`
+  - `flutter analyze`
+  - `flutter test`
+  - `flutter build linux --debug`
+  - real `trojan` client preflight with a generated config
+  - desktop app launch smoke when a GUI is available
+- `scripts/client_packaged_smoke.py`
+  - resolves the packaged desktop artifact for a target platform
+  - extracts the artifact into a temporary validation root
+  - resolves the packaged executable/app bundle
+  - runs a bounded desktop launch smoke window on the packaged app
 
-In headless environments, the script will explicitly report the GUI step as skipped unless `xvfb-run` or a real `DISPLAY`/`WAYLAND_DISPLAY` is available.
+In headless environments, the packaged smoke helper will explicitly report Linux GUI launch as skipped unless `xvfb-run` or a real `DISPLAY`/`WAYLAND_DISPLAY` is available.
 
 ---
 
@@ -161,9 +174,26 @@ Expected:
 
 ---
 
+## Packaged smoke policy
+
+For `v1.4.0-beta.3`, packaged smoke is intentionally narrower than the full manual runtime checklist above.
+
+Latest runner-backed result:
+- `Client Packaging` run `24403624832` is green on all desktop packaged smoke lanes (macOS/Linux/Windows)
+- macOS no longer reproduces `another desktop instance is already running; secondary launch exits.` in packaged smoke
+
+Pass criteria for packaged smoke:
+- the expected packaged artifact exists for the target platform
+- extraction succeeds
+- the packaged executable/app bundle is discoverable
+- the packaged app stays alive for the smoke window on a GUI-capable runner
+- or, on headless Linux, the step reports an explicit environment-limited skip instead of pretending to be a pass
+
+This packaged smoke is a **release/CI gate**, not a substitute for full operator-like runtime validation.
+
 ## Pass Criteria
 
-The smoke test passes if:
+The full runtime smoke test passes if:
 
 - app launches
 - profile/password flow works

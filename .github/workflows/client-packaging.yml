@@ -42,6 +42,8 @@ on:
       - 'scripts/package-client-windows-zip.sh'
       - 'scripts/package-client-macos-app-zip.sh'
       - 'scripts/collect-client-android-apk.sh'
+      - 'scripts/client_packaged_smoke.py'
+      - 'scripts/validate_client_release_truth.py'
       - '.github/workflows/client-packaging.yml'
 
 jobs:
@@ -121,6 +123,19 @@ jobs:
           chmod +x scripts/build-client-linux-bundle-tar.sh
           scripts/build-client-linux-bundle-tar.sh
 
+      - name: Validate release truth
+        run: |
+          python3 scripts/validate_client_release_truth.py
+
+      - name: Packaged smoke (Linux bundle)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libegl1
+          python3 scripts/client_packaged_smoke.py \
+            --platform linux \
+            --artifact-root packaging/linux/artifacts/${{ steps.meta.outputs.release_dir_name }} \
+            --mode smoke
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -188,6 +203,19 @@ jobs:
           chmod +x scripts/package-client-windows-zip.sh
           scripts/package-client-windows-zip.sh
 
+      - name: Validate release truth
+        shell: bash
+        run: |
+          python scripts/validate_client_release_truth.py
+
+      - name: Packaged smoke (Windows zip)
+        shell: bash
+        run: |
+          python scripts/client_packaged_smoke.py \
+            --platform windows \
+            --artifact-root packaging/windows/artifacts/${{ steps.meta.outputs.release_dir_name }} \
+            --mode smoke
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -246,6 +274,17 @@ jobs:
         run: |
           chmod +x scripts/package-client-macos-app-zip.sh
           scripts/package-client-macos-app-zip.sh
+
+      - name: Validate release truth
+        run: |
+          python3 scripts/validate_client_release_truth.py
+
+      - name: Packaged smoke (macOS app zip)
+        run: |
+          python3 scripts/client_packaged_smoke.py \
+            --platform macos \
+            --artifact-root packaging/macos/artifacts/${{ steps.meta.outputs.release_dir_name }} \
+            --mode smoke
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7

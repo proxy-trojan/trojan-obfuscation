@@ -3,16 +3,24 @@
 ## Latest validated CI status / 最新已验证 CI 状态
 
 **EN**
-- As of 2026-03-12, GitHub Actions `Build and Release` has verified one-run delivery for:
-  - core: Linux x86_64 / aarch64, macOS x86_64 / arm64, Windows x86_64
-  - client: Linux `.deb` + `.tar.gz`, Windows `.zip`, macOS `.app.zip`
-- Android remains an optional lane and is disabled by default in manual dispatch.
+- As of 2026-04-14, the client packaging pipeline is defined to build:
+  - Linux `.deb` + `.tar.gz`
+  - Windows `.zip`
+  - macOS `.app.zip`
+  - optional Android `.apk`
+- The desktop lanes now also run two executable gates before artifact upload:
+  - release-truth validation (`scripts/validate_client_release_truth.py`)
+  - packaged smoke (`scripts/client_packaged_smoke.py`)
 
 **中文**
-- 截至 2026-03-12，GitHub Actions `Build and Release` 已验证可在一次运行中产出：
-  - core：Linux x86_64 / aarch64、macOS x86_64 / arm64、Windows x86_64
-  - client：Linux `.deb` + `.tar.gz`、Windows `.zip`、macOS `.app.zip`
-- Android 仍为可选通道，手动触发时默认关闭。
+- 截至 2026-04-14，client packaging 流水线已定义产出：
+  - Linux `.deb` + `.tar.gz`
+  - Windows `.zip`
+  - macOS `.app.zip`
+  - 可选 Android `.apk`
+- 桌面三端在上传制品前还会执行两道可执行 gate：
+  - release truth 校验（`scripts/validate_client_release_truth.py`）
+  - packaged smoke（`scripts/client_packaged_smoke.py`）
 
 ## Current objective
 
@@ -122,5 +130,5 @@ Do not let Android lane slow the desktop-first track.
 
 Right now the honest statement is:
 - **Linux installable packaging is real and locally verified**
-- **Windows and macOS packaging are CI-runner targets, not Linux-host local targets**
+- **Windows and macOS packaging are still primarily CI-runner truths, but no longer “artifact-only” because packaged smoke is wired into their lanes**
 - **Android packaging is feasible once SDK provisioning is added, but should remain optional**

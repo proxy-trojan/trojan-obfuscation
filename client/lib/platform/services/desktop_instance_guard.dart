@@ -8,15 +8,18 @@ import 'desktop_lifecycle_models.dart';
 
 class DesktopInstanceGuard {
   static const String _focusMessage = 'focus';
+  static const String _defaultLockName = 'trojan_pro_client.desktop.lock';
+  static const String _lockNameEnvVar = 'TROJAN_CLIENT_SINGLE_INSTANCE_LOCK_NAME';
 
   static RandomAccessFile? _lockHandle;
   static ServerSocket? _focusServer;
   static String? _lockName;
   static String? _focusNonce;
   static Future<void> Function()? _focusRequestHandler;
+  static Future<void> Function(String lockName)? _focusServerStarterForTests;
 
   static Future<bool> tryAcquirePrimaryLock({
-    String lockName = 'trojan_pro_client.desktop.lock',
+    String? lockName,
   }) async {
     if (!isDesktopPlatform()) {
       return true;
@@ -25,21 +28,46 @@ class DesktopInstanceGuard {
       return true;
     }
 
-    final lockPath = _lockFilePath(lockName);
+    final effectiveLockName = _resolveEffectiveLockName(lockName);
+    final lockPath = _lockFilePath(effectiveLockName);
     final lockFile = File(lockPath);
     final handle = await lockFile.open(mode: FileMode.write);
 
     try {
       await handle.lock(FileLock.exclusive);
-      _lockHandle = handle;
-      _lockName = lockName;
-      await _startFocusServer(lockName);
-      return true;
     } catch (_) {
       await handle.close();
-      await _notifyPrimaryToFocus(lockName);
+      await _notifyPrimaryToFocus(effectiveLockName);
       return false;
     }
+
+    _lockHandle = handle;
+    _lockName = effectiveLockName;
+
+    try {
+      final focusServerStarter = _focusServerStarterForTests;
+      if (focusServerStarter != null) {
+        await focusServerStarter(effectiveLockName);
+      } else {
+        await _startFocusServer(effectiveLockName);
+      }
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Trojan-Pro Client: primary lock acquired but focus IPC startup failed '
+        'for "$effectiveLockName": $error\n$stackTrace',
+      );
+    }
+
+    return true;
+  }
+
+  static String resolveLockName({Map<String, String>? environment}) {
+    final env = environment ?? Platform.environment;
+    final override = env[_lockNameEnvVar]?.trim();
+    if (override != null && override.isNotEmpty) {
+      return override;
+    }
+    return _defaultLockName;
   }
 
   static void setFocusRequestHandler(Future<void> Function() handler) {
@@ -91,7 +119,6 @@ class DesktopInstanceGuard {
     final server = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
       0,
-      shared: true,
     );
     _focusServer = server;
 
@@ -183,6 +210,14 @@ class DesktopInstanceGuard {
     }
   }
 
+  static String _resolveEffectiveLockName(String? lockName) {
+    final candidate = lockName?.trim();
+    if (candidate != null && candidate.isNotEmpty) {
+      return candidate;
+    }
+    return resolveLockName();
+  }
+
   static String _lockFilePath(String lockName) {
     return '${Directory.systemTemp.path}${Platform.pathSeparator}$lockName';
   }
@@ -196,6 +231,14 @@ class DesktopInstanceGuard {
     await release();
     _focusRequestHandler = null;
     _focusNonce = null;
+    _focusServerStarterForTests = null;
+  }
+
+  @visibleForTesting
+  static void debugSetFocusServerStarterForTests(
+    Future<void> Function(String lockName)? starter,
+  ) {
+    _focusServerStarterForTests = starter;
   }
 
   @visibleForTesting

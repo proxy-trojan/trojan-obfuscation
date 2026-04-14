@@ -14,6 +14,7 @@ import '../domain/controller_runtime_config.dart';
 import '../domain/controller_runtime_health.dart';
 import '../domain/controller_runtime_session.dart';
 import '../domain/controller_telemetry_snapshot.dart';
+import '../domain/failure_family.dart';
 import '../domain/last_runtime_failure_summary.dart';
 import 'client_controller_api.dart';
 import 'shell_controller_adapter.dart';
@@ -109,6 +110,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: recoveryMessage,
         updatedAt: DateTime.now(),
         activeProfileId: snapshot.activeProfileId,
+        errorCode: 'RUNTIME_RECOVERY_INTERRUPTED_SESSION',
+        failureFamilyHint: FailureFamily.launch.label,
       );
       _recordEvent(
         title: 'Recovered interrupted session state',
@@ -123,6 +126,7 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'recovery',
         headline: 'Recovered from interrupted runtime state',
         detail: recoveryMessage,
+        summary: recoveryMessage,
       );
       await _persistRuntimeSnapshot();
       changed = true;
@@ -135,6 +139,40 @@ class AdapterBackedClientController extends ClientControllerApi {
 
   @override
   Future<ControllerRuntimeHealth> checkHealth() => _adapter.checkHealth();
+
+  @override
+  Future<ControllerCommandResult> collectDiagnostics({
+    required String bundleKind,
+  }) {
+    return _adapter.execute(
+      ControllerCommand(
+        id: 'collect-diagnostics-${++_operationCounter}',
+        kind: ControllerCommandKind.collectDiagnostics,
+        issuedAt: DateTime.now(),
+        profileId: _status.activeProfileId,
+        arguments: <String, Object?>{
+          'bundleKind': bundleKind,
+        },
+      ),
+    );
+  }
+
+  @override
+  Future<ControllerCommandResult> prepareExport({
+    required String bundleKind,
+  }) {
+    return _adapter.execute(
+      ControllerCommand(
+        id: 'prepare-export-${++_operationCounter}',
+        kind: ControllerCommandKind.prepareExport,
+        issuedAt: DateTime.now(),
+        profileId: _status.activeProfileId,
+        arguments: <String, Object?>{
+          'bundleKind': bundleKind,
+        },
+      ),
+    );
+  }
 
   @override
   Future<ControllerCommandResult> connect(ClientProfile profile) async {
@@ -182,6 +220,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: result.error ?? result.summary,
         updatedAt: DateTime.now(),
         activeProfileId: profile.id,
+        errorCode: result.error,
+        failureFamilyHint: FailureFamily.userInput.label,
       );
       await _persistRuntimeSnapshot();
       _notifyIfActive();
@@ -242,12 +282,21 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: commandResult.error ?? commandResult.summary,
         updatedAt: DateTime.now(),
         activeProfileId: profile.id,
+        errorCode: commandResult.error,
+        failureFamilyHint: classifyFailureFamily(
+          errorCode: commandResult.error,
+          summary: commandResult.summary,
+          detail: commandResult.error ?? commandResult.summary,
+          phase: 'launch',
+        ).label,
       );
       await _recordLastRuntimeFailure(
         profileId: profile.id,
         phase: 'launch',
         headline: 'The connection could not start',
         detail: commandResult.error ?? commandResult.summary,
+        errorCode: commandResult.error,
+        summary: commandResult.summary,
       );
       await _persistRuntimeSnapshot();
       _notifyIfActive();
@@ -323,12 +372,21 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: commandResult.error ?? commandResult.summary,
         updatedAt: DateTime.now(),
         activeProfileId: activeProfileId,
+        errorCode: commandResult.error,
+        failureFamilyHint: classifyFailureFamily(
+          errorCode: commandResult.error,
+          summary: commandResult.summary,
+          detail: commandResult.error ?? commandResult.summary,
+          phase: 'disconnect',
+        ).label,
       );
       await _recordLastRuntimeFailure(
         profileId: activeProfileId,
         phase: 'disconnect',
         headline: 'The session could not be disconnected cleanly',
         detail: commandResult.error ?? commandResult.summary,
+        errorCode: commandResult.error,
+        summary: commandResult.summary,
       );
       await _persistRuntimeSnapshot();
       _notifyIfActive();
@@ -454,6 +512,8 @@ class AdapterBackedClientController extends ClientControllerApi {
             phase: ClientConnectionPhase.connected,
             message: summary,
             updatedAt: DateTime.now(),
+            clearErrorCode: true,
+            clearFailureFamilyHint: true,
           );
           _recordEvent(
             title: 'Runtime session ready',
@@ -489,6 +549,8 @@ class AdapterBackedClientController extends ClientControllerApi {
             phase: ClientConnectionPhase.connecting,
             message: progressSummary,
             updatedAt: DateTime.now(),
+            clearErrorCode: true,
+            clearFailureFamilyHint: true,
           );
           _recordEvent(
             title: 'Runtime launch in progress',
@@ -511,6 +573,8 @@ class AdapterBackedClientController extends ClientControllerApi {
             phase: ClientConnectionPhase.disconnecting,
             message: stopSummary,
             updatedAt: DateTime.now(),
+            clearErrorCode: true,
+            clearFailureFamilyHint: true,
           );
           _recordEvent(
             title: 'Runtime stop in progress',
@@ -572,6 +636,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: summary,
         updatedAt: DateTime.now(),
         activeProfileId: activeProfileId,
+        errorCode: 'RUNTIME_SESSION_ERROR',
+        failureFamilyHint: FailureFamily.connect.label,
       );
       _recordEvent(
         title: 'Runtime session ended',
@@ -586,6 +652,7 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'runtime',
         headline: 'The runtime session stopped unexpectedly',
         detail: lastError,
+        summary: summary,
       );
       _persistRuntimeSnapshotSoon();
       return;
@@ -598,6 +665,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         message: summary,
         updatedAt: DateTime.now(),
         activeProfileId: activeProfileId,
+        errorCode: 'RUNTIME_SESSION_EXIT_NONZERO',
+        failureFamilyHint: FailureFamily.connect.label,
       );
       _recordEvent(
         title: 'Runtime session ended',
@@ -612,6 +681,7 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: 'runtime',
         headline: 'The runtime session exited unexpectedly',
         detail: 'Exit code $lastExitCode',
+        summary: summary,
       );
       _persistRuntimeSnapshotSoon();
       return;
@@ -642,10 +712,18 @@ class AdapterBackedClientController extends ClientControllerApi {
     required String phase,
     required String headline,
     required String detail,
+    String? errorCode,
+    String? summary,
   }) async {
     _lastRuntimeFailure = LastRuntimeFailureSummary(
       profileId: profileId,
       phase: phase,
+      family: classifyFailureFamily(
+        errorCode: errorCode,
+        summary: summary,
+        detail: detail,
+        phase: phase,
+      ),
       headline: headline,
       detail: detail,
       recordedAt: DateTime.now(),
@@ -658,6 +736,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     required String phase,
     required String headline,
     required String detail,
+    String? errorCode,
+    String? summary,
   }) {
     unawaited(
       _recordLastRuntimeFailure(
@@ -665,6 +745,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: phase,
         headline: headline,
         detail: detail,
+        errorCode: errorCode,
+        summary: summary,
       ).then((_) => _notifyIfActive()),
     );
   }

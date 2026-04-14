@@ -12,12 +12,16 @@ class ClientConnectionStatus {
     required this.message,
     required this.updatedAt,
     this.activeProfileId,
+    this.errorCode,
+    this.failureFamilyHint,
   });
 
   final ClientConnectionPhase phase;
   final String message;
   final DateTime updatedAt;
   final String? activeProfileId;
+  final String? errorCode;
+  final String? failureFamilyHint;
 
   bool get isConnected => phase == ClientConnectionPhase.connected;
   bool get isBusy =>
@@ -29,7 +33,11 @@ class ClientConnectionStatus {
     String? message,
     DateTime? updatedAt,
     String? activeProfileId,
+    String? errorCode,
+    String? failureFamilyHint,
     bool clearActiveProfile = false,
+    bool clearErrorCode = false,
+    bool clearFailureFamilyHint = false,
   }) {
     return ClientConnectionStatus(
       phase: phase ?? this.phase,
@@ -37,6 +45,10 @@ class ClientConnectionStatus {
       updatedAt: updatedAt ?? this.updatedAt,
       activeProfileId:
           clearActiveProfile ? null : (activeProfileId ?? this.activeProfileId),
+      errorCode: clearErrorCode ? null : (errorCode ?? this.errorCode),
+      failureFamilyHint: clearFailureFamilyHint
+          ? null
+          : (failureFamilyHint ?? this.failureFamilyHint),
     );
   }
 

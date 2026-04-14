@@ -1,4 +1,5 @@
 import '../../controller/domain/client_connection_status.dart';
+import '../../controller/domain/failure_family.dart';
 import '../../profiles/domain/client_profile.dart';
 
 enum ConnectionLifecycleStage {
@@ -119,7 +120,7 @@ class ConnectionLifecycleViewModel {
           showOpenTroubleshooting: true,
         );
       case ClientConnectionPhase.error:
-        final errorPresentation = _describeError(status.message, profileName);
+        final errorPresentation = _describeError(status, profileName);
         return ConnectionLifecycleViewModel(
           stage: ConnectionLifecycleStage.error,
           label: 'Needs attention',
@@ -137,14 +138,21 @@ class ConnectionLifecycleViewModel {
   }
 
   static _ConnectionErrorPresentation _describeError(
-    String message,
+    ClientConnectionStatus status,
     String? profileName,
   ) {
-    final normalized = message.trim();
+    final normalized = status.message.trim();
     final profileLabel = profileName ?? 'this profile';
+    final familyHint = parseFailureFamily(status.failureFamilyHint);
+    final family = familyHint != FailureFamily.unknown
+        ? familyHint
+        : classifyFailureFamily(
+            errorCode: status.errorCode,
+            summary: normalized,
+            detail: normalized,
+          );
 
-    if (normalized == 'MISSING_TROJAN_PASSWORD' ||
-        normalized.contains('no Trojan password')) {
+    if (family == FailureFamily.userInput) {
       return _ConnectionErrorPresentation(
         headline: '$profileLabel still needs a saved password',
         detail:
@@ -155,42 +163,55 @@ class ConnectionLifecycleViewModel {
       );
     }
 
-    final exitCodeMatch = RegExp(r'code\s+(\d+)').firstMatch(normalized);
-    if (normalized.contains('Runtime session exited with code') &&
-        exitCodeMatch != null) {
-      final code = exitCodeMatch.group(1)!;
-      return _ConnectionErrorPresentation(
-        headline: 'The connection ended unexpectedly',
-        detail:
-            'The runtime stopped with exit code $code. Retry from Profiles or open Troubleshooting for recent logs.',
-        statusSummary: 'Runtime exited unexpectedly (code $code).',
-        canRetryFromProfiles: true,
-        showOpenTroubleshooting: true,
-      );
-    }
-
-    if (normalized.startsWith('Runtime session stopped with error:')) {
-      final reason = normalized
-          .replaceFirst('Runtime session stopped with error:', '')
-          .trim();
-      return _ConnectionErrorPresentation(
-        headline: 'The runtime hit a local error',
-        detail:
-            'The current session stopped before it could stay connected. Open Troubleshooting for logs${reason.isEmpty ? '' : ' — latest detail: $reason'}.',
-        statusSummary: reason.isEmpty
-            ? 'Runtime reported a local error.'
-            : 'Runtime error: $reason',
-        canRetryFromProfiles: true,
-        showOpenTroubleshooting: true,
-      );
-    }
-
-    if (normalized.contains('config') && normalized.contains('invalid')) {
+    if (family == FailureFamily.config) {
       return const _ConnectionErrorPresentation(
-        headline: 'The connection could not start',
+        headline: 'The runtime config needs attention',
         detail:
-            'The client could not prepare a valid runtime configuration. Review the selected profile and try again.',
-        statusSummary: 'Configuration is not valid for launch.',
+            'Review the selected profile and config inputs before the runtime could launch, then try again.',
+        statusSummary: 'Config preparation failed before launch.',
+        canRetryFromProfiles: false,
+        showOpenTroubleshooting: true,
+      );
+    }
+
+    if (family == FailureFamily.connect) {
+      final exitCodeMatch = RegExp(r'code\s+(\d+)').firstMatch(normalized);
+      if (exitCodeMatch != null) {
+        final code = exitCodeMatch.group(1)!;
+        return _ConnectionErrorPresentation(
+          headline: 'The connection ended unexpectedly',
+          detail:
+              'The runtime reached launch but the connect path still failed with exit code $code. Retry from Profiles or open Troubleshooting for recent logs.',
+          statusSummary: 'Connect path failed after launch (code $code).',
+          canRetryFromProfiles: true,
+          showOpenTroubleshooting: true,
+        );
+      }
+
+      if (normalized.startsWith('Runtime session stopped with error:')) {
+        final reason = normalized
+            .replaceFirst('Runtime session stopped with error:', '')
+            .trim();
+        return _ConnectionErrorPresentation(
+          headline: 'The runtime hit a local error',
+          detail:
+              'The current session stopped after launch and before it could stay connected. Open Troubleshooting for logs${reason.isEmpty ? '' : ' — latest detail: $reason'}.',
+          statusSummary: reason.isEmpty
+              ? 'Connect path failed after launch.'
+              : 'Runtime error: $reason',
+          canRetryFromProfiles: true,
+          showOpenTroubleshooting: true,
+        );
+      }
+    }
+
+    if (family == FailureFamily.environment) {
+      return const _ConnectionErrorPresentation(
+        headline: 'This environment cannot complete that action',
+        detail:
+            'The current controller posture or host environment does not expose the required runtime evidence path yet.',
+        statusSummary:
+            'Environment cannot provide the requested runtime evidence.',
         canRetryFromProfiles: false,
         showOpenTroubleshooting: true,
       );

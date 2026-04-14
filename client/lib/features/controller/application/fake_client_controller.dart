@@ -52,6 +52,40 @@ class FakeClientController extends ClientControllerApi {
   Future<ControllerRuntimeHealth> checkHealth() => _adapter.checkHealth();
 
   @override
+  Future<ControllerCommandResult> collectDiagnostics({
+    required String bundleKind,
+  }) {
+    return _adapter.execute(
+      ControllerCommand(
+        id: 'collect-diagnostics-${++_operationCounter}',
+        kind: ControllerCommandKind.collectDiagnostics,
+        issuedAt: DateTime.now(),
+        profileId: _status.activeProfileId,
+        arguments: <String, Object?>{
+          'bundleKind': bundleKind,
+        },
+      ),
+    );
+  }
+
+  @override
+  Future<ControllerCommandResult> prepareExport({
+    required String bundleKind,
+  }) {
+    return _adapter.execute(
+      ControllerCommand(
+        id: 'prepare-export-${++_operationCounter}',
+        kind: ControllerCommandKind.prepareExport,
+        issuedAt: DateTime.now(),
+        profileId: _status.activeProfileId,
+        arguments: <String, Object?>{
+          'bundleKind': bundleKind,
+        },
+      ),
+    );
+  }
+
+  @override
   Future<ControllerCommandResult> connect(ClientProfile profile) async {
     final operationId = 'connect-${++_operationCounter}';
     final commandResult = await _adapter.execute(

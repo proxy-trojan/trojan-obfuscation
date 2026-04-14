@@ -4,6 +4,7 @@ import '../../../platform/secure_storage/secure_storage.dart';
 import '../../../platform/services/app_runtime_error_store.dart';
 import '../../../platform/services/diagnostics_file_exporter.dart';
 import '../../controller/application/client_controller_api.dart';
+import '../../controller/domain/controller_command_result.dart';
 import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_posture.dart';
 import '../../packaging/application/packaging_store.dart';
@@ -70,6 +71,12 @@ class DiagnosticsExportService {
     final selected = profileStore.selectedProfile;
     final keys = await secureStorage.listKeys();
     final controllerHealth = await controller.checkHealth();
+    final diagnosticsCommand = await controller.collectDiagnostics(
+      bundleKind: bundleKind,
+    );
+    final exportPreparationCommand = await controller.prepareExport(
+      bundleKind: bundleKind,
+    );
     final readinessReport = await readiness.buildReport();
     final controllerStatus = controller.status;
     final controllerTelemetry = controller.telemetry;
@@ -127,6 +134,17 @@ class DiagnosticsExportService {
           'expectedRealRuntimePath': expectedRealRuntimePath,
           'reason': adapterSelectionReason,
         },
+        'runtimeEvidence': {
+          'collectDiagnostics': _normalizeRuntimeEvidence(
+            command: diagnosticsCommand,
+            commandName: 'collectDiagnostics',
+          ),
+          'prepareExport': _normalizeRuntimeEvidence(
+            command: exportPreparationCommand,
+            commandName: 'prepareExport',
+          ),
+        },
+        'lastRuntimeFailure': controller.lastRuntimeFailure?.toJson(),
         'runtimePosture': {
           'kind': runtimePosture.kind.name,
           'label': runtimePosture.postureLabel,
@@ -215,6 +233,56 @@ class DiagnosticsExportService {
       contents: contents,
     );
     return DiagnosticsExportResult(target: target, contents: contents);
+  }
+
+  Map<String, Object?> _normalizeRuntimeEvidence({
+    required ControllerCommandResult command,
+    required String commandName,
+  }) {
+    final rawDetails = command.details;
+    final nestedDetails = rawDetails['details'];
+    final nestedMap =
+        nestedDetails is Map<String, Object?> ? nestedDetails : null;
+    final bundleKind = rawDetails['bundleKind']?.toString() ??
+        nestedMap?['bundleKind']?.toString();
+    final evidenceClass = rawDetails['evidenceClass']?.toString() ??
+        nestedMap?['evidenceClass']?.toString();
+
+    final evidence = <String, Object?>{};
+    void addEvidence(String key) {
+      if (rawDetails.containsKey(key)) {
+        evidence[key] = rawDetails[key];
+      }
+    }
+
+    addEvidence('backendKind');
+    addEvidence('backendVersion');
+    addEvidence('binaryPathHint');
+    addEvidence('transportEndpointHint');
+    addEvidence('runtimeMode');
+    addEvidence('runtimePhase');
+    addEvidence('health');
+    addEvidence('session');
+    addEvidence('launchPlan');
+    addEvidence('logTail');
+    addEvidence('safeToExport');
+    addEvidence('includesBinaryPathHint');
+    addEvidence('includesLaunchPlan');
+    addEvidence('includesSessionEvidence');
+    addEvidence('includesLogTail');
+
+    return <String, Object?>{
+      'command': commandName,
+      'commandId': command.commandId,
+      'accepted': command.accepted,
+      'completedAt': command.completedAt.toIso8601String(),
+      'summary': command.summary,
+      'error': command.error,
+      'bundleKind': bundleKind,
+      'evidenceClass': evidenceClass,
+      'evidence': evidence,
+      'rawDetails': rawDetails,
+    };
   }
 
   @Deprecated('Use exportSupportBundle instead.')
