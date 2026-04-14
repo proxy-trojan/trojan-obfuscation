@@ -24,6 +24,31 @@ void main() {
     expect(resolved, 'trojan_pro_client.desktop.lock');
   });
 
+  test('lock acquisition still succeeds when focus IPC startup fails', () async {
+    if (!isDesktopPlatform()) {
+      return;
+    }
+
+    final lockName =
+        'trojan_pro_client.test.${DateTime.now().microsecondsSinceEpoch}.ipc-fail.lock';
+    await DesktopInstanceGuard.debugResetForTests();
+
+    DesktopInstanceGuard.debugSetFocusServerStarterForTests((_) {
+      throw const SocketException('focus-startup-failed');
+    });
+
+    final primary = await DesktopInstanceGuard.tryAcquirePrimaryLock(
+      lockName: lockName,
+    );
+
+    expect(primary, isTrue);
+
+    await DesktopInstanceGuard.debugResetForTests();
+    final lockPath = '${Directory.systemTemp.path}${Platform.pathSeparator}$lockName';
+    expect(await File(lockPath).exists(), isTrue);
+    await File(lockPath).delete();
+  });
+
   test('secondary focus signal reaches primary instance handler', () async {
     if (!isDesktopPlatform()) {
       return;

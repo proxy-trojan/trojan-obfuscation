@@ -16,6 +16,7 @@ class DesktopInstanceGuard {
   static String? _lockName;
   static String? _focusNonce;
   static Future<void> Function()? _focusRequestHandler;
+  static Future<void> Function(String lockName)? _focusServerStarterForTests;
 
   static Future<bool> tryAcquirePrimaryLock({
     String? lockName,
@@ -34,15 +35,30 @@ class DesktopInstanceGuard {
 
     try {
       await handle.lock(FileLock.exclusive);
-      _lockHandle = handle;
-      _lockName = effectiveLockName;
-      await _startFocusServer(effectiveLockName);
-      return true;
     } catch (_) {
       await handle.close();
       await _notifyPrimaryToFocus(effectiveLockName);
       return false;
     }
+
+    _lockHandle = handle;
+    _lockName = effectiveLockName;
+
+    try {
+      final focusServerStarter = _focusServerStarterForTests;
+      if (focusServerStarter != null) {
+        await focusServerStarter(effectiveLockName);
+      } else {
+        await _startFocusServer(effectiveLockName);
+      }
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Trojan-Pro Client: primary lock acquired but focus IPC startup failed '
+        'for "$effectiveLockName": $error\n$stackTrace',
+      );
+    }
+
+    return true;
   }
 
   static String resolveLockName({Map<String, String>? environment}) {
@@ -103,7 +119,6 @@ class DesktopInstanceGuard {
     final server = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
       0,
-      shared: true,
     );
     _focusServer = server;
 
@@ -216,6 +231,14 @@ class DesktopInstanceGuard {
     await release();
     _focusRequestHandler = null;
     _focusNonce = null;
+    _focusServerStarterForTests = null;
+  }
+
+  @visibleForTesting
+  static void debugSetFocusServerStarterForTests(
+    Future<void> Function(String lockName)? starter,
+  ) {
+    _focusServerStarterForTests = starter;
   }
 
   @visibleForTesting
