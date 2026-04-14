@@ -61,7 +61,7 @@ class UpdateWorkflowState {
 
   static const UpdateWorkflowState initial = UpdateWorkflowState(
     selectedChannel: UpdateChannel.beta,
-    currentVersionLabel: '1.4.0-beta.3',
+    currentVersionLabel: '1.4.0-beta.4',
     updateChecksEnabled: true,
     lastCheckSummary:
         'No update check has been executed in this shell environment yet.',
