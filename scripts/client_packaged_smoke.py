@@ -136,6 +136,11 @@ def run_packaged_executable_smoke(
         env.update(environment)
     env.setdefault('TROJAN_CLIENT_BACKEND_MODE', 'stub')
     env.setdefault('TROJAN_CLIENT_ENABLE_REAL_ADAPTER', '0')
+    smoke_lock_suffix = f'packaged_smoke.{platform_key}.{os.getpid()}.{int(time.time() * 1000)}'
+    env.setdefault(
+        'TROJAN_CLIENT_SINGLE_INSTANCE_LOCK_NAME',
+        f'trojan_pro_client.{smoke_lock_suffix}.desktop.lock',
+    )
 
     command: list[str] = []
     resolved_log_path = Path(log_path) if log_path is not None else executable.parent / 'packaged-smoke.log'
