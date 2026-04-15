@@ -39,7 +39,8 @@ class _RuntimeTrueController extends FakeClientController {
 
 class _ControllerWithFailureSummary extends FakeClientController {
   @override
-  LastRuntimeFailureSummary? get lastRuntimeFailure => LastRuntimeFailureSummary(
+  LastRuntimeFailureSummary? get lastRuntimeFailure =>
+      LastRuntimeFailureSummary(
         profileId: 'sample-hk-1',
         phase: 'runtime',
         family: FailureFamily.connect,
@@ -101,6 +102,14 @@ void main() {
     final payload = jsonDecode(preview) as Map<String, dynamic>;
 
     expect(payload['bundleKind'], 'support-bundle');
+
+    final selectedProfile = payload['selectedProfile'] as Map<String, dynamic>;
+    final selectedRouting = selectedProfile['routing'] as Map<String, dynamic>;
+    expect(selectedRouting['mode'], 'rule');
+    expect(selectedRouting['defaultAction'], 'proxy');
+    expect(selectedRouting['globalAction'], 'proxy');
+    expect(selectedRouting['ruleCount'], 0);
+    expect(selectedRouting['policyGroupCount'], 0);
 
     final controllerPayload = payload['controller'] as Map<String, dynamic>;
     final runtimePosture =

@@ -145,7 +145,8 @@ void main() {
     );
     final controller = AdapterBackedClientController(
       adapter: adapter,
-      profileSecrets: ProfileSecretsService(secureStorage: MemorySecureStorage()),
+      profileSecrets:
+          ProfileSecretsService(secureStorage: MemorySecureStorage()),
       sessionPollInterval: const Duration(milliseconds: 20),
     );
     addTearDown(controller.dispose);
@@ -166,8 +167,7 @@ void main() {
     );
   });
 
-  test('prepareExport forwards bundle kind through adapter boundary',
-      () async {
+  test('prepareExport forwards bundle kind through adapter boundary', () async {
     final adapter = _ControllableShellControllerAdapter(
       runtimeConfig: const ControllerRuntimeConfig(
         mode: 'external-runtime-boundary',
@@ -181,7 +181,8 @@ void main() {
     );
     final controller = AdapterBackedClientController(
       adapter: adapter,
-      profileSecrets: ProfileSecretsService(secureStorage: MemorySecureStorage()),
+      profileSecrets:
+          ProfileSecretsService(secureStorage: MemorySecureStorage()),
       sessionPollInterval: const Duration(milliseconds: 20),
     );
     addTearDown(controller.dispose);
@@ -229,6 +230,14 @@ void main() {
 
     await controller.connect(_demoProfile());
     expect(controller.status.phase, ClientConnectionPhase.connecting);
+
+    expect(adapter.lastCommand, isNotNull);
+    final routing = adapter.lastCommand!.arguments['routing'];
+    expect(routing, isA<Map<String, Object?>>());
+    final routingMap = routing! as Map<String, Object?>;
+    expect(routingMap['mode'], 'rule');
+    expect(routingMap['defaultAction'], 'proxy');
+    expect(routingMap['globalAction'], 'proxy');
 
     adapter.setSession(_session(isRunning: true, pid: 4321));
     await _waitFor(
@@ -420,7 +429,8 @@ void main() {
       ),
     );
     await _waitFor(
-      () => controller.status.message.contains('Waiting for the runtime process to exit cleanly'),
+      () => controller.status.message
+          .contains('Waiting for the runtime process to exit cleanly'),
       description: 'disconnecting status reflects stop-requested runtime',
     );
 

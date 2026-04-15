@@ -1,9 +1,13 @@
 import 'dart:convert';
 
 import '../../profiles/domain/client_profile.dart';
+import '../../routing/application/routing_profile_codec.dart';
 
 class TrojanClientConfigRenderer {
-  const TrojanClientConfigRenderer();
+  TrojanClientConfigRenderer({RoutingProfileCodec? routingCodec})
+      : _routingCodec = routingCodec ?? const RoutingProfileCodec();
+
+  final RoutingProfileCodec _routingCodec;
 
   String render({
     required ClientProfile profile,
@@ -37,6 +41,7 @@ class TrojanClientConfigRenderer {
         'fast_open': false,
         'fast_open_qlen': 20,
       },
+      'routing': _routingCodec.encodeToJsonMap(profile.routing),
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);

@@ -6,6 +6,7 @@ import '../../../platform/services/client_filesystem_layout.dart';
 import '../../../platform/services/local_state_store.dart';
 import '../../profiles/application/profile_secrets_service.dart';
 import '../../profiles/domain/client_profile.dart';
+import '../../routing/application/routing_profile_codec.dart';
 import '../domain/client_connection_status.dart';
 import '../domain/client_controller_event.dart';
 import '../domain/controller_command.dart';
@@ -25,11 +26,13 @@ class AdapterBackedClientController extends ClientControllerApi {
     required ProfileSecretsService profileSecrets,
     LocalStateStore? localStateStore,
     ClientFilesystemLayout? filesystemLayout,
+    RoutingProfileCodec? routingCodec,
     Duration sessionPollInterval = const Duration(milliseconds: 600),
   })  : _adapter = adapter,
         _profileSecrets = profileSecrets,
         _localStateStore = localStateStore,
-        _filesystemLayout = filesystemLayout {
+        _filesystemLayout = filesystemLayout,
+        _routingCodec = routingCodec ?? const RoutingProfileCodec() {
     _lastSessionUpdatedAt = _adapter.session.updatedAt;
     _sessionWatcher = Timer.periodic(sessionPollInterval, (_) {
       final session = _adapter.session;
@@ -51,6 +54,7 @@ class AdapterBackedClientController extends ClientControllerApi {
   final ProfileSecretsService _profileSecrets;
   final LocalStateStore? _localStateStore;
   final ClientFilesystemLayout? _filesystemLayout;
+  final RoutingProfileCodec _routingCodec;
   late final Timer _sessionWatcher;
   DateTime? _lastSessionUpdatedAt;
   int _operationCounter = 0;
@@ -242,6 +246,7 @@ class AdapterBackedClientController extends ClientControllerApi {
           'sni': profile.sni,
           'verifyTls': profile.verifyTls,
           'configPath': _configPathFor(profile.id),
+          'routing': _routingCodec.encodeToJsonMap(profile.routing),
         },
         secretArguments: <String, String>{
           'trojanPassword': password,
@@ -467,10 +472,8 @@ class AdapterBackedClientController extends ClientControllerApi {
         'Launch plan accepted. Starting runtime process.',
       ControllerRuntimePhase.alive =>
         'Runtime process is alive. Waiting for session-ready signal.',
-      ControllerRuntimePhase.sessionReady =>
-        commandResult.summary,
-      ControllerRuntimePhase.failed =>
-        commandResult.summary,
+      ControllerRuntimePhase.sessionReady => commandResult.summary,
+      ControllerRuntimePhase.failed => commandResult.summary,
       ControllerRuntimePhase.stopped =>
         'Launch accepted. Waiting for runtime state update.',
     };
@@ -480,7 +483,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     ControllerRuntimeSession runtimeSession,
     ControllerCommandResult commandResult,
   ) {
-    final pidSuffix = runtimeSession.pid == null ? '' : ' (pid=${runtimeSession.pid})';
+    final pidSuffix =
+        runtimeSession.pid == null ? '' : ' (pid=${runtimeSession.pid})';
     if (runtimeSession.stopRequested) {
       return 'Stop requested$pidSuffix. Waiting for the runtime process to exit cleanly.';
     }
@@ -540,8 +544,7 @@ class AdapterBackedClientController extends ClientControllerApi {
             'Runtime launch reported a failure state.',
           ControllerRuntimePhase.stopped =>
             'Launch accepted. Waiting for runtime process to start.',
-          ControllerRuntimePhase.sessionReady =>
-            'Runtime session is ready.',
+          ControllerRuntimePhase.sessionReady => 'Runtime session is ready.',
         };
 
         if (_status.message != progressSummary) {
@@ -1024,7 +1027,8 @@ class _PersistedRuntimeSnapshot {
     final sessionPid = value['sessionPid'];
     final sessionActiveConfigPath = value['sessionActiveConfigPath'];
     final sessionConfigProvenance = value['sessionConfigProvenance'];
-    final sessionExpectedLocalSocksPort = value['sessionExpectedLocalSocksPort'];
+    final sessionExpectedLocalSocksPort =
+        value['sessionExpectedLocalSocksPort'];
     final sessionLaunchPlanSummary = value['sessionLaunchPlanSummary'];
     final sessionLastExitCode = value['sessionLastExitCode'];
     final sessionLastError = value['sessionLastError'];
@@ -1051,7 +1055,8 @@ class _PersistedRuntimeSnapshot {
       statusUpdatedAt: parsedStatusUpdatedAt,
       sessionPhase: sessionPhase is String ? sessionPhase : 'stopped',
       sessionIsRunning: sessionIsRunning,
-      sessionStopRequested: sessionStopRequested is bool ? sessionStopRequested : false,
+      sessionStopRequested:
+          sessionStopRequested is bool ? sessionStopRequested : false,
       sessionStopRequestedAt: sessionStopRequestedAt is String
           ? DateTime.tryParse(sessionStopRequestedAt)
           : null,
@@ -1060,8 +1065,9 @@ class _PersistedRuntimeSnapshot {
           sessionActiveConfigPath is String ? sessionActiveConfigPath : null,
       sessionConfigProvenance:
           sessionConfigProvenance is String ? sessionConfigProvenance : null,
-      sessionExpectedLocalSocksPort:
-          sessionExpectedLocalSocksPort is int ? sessionExpectedLocalSocksPort : null,
+      sessionExpectedLocalSocksPort: sessionExpectedLocalSocksPort is int
+          ? sessionExpectedLocalSocksPort
+          : null,
       sessionLaunchPlanSummary:
           sessionLaunchPlanSummary is String ? sessionLaunchPlanSummary : null,
       sessionLastExitCode:

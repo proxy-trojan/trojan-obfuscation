@@ -1,9 +1,15 @@
 import 'dart:convert';
 
+import '../../routing/application/routing_profile_codec.dart';
 import '../domain/client_profile.dart';
 import 'profile_import_bundle.dart';
 
 class ProfilePortabilityService {
+  ProfilePortabilityService({RoutingProfileCodec? routingCodec})
+      : _routingCodec = routingCodec ?? const RoutingProfileCodec();
+
+  final RoutingProfileCodec _routingCodec;
+
   Map<String, Object?> _profilePayload(ClientProfile profile) {
     return <String, Object?>{
       'id': profile.id,
@@ -15,6 +21,7 @@ class ProfilePortabilityService {
       'verifyTls': profile.verifyTls,
       'notes': profile.notes,
       'updatedAt': profile.updatedAt.toIso8601String(),
+      'routing': _routingCodec.encodeToJsonMap(profile.routing),
     };
   }
 
@@ -28,7 +35,7 @@ class ProfilePortabilityService {
 
   String exportProfile(ClientProfile profile) {
     final payload = <String, Object?>{
-      'version': 1,
+      'version': 2,
       'kind': 'trojan-pro-client-profile',
       'profile': _profilePayload(profile),
       'secrets': _secretsPayload(profile),
@@ -39,7 +46,7 @@ class ProfilePortabilityService {
 
   String exportProfiles(List<ClientProfile> profiles) {
     final payload = <String, Object?>{
-      'version': 1,
+      'version': 2,
       'kind': 'trojan-pro-client-profile-bundle',
       'profiles': profiles
           .map(
@@ -75,6 +82,7 @@ class ProfilePortabilityService {
         updatedAt: DateTime.tryParse((profile['updatedAt'] as String?) ?? '') ??
             DateTime.now(),
         hasStoredPassword: false,
+        routing: _routingCodec.decodeFromObject(profile['routing']),
       ),
       trojanPasswordIncluded:
           (secrets['trojanPasswordIncluded'] as bool?) ?? false,

@@ -104,6 +104,13 @@ class DiagnosticsExportService {
               'serverPort': selected.serverPort,
               'sni': selected.sni,
               'hasStoredPassword': selected.hasStoredPassword,
+              'routing': {
+                'mode': selected.routing.mode.name,
+                'defaultAction': selected.routing.defaultAction.name,
+                'globalAction': selected.routing.globalAction.name,
+                'ruleCount': selected.routing.rules.length,
+                'policyGroupCount': selected.routing.policyGroups.length,
+              },
             },
       'readiness': readinessReport.toJson(),
       'controller': {
