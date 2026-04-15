@@ -15,9 +15,25 @@ Future<void> _selectDropdownValue(
   final dropdown = find.byKey(dropdownKey);
   await tester.ensureVisible(dropdown);
   await tester.pumpAndSettle();
-  await tester.tap(dropdown);
+
+  Future<bool> openMenuAndCheckOption() async {
+    await tester.tap(dropdown, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    return find.text(valueText).evaluate().isNotEmpty;
+  }
+
+  var optionFound = await openMenuAndCheckOption();
+  if (!optionFound) {
+    await tester.ensureVisible(dropdown);
+    await tester.pumpAndSettle();
+    optionFound = await openMenuAndCheckOption();
+  }
+
+  expect(find.text(valueText), findsWidgets);
+  final option = find.text(valueText).last;
+  await tester.ensureVisible(option);
   await tester.pumpAndSettle();
-  await tester.tap(find.text(valueText).last, warnIfMissed: false);
+  await tester.tap(option, warnIfMissed: false);
   await tester.pumpAndSettle();
 }
 
@@ -114,11 +130,6 @@ Future<void> _addRoutingRule(
       valueText: policyGroupId!,
     );
   } else {
-    await _selectDropdownValue(
-      tester,
-      dropdownKey: const Key('routing-rule-target-type-dropdown'),
-      valueText: 'direct',
-    );
     await _selectDropdownValue(
       tester,
       dropdownKey: const Key('routing-rule-direct-action-dropdown'),
@@ -479,6 +490,38 @@ void main() {
       find.byKey(const Key('routing-rule-domain-keyword-field')),
       'after-keyword',
     );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-domain-exact-field')),
+      'api.example.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-domain-suffix-field')),
+      '.example.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-domain-regex-field')),
+      '^api\\.example\\.com\$',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-ip-cidr-field')),
+      '10.0.0.0/8',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-port-field')),
+      '443',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-protocol-field')),
+      'tcp',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-process-name-field')),
+      'curl',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-process-path-field')),
+      '/usr/bin/curl',
+    );
     await _selectDropdownValue(
       tester,
       dropdownKey: const Key('routing-rule-direct-action-dropdown'),
@@ -499,7 +542,109 @@ void main() {
     expect(rule.name, 'After Rule Edit');
     expect(rule.priority, 5);
     expect(rule.match.domainKeyword, 'after-keyword');
+    expect(rule.match.domainExact, 'api.example.com');
+    expect(rule.match.domainSuffix, '.example.com');
+    expect(rule.match.domainRegex, '^api\\.example\\.com\$');
+    expect(rule.match.ipCidr, '10.0.0.0/8');
+    expect(rule.match.port, 443);
+    expect(rule.match.protocol, 'tcp');
+    expect(rule.match.processName, 'curl');
+    expect(rule.match.processPath, '/usr/bin/curl');
     expect(rule.action.directAction, RoutingAction.block);
+  });
+
+  testWidgets('rule dialog rejects save when no match field is provided',
+      (WidgetTester tester) async {
+    final completer = await _openEditorDialog(tester);
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'No Match Edge');
+    await tester.enterText(fields.at(1), 'no-match.example.com');
+    await tester.enterText(fields.at(2), '443');
+    await tester.enterText(fields.at(4), '1080');
+
+    final addRuleButton = find.byKey(const Key('add-routing-rule-button'));
+    await tester.ensureVisible(addRuleButton);
+    await tester.pumpAndSettle();
+    await tester.tap(addRuleButton);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-id-field')), 'rule-empty-match');
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-name-field')), 'Empty Match');
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-priority-field')), '10');
+
+    await tester.tap(find.byKey(const Key('save-routing-rule-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('At least one match condition is required.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.rules, isEmpty);
+  });
+
+  testWidgets('rule dialog rejects invalid port value',
+      (WidgetTester tester) async {
+    final completer = await _openEditorDialog(tester);
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Invalid Port Edge');
+    await tester.enterText(fields.at(1), 'invalid-port.example.com');
+    await tester.enterText(fields.at(2), '443');
+    await tester.enterText(fields.at(4), '1080');
+
+    final addRuleButton = find.byKey(const Key('add-routing-rule-button'));
+    await tester.ensureVisible(addRuleButton);
+    await tester.pumpAndSettle();
+    await tester.tap(addRuleButton);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-id-field')), 'rule-invalid-port');
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-name-field')), 'Invalid Port');
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-priority-field')), '10');
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-domain-keyword-field')),
+      'keyword',
+    );
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-port-field')),
+      '70000',
+    );
+
+    await tester.tap(find.byKey(const Key('save-routing-rule-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Port must be between 1 and 65535.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.rules, isEmpty);
   });
 
   testWidgets('editing profile can remove policy group and routing rule',

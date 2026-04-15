@@ -36,8 +36,16 @@ class _RoutingRuleDraft {
     required this.id,
     required this.name,
     required this.priority,
-    required this.domainKeyword,
     required this.targetType,
+    this.domainExact,
+    this.domainSuffix,
+    this.domainKeyword,
+    this.domainRegex,
+    this.ipCidr,
+    this.port,
+    this.protocol,
+    this.processName,
+    this.processPath,
     this.directAction,
     this.policyGroupId,
   });
@@ -45,7 +53,15 @@ class _RoutingRuleDraft {
   final String id;
   final String name;
   final int priority;
-  final String domainKeyword;
+  final String? domainExact;
+  final String? domainSuffix;
+  final String? domainKeyword;
+  final String? domainRegex;
+  final String? ipCidr;
+  final int? port;
+  final String? protocol;
+  final String? processName;
+  final String? processPath;
   final _RoutingRuleTargetType targetType;
   final RoutingAction? directAction;
   final String? policyGroupId;
@@ -461,7 +477,17 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       name: draft.name,
       enabled: true,
       priority: draft.priority,
-      match: RoutingRuleMatch(domainKeyword: draft.domainKeyword),
+      match: RoutingRuleMatch(
+        domainExact: _normalizeOptionalText(draft.domainExact),
+        domainSuffix: _normalizeOptionalText(draft.domainSuffix),
+        domainKeyword: _normalizeOptionalText(draft.domainKeyword),
+        domainRegex: _normalizeOptionalText(draft.domainRegex),
+        ipCidr: _normalizeOptionalText(draft.ipCidr),
+        port: draft.port,
+        protocol: _normalizeOptionalText(draft.protocol),
+        processName: _normalizeOptionalText(draft.processName),
+        processPath: _normalizeOptionalText(draft.processPath),
+      ),
       action: action,
     );
 
@@ -525,6 +551,14 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       match: source.match,
       action: action,
     );
+  }
+
+  String? _normalizeOptionalText(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final normalized = value.trim();
+    return normalized.isEmpty ? null : normalized;
   }
 
   void _submit() {
@@ -742,8 +776,16 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
   static const _idFieldKey = Key('routing-rule-id-field');
   static const _nameFieldKey = Key('routing-rule-name-field');
   static const _priorityFieldKey = Key('routing-rule-priority-field');
+  static const _domainExactFieldKey = Key('routing-rule-domain-exact-field');
+  static const _domainSuffixFieldKey = Key('routing-rule-domain-suffix-field');
   static const _domainKeywordFieldKey =
       Key('routing-rule-domain-keyword-field');
+  static const _domainRegexFieldKey = Key('routing-rule-domain-regex-field');
+  static const _ipCidrFieldKey = Key('routing-rule-ip-cidr-field');
+  static const _portFieldKey = Key('routing-rule-port-field');
+  static const _protocolFieldKey = Key('routing-rule-protocol-field');
+  static const _processNameFieldKey = Key('routing-rule-process-name-field');
+  static const _processPathFieldKey = Key('routing-rule-process-path-field');
   static const _targetTypeDropdownKey =
       Key('routing-rule-target-type-dropdown');
   static const _directActionDropdownKey =
@@ -755,7 +797,15 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
   late final TextEditingController _idController;
   late final TextEditingController _nameController;
   late final TextEditingController _priorityController;
+  late final TextEditingController _domainExactController;
+  late final TextEditingController _domainSuffixController;
   late final TextEditingController _domainKeywordController;
+  late final TextEditingController _domainRegexController;
+  late final TextEditingController _ipCidrController;
+  late final TextEditingController _portController;
+  late final TextEditingController _protocolController;
+  late final TextEditingController _processNameController;
+  late final TextEditingController _processPathController;
   _RoutingRuleTargetType _targetType = _RoutingRuleTargetType.direct;
   late RoutingAction _directAction;
   String? _policyGroupId;
@@ -770,8 +820,32 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
     _priorityController = TextEditingController(
       text: '${initial?.priority ?? 100}',
     );
+    _domainExactController = TextEditingController(
+      text: initial?.match.domainExact ?? '',
+    );
+    _domainSuffixController = TextEditingController(
+      text: initial?.match.domainSuffix ?? '',
+    );
     _domainKeywordController = TextEditingController(
       text: initial?.match.domainKeyword ?? '',
+    );
+    _domainRegexController = TextEditingController(
+      text: initial?.match.domainRegex ?? '',
+    );
+    _ipCidrController = TextEditingController(
+      text: initial?.match.ipCidr ?? '',
+    );
+    _portController = TextEditingController(
+      text: initial?.match.port?.toString() ?? '',
+    );
+    _protocolController = TextEditingController(
+      text: initial?.match.protocol ?? '',
+    );
+    _processNameController = TextEditingController(
+      text: initial?.match.processName ?? '',
+    );
+    _processPathController = TextEditingController(
+      text: initial?.match.processPath ?? '',
     );
 
     if (initial == null) {
@@ -798,7 +872,15 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
     _idController.dispose();
     _nameController.dispose();
     _priorityController.dispose();
+    _domainExactController.dispose();
+    _domainSuffixController.dispose();
     _domainKeywordController.dispose();
+    _domainRegexController.dispose();
+    _ipCidrController.dispose();
+    _portController.dispose();
+    _protocolController.dispose();
+    _processNameController.dispose();
+    _processPathController.dispose();
     super.dispose();
   }
 
@@ -840,10 +922,56 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
                 decoration: const InputDecoration(labelText: 'Priority'),
               ),
               TextField(
+                key: _domainExactFieldKey,
+                controller: _domainExactController,
+                decoration:
+                    const InputDecoration(labelText: 'Domain exact match'),
+              ),
+              TextField(
+                key: _domainSuffixFieldKey,
+                controller: _domainSuffixController,
+                decoration:
+                    const InputDecoration(labelText: 'Domain suffix match'),
+              ),
+              TextField(
                 key: _domainKeywordFieldKey,
                 controller: _domainKeywordController,
                 decoration:
                     const InputDecoration(labelText: 'Domain keyword match'),
+              ),
+              TextField(
+                key: _domainRegexFieldKey,
+                controller: _domainRegexController,
+                decoration:
+                    const InputDecoration(labelText: 'Domain regex match'),
+              ),
+              TextField(
+                key: _ipCidrFieldKey,
+                controller: _ipCidrController,
+                decoration: const InputDecoration(labelText: 'IP CIDR match'),
+              ),
+              TextField(
+                key: _portFieldKey,
+                controller: _portController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Port match'),
+              ),
+              TextField(
+                key: _protocolFieldKey,
+                controller: _protocolController,
+                decoration: const InputDecoration(labelText: 'Protocol match'),
+              ),
+              TextField(
+                key: _processNameFieldKey,
+                controller: _processNameController,
+                decoration:
+                    const InputDecoration(labelText: 'Process name match'),
+              ),
+              TextField(
+                key: _processPathFieldKey,
+                controller: _processPathController,
+                decoration:
+                    const InputDecoration(labelText: 'Process path match'),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<_RoutingRuleTargetType>(
@@ -932,7 +1060,15 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
     final id = _idController.text.trim();
     final name = _nameController.text.trim();
     final priority = int.tryParse(_priorityController.text.trim());
+    final domainExact = _domainExactController.text.trim();
+    final domainSuffix = _domainSuffixController.text.trim();
     final domainKeyword = _domainKeywordController.text.trim();
+    final domainRegex = _domainRegexController.text.trim();
+    final ipCidr = _ipCidrController.text.trim();
+    final portText = _portController.text.trim();
+    final protocol = _protocolController.text.trim();
+    final processName = _processNameController.text.trim();
+    final processPath = _processPathController.text.trim();
 
     if (id.isEmpty) {
       setState(() => _validationError = 'Rule id is required.');
@@ -946,8 +1082,35 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
       setState(() => _validationError = 'Priority must be a valid integer.');
       return;
     }
-    if (domainKeyword.isEmpty) {
-      setState(() => _validationError = 'Domain keyword match is required.');
+
+    int? port;
+    if (portText.isNotEmpty) {
+      port = int.tryParse(portText);
+      if (port == null) {
+        setState(() => _validationError = 'Port must be a valid integer.');
+        return;
+      }
+      if (port < 1 || port > 65535) {
+        setState(() => _validationError = 'Port must be between 1 and 65535.');
+        return;
+      }
+    }
+
+    final hasAnyMatch = RoutingRuleMatch(
+      domainExact: domainExact,
+      domainSuffix: domainSuffix,
+      domainKeyword: domainKeyword,
+      domainRegex: domainRegex,
+      ipCidr: ipCidr,
+      port: port,
+      protocol: protocol,
+      processName: processName,
+      processPath: processPath,
+    ).hasAnyConstraint;
+    if (!hasAnyMatch) {
+      setState(
+        () => _validationError = 'At least one match condition is required.',
+      );
       return;
     }
 
@@ -968,7 +1131,15 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
         id: id,
         name: name.isEmpty ? id : name,
         priority: priority,
-        domainKeyword: domainKeyword,
+        domainExact: domainExact.isEmpty ? null : domainExact,
+        domainSuffix: domainSuffix.isEmpty ? null : domainSuffix,
+        domainKeyword: domainKeyword.isEmpty ? null : domainKeyword,
+        domainRegex: domainRegex.isEmpty ? null : domainRegex,
+        ipCidr: ipCidr.isEmpty ? null : ipCidr,
+        port: port,
+        protocol: protocol.isEmpty ? null : protocol,
+        processName: processName.isEmpty ? null : processName,
+        processPath: processPath.isEmpty ? null : processPath,
         targetType: _targetType,
         directAction:
             _targetType == _RoutingRuleTargetType.direct ? _directAction : null,
