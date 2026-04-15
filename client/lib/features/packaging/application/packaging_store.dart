@@ -9,7 +9,7 @@ import '../domain/update_workflow_state.dart';
 import 'packaging_dry_run_service.dart';
 
 class PackagingStore extends ChangeNotifier {
-  PackagingStore({UpdateChannel initialChannel = UpdateChannel.beta})
+  PackagingStore({UpdateChannel initialChannel = UpdateChannel.stable})
       : _state = UpdateWorkflowState.initial.copyWith(
           selectedChannel: initialChannel,
           rolloutPolicySummary: _rolloutPolicySummaryFor(initialChannel),
@@ -24,8 +24,7 @@ class PackagingStore extends ChangeNotifier {
   final List<PackagingExportRecord> _exportHistory = <PackagingExportRecord>[];
 
   // 不使用 const：列表内容在后续版本中可能被动态更新
-  final List<DesktopPackageStatus> _packageStatuses =
-      <DesktopPackageStatus>[
+  final List<DesktopPackageStatus> _packageStatuses = <DesktopPackageStatus>[
     const DesktopPackageStatus(
       platform: DesktopPackagePlatform.windows,
       readiness: DesktopPackageReadiness.scaffolded,
@@ -102,7 +101,7 @@ class PackagingStore extends ChangeNotifier {
     _state = _state.copyWith(
       installerSkeletonReady: true,
       lastCheckSummary:
-          'Packaging skeleton drafted; release truth + packaged smoke gates are now part of the current beta.3 posture.',
+          'Packaging skeleton drafted; release truth + packaged smoke gates are now part of the current stable posture.',
     );
     notifyListeners();
   }

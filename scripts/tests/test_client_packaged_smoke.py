@@ -28,7 +28,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
     def test_resolves_linux_packaged_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_linux-x64-bundle.tar.gz'
+            artifact = root / 'trojan-pro-client_1.4.0_linux-x64-bundle.tar.gz'
             artifact.write_text('')
 
             self.assertEqual(resolve_packaged_artifact('linux', root), artifact)
@@ -44,7 +44,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
     def test_resolves_windows_packaged_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_windows-x64.zip'
+            artifact = root / 'trojan-pro-client_1.4.0_windows-x64.zip'
             artifact.write_text('')
 
             self.assertEqual(resolve_packaged_artifact('windows', root), artifact)
@@ -62,7 +62,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
     def test_resolves_macos_packaged_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_macos-app.zip'
+            artifact = root / 'trojan-pro-client_1.4.0_macos-app.zip'
             artifact.write_text('')
 
             self.assertEqual(resolve_packaged_artifact('macos', root), artifact)
@@ -75,7 +75,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
             binary = bundle_dir / 'trojan_pro_client'
             binary.write_text('')
             binary.chmod(0o755)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_linux-x64-bundle.tar.gz'
+            artifact = root / 'trojan-pro-client_1.4.0_linux-x64-bundle.tar.gz'
             with tarfile.open(artifact, 'w:gz') as archive:
                 archive.add(bundle_dir, arcname=bundle_dir.name)
 
@@ -90,7 +90,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
     def test_extracts_windows_zip_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_windows-x64.zip'
+            artifact = root / 'trojan-pro-client_1.4.0_windows-x64.zip'
             with zipfile.ZipFile(artifact, 'w') as archive:
                 archive.writestr('Trojan Pro Client.exe', '')
 
@@ -105,7 +105,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
     def test_extracts_macos_zip_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_macos-app.zip'
+            artifact = root / 'trojan-pro-client_1.4.0_macos-app.zip'
             with zipfile.ZipFile(artifact, 'w') as archive:
                 info = zipfile.ZipInfo(
                     'Trojan Pro Client.app/Contents/MacOS/Trojan Pro Client',
@@ -130,7 +130,7 @@ class ClientPackagedSmokeTest(unittest.TestCase):
     def test_extracts_macos_zip_symlinks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            artifact = root / 'trojan-pro-client_1.4.0-beta.3_macos-app.zip'
+            artifact = root / 'trojan-pro-client_1.4.0_macos-app.zip'
             link_path = 'trojan_pro_client.app/Contents/Frameworks/App.framework/Versions/Current'
             with zipfile.ZipFile(artifact, 'w') as archive:
                 app_binary = zipfile.ZipInfo(

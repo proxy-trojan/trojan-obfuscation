@@ -35,6 +35,30 @@ ControllerCommand _disconnectCommand() {
   );
 }
 
+ControllerCommand _collectDiagnosticsCommand({String? bundleKind}) {
+  return ControllerCommand(
+    id: 'collect-diagnostics-1',
+    kind: ControllerCommandKind.collectDiagnostics,
+    issuedAt: DateTime.now(),
+    profileId: 'profile-demo',
+    arguments: <String, Object?>{
+      if (bundleKind != null) 'bundleKind': bundleKind,
+    },
+  );
+}
+
+ControllerCommand _prepareExportCommand({String? bundleKind}) {
+  return ControllerCommand(
+    id: 'prepare-export-1',
+    kind: ControllerCommandKind.prepareExport,
+    issuedAt: DateTime.now(),
+    profileId: 'profile-demo',
+    arguments: <String, Object?>{
+      if (bundleKind != null) 'bundleKind': bundleKind,
+    },
+  );
+}
+
 Future<File> _writeFakeTrojanScript(Directory tempDir) async {
   final script = File(
     '${tempDir.path}${Platform.pathSeparator}fake-trojan.py',
@@ -289,5 +313,64 @@ void main() {
 
     expect(adapter.session.phase, ControllerRuntimePhase.stopped);
     expect(adapter.session.activeConfigPath, isNull);
+  });
+
+  test('collectDiagnostics returns runtime evidence payload', () async {
+    final tempDir =
+        await Directory.systemTemp.createTemp('real-shell-adapter-evidence');
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final adapter = RealShellControllerAdapter(
+      binaryPathHint: '${tempDir.path}${Platform.pathSeparator}missing-trojan',
+      transportEndpointHint: 'local-controller://test',
+    );
+
+    final result = await adapter.execute(
+      _collectDiagnosticsCommand(bundleKind: 'support-bundle'),
+    );
+
+    expect(result.accepted, isTrue);
+    expect(result.error, isNull);
+    expect(result.details['bundleKind'], 'support-bundle');
+    expect(result.details['backendKind'], isNotNull);
+    expect(result.details['runtimeMode'], 'external-runtime-boundary');
+    expect(result.details['runtimePhase'], isNotNull);
+    expect(result.details['session'], isA<Map<String, Object?>>());
+    expect(result.details['health'], isA<Map<String, Object?>>());
+    expect(result.details['safeToExport'], isA<bool>());
+    expect(result.details['includesSessionEvidence'], isTrue);
+    expect(result.details['includesLogTail'], isTrue);
+  });
+
+  test('prepareExport is accepted and carries evidence contract fields',
+      () async {
+    final tempDir =
+        await Directory.systemTemp.createTemp('real-shell-adapter-export');
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final adapter = RealShellControllerAdapter(
+      binaryPathHint: '${tempDir.path}${Platform.pathSeparator}missing-trojan',
+      transportEndpointHint: 'local-controller://test',
+    );
+
+    final result = await adapter.execute(
+      _prepareExportCommand(bundleKind: 'runtime-proof-artifact'),
+    );
+
+    expect(result.accepted, isTrue);
+    expect(result.error, isNull);
+    expect(result.details['bundleKind'], 'runtime-proof-artifact');
+    expect(result.details['evidenceClass'], isNotNull);
+    expect(result.details['safeToExport'], isA<bool>());
+    expect(result.details['includesBinaryPathHint'], isTrue);
+    expect(result.details['includesSessionEvidence'], isTrue);
   });
 }

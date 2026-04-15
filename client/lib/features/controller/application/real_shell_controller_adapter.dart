@@ -71,6 +71,7 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
           'connect',
           'disconnect',
           'healthCheck',
+          'collectDiagnostics',
           'prepareExport',
         ],
         lastUpdatedAt: DateTime.now(),
@@ -162,16 +163,55 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
       case ControllerCommandKind.disconnect:
         return _disconnect(command);
       case ControllerCommandKind.collectDiagnostics:
+        return _collectDiagnostics(command);
       case ControllerCommandKind.prepareExport:
-        return ControllerCommandResult(
-          commandId: command.id,
-          accepted: false,
-          completedAt: DateTime.now(),
-          summary:
-              'Command kind ${command.kind.name} is not wired in the real shell adapter yet.',
-          error: 'NOT_IMPLEMENTED',
-        );
+        return _prepareExport(command);
     }
+  }
+
+  Future<ControllerCommandResult> _collectDiagnostics(
+    ControllerCommand command,
+  ) async {
+    final bundleKind = command.arguments['bundleKind']?.toString();
+    final health = await checkHealth();
+    final safeToExport = _runtimePhase != ControllerRuntimePhase.failed &&
+        health.level != ControllerRuntimeHealthLevel.unavailable;
+
+    return ControllerCommandResult(
+      commandId: command.id,
+      accepted: true,
+      completedAt: DateTime.now(),
+      summary:
+          'Collected runtime evidence from the real shell adapter for diagnostics.',
+      details: _buildRuntimeEvidenceDetails(
+        bundleKind: bundleKind,
+        health: health,
+        safeToExport: safeToExport,
+      ),
+    );
+  }
+
+  Future<ControllerCommandResult> _prepareExport(
+    ControllerCommand command,
+  ) async {
+    final bundleKind = command.arguments['bundleKind']?.toString();
+    final health = await checkHealth();
+    final safeToExport = _runtimePhase != ControllerRuntimePhase.failed &&
+        health.level != ControllerRuntimeHealthLevel.unavailable;
+
+    return ControllerCommandResult(
+      commandId: command.id,
+      accepted: true,
+      completedAt: DateTime.now(),
+      summary: safeToExport
+          ? 'Runtime evidence is prepared for export from the real shell adapter.'
+          : 'Runtime evidence is prepared with caution because runtime health is unavailable or failed.',
+      details: _buildRuntimeEvidenceDetails(
+        bundleKind: bundleKind,
+        health: health,
+        safeToExport: safeToExport,
+      ),
+    );
   }
 
   Future<ControllerCommandResult> _disconnect(ControllerCommand command) async {
@@ -455,5 +495,40 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
 
   void _markSessionUpdated() {
     _sessionUpdatedAt = DateTime.now();
+  }
+
+  Map<String, Object?> _buildRuntimeEvidenceDetails({
+    required String? bundleKind,
+    required ControllerRuntimeHealth health,
+    required bool safeToExport,
+  }) {
+    return <String, Object?>{
+      if (bundleKind != null) 'bundleKind': bundleKind,
+      'evidenceClass': _runningProcess != null
+          ? 'runtime-live-evidence'
+          : 'runtime-snapshot-evidence',
+      'backendKind': backendKind,
+      'backendVersion': backendVersion,
+      'binaryPathHint': binaryPathHint,
+      'transportEndpointHint': transportEndpointHint,
+      'runtimeMode': runtimeMode,
+      'runtimePhase': _runtimePhase.name,
+      'health': <String, Object?>{
+        'level': health.level.name,
+        'summary': health.summary,
+        'updatedAt': health.updatedAt.toIso8601String(),
+      },
+      'session': session.toJson(),
+      if (_lastLaunchPlan != null) 'launchPlan': _lastLaunchPlan!.toJson(),
+      'logTail': <String, Object?>{
+        'stdoutTail': List<String>.unmodifiable(_stdoutTail),
+        'stderrTail': List<String>.unmodifiable(_stderrTail),
+      },
+      'safeToExport': safeToExport,
+      'includesBinaryPathHint': true,
+      'includesLaunchPlan': _lastLaunchPlan != null,
+      'includesSessionEvidence': true,
+      'includesLogTail': true,
+    };
   }
 }
