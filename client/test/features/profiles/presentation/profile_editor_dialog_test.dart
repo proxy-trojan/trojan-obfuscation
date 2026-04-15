@@ -7,6 +7,129 @@ import 'package:trojan_pro_client/features/profiles/presentation/profile_editor_
 import 'package:trojan_pro_client/features/routing/domain/routing_models.dart';
 import 'package:trojan_pro_client/features/routing/domain/routing_profile_config.dart';
 
+Future<void> _selectDropdownValue(
+  WidgetTester tester, {
+  required Key dropdownKey,
+  required String valueText,
+}) async {
+  final dropdown = find.byKey(dropdownKey);
+  await tester.ensureVisible(dropdown);
+  await tester.pumpAndSettle();
+  await tester.tap(dropdown);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(valueText).last, warnIfMissed: false);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectRoutingMode(WidgetTester tester, RoutingMode mode) {
+  return _selectDropdownValue(
+    tester,
+    dropdownKey: const Key('routing-mode-dropdown'),
+    valueText: mode.name,
+  );
+}
+
+Future<void> _selectRoutingDefaultAction(
+  WidgetTester tester,
+  RoutingAction action,
+) {
+  return _selectDropdownValue(
+    tester,
+    dropdownKey: const Key('routing-default-action-dropdown'),
+    valueText: action.name,
+  );
+}
+
+Future<void> _selectRoutingGlobalAction(
+  WidgetTester tester,
+  RoutingAction action,
+) {
+  return _selectDropdownValue(
+    tester,
+    dropdownKey: const Key('routing-global-action-dropdown'),
+    valueText: action.name,
+  );
+}
+
+Future<void> _addPolicyGroup(
+  WidgetTester tester, {
+  required String id,
+  required String name,
+  required RoutingAction action,
+}) async {
+  final addButton = find.byKey(const Key('add-policy-group-button'));
+  await tester.ensureVisible(addButton);
+  await tester.pumpAndSettle();
+  await tester.tap(addButton);
+  await tester.pumpAndSettle();
+
+  await tester.enterText(find.byKey(const Key('policy-group-id-field')), id);
+  await tester.enterText(
+      find.byKey(const Key('policy-group-name-field')), name);
+  await _selectDropdownValue(
+    tester,
+    dropdownKey: const Key('policy-group-action-dropdown'),
+    valueText: action.name,
+  );
+
+  await tester.tap(find.byKey(const Key('save-policy-group-button')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _addRoutingRule(
+  WidgetTester tester, {
+  required String id,
+  required String name,
+  required int priority,
+  required String domainKeyword,
+  bool usePolicyGroup = false,
+  RoutingAction directAction = RoutingAction.proxy,
+  String? policyGroupId,
+}) async {
+  final addButton = find.byKey(const Key('add-routing-rule-button'));
+  await tester.ensureVisible(addButton);
+  await tester.pumpAndSettle();
+  await tester.tap(addButton);
+  await tester.pumpAndSettle();
+
+  await tester.enterText(find.byKey(const Key('routing-rule-id-field')), id);
+  await tester.enterText(
+      find.byKey(const Key('routing-rule-name-field')), name);
+  await tester.enterText(
+      find.byKey(const Key('routing-rule-priority-field')), '$priority');
+  await tester.enterText(
+    find.byKey(const Key('routing-rule-domain-keyword-field')),
+    domainKeyword,
+  );
+
+  if (usePolicyGroup) {
+    await _selectDropdownValue(
+      tester,
+      dropdownKey: const Key('routing-rule-target-type-dropdown'),
+      valueText: 'policy-group',
+    );
+    await _selectDropdownValue(
+      tester,
+      dropdownKey: const Key('routing-rule-policy-group-dropdown'),
+      valueText: policyGroupId!,
+    );
+  } else {
+    await _selectDropdownValue(
+      tester,
+      dropdownKey: const Key('routing-rule-target-type-dropdown'),
+      valueText: 'direct',
+    );
+    await _selectDropdownValue(
+      tester,
+      dropdownKey: const Key('routing-rule-direct-action-dropdown'),
+      valueText: directAction.name,
+    );
+  }
+
+  await tester.tap(find.byKey(const Key('save-routing-rule-button')));
+  await tester.pumpAndSettle();
+}
+
 Future<Completer<ClientProfile?>> _openEditorDialog(
   WidgetTester tester, {
   ClientProfile? initial,
@@ -110,31 +233,9 @@ void main() {
     await tester.enterText(fields.at(2), '443');
     await tester.enterText(fields.at(4), '1080');
 
-    final routingModeDropdown = find.byKey(const Key('routing-mode-dropdown'));
-    await tester.ensureVisible(routingModeDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(routingModeDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('global').last, warnIfMissed: false);
-    await tester.pumpAndSettle();
-
-    final routingDefaultActionDropdown =
-        find.byKey(const Key('routing-default-action-dropdown'));
-    await tester.ensureVisible(routingDefaultActionDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(routingDefaultActionDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('direct').last, warnIfMissed: false);
-    await tester.pumpAndSettle();
-
-    final routingGlobalActionDropdown =
-        find.byKey(const Key('routing-global-action-dropdown'));
-    await tester.ensureVisible(routingGlobalActionDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(routingGlobalActionDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('block').last, warnIfMissed: false);
-    await tester.pumpAndSettle();
+    await _selectRoutingMode(tester, RoutingMode.global);
+    await _selectRoutingDefaultAction(tester, RoutingAction.direct);
+    await _selectRoutingGlobalAction(tester, RoutingAction.block);
 
     await tester.tap(find.text('Create'));
     await tester.pumpAndSettle();
@@ -177,5 +278,161 @@ void main() {
     final profile = await completer.future;
     expect(profile, isNotNull);
     expect(profile!.routing, routing);
+  });
+
+  testWidgets(
+      'editing profile updates only routing mode/default/global and keeps rule payload',
+      (WidgetTester tester) async {
+    const originalRule = RoutingRule(
+      id: 'rule-1',
+      name: 'Block social',
+      enabled: true,
+      priority: 10,
+      match: RoutingRuleMatch(domainKeyword: 'social'),
+      action: RoutingRuleAction.direct(RoutingAction.block),
+    );
+    const originalPolicyGroup = RoutingPolicyGroup(
+      id: 'group-proxy',
+      name: 'Proxy Group',
+      action: RoutingAction.proxy,
+    );
+    const originalRouting = RoutingProfileConfig(
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: <RoutingPolicyGroup>[originalPolicyGroup],
+      rules: <RoutingRule>[originalRule],
+    );
+    final initial = ClientProfile(
+      id: 'profile-jp-1',
+      name: 'JP Edge',
+      serverHost: 'jp.edge.example.com',
+      serverPort: 443,
+      sni: 'jp.edge.example.com',
+      localSocksPort: 1080,
+      verifyTls: true,
+      updatedAt: DateTime.parse('2026-04-15T00:00:00.000Z'),
+      hasStoredPassword: true,
+      routing: originalRouting,
+    );
+
+    final completer = await _openEditorDialog(tester, initial: initial);
+
+    await _selectRoutingMode(tester, RoutingMode.global);
+    await _selectRoutingDefaultAction(tester, RoutingAction.direct);
+    await _selectRoutingGlobalAction(tester, RoutingAction.block);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.mode, RoutingMode.global);
+    expect(profile.routing.defaultAction, RoutingAction.direct);
+    expect(profile.routing.globalAction, RoutingAction.block);
+    expect(profile.routing.rules, originalRouting.rules);
+    expect(profile.routing.policyGroups, originalRouting.policyGroups);
+  });
+
+  testWidgets('submits profile with added policy group and routing rule',
+      (WidgetTester tester) async {
+    final completer = await _openEditorDialog(tester);
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'SG Edge');
+    await tester.enterText(fields.at(1), 'sg.edge.example.com');
+    await tester.enterText(fields.at(2), '443');
+    await tester.enterText(fields.at(4), '1080');
+
+    await _addPolicyGroup(
+      tester,
+      id: 'group-proxy',
+      name: 'Proxy Group',
+      action: RoutingAction.proxy,
+    );
+    await _addRoutingRule(
+      tester,
+      id: 'rule-social',
+      name: 'Route social domains',
+      priority: 10,
+      domainKeyword: 'social',
+      usePolicyGroup: true,
+      policyGroupId: 'group-proxy',
+    );
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.policyGroups.length, 1);
+    expect(profile.routing.policyGroups.single.id, 'group-proxy');
+    expect(profile.routing.rules.length, 1);
+    expect(profile.routing.rules.single.id, 'rule-social');
+    expect(profile.routing.rules.single.match.domainKeyword, 'social');
+    expect(profile.routing.rules.single.action.policyGroupId, 'group-proxy');
+  });
+
+  testWidgets('editing profile can remove policy group and routing rule',
+      (WidgetTester tester) async {
+    const originalRule = RoutingRule(
+      id: 'rule-remove',
+      name: 'Remove me',
+      enabled: true,
+      priority: 10,
+      match: RoutingRuleMatch(domainKeyword: 'remove-me'),
+      action: RoutingRuleAction.direct(RoutingAction.block),
+    );
+    const originalPolicyGroup = RoutingPolicyGroup(
+      id: 'group-remove',
+      name: 'Remove Group',
+      action: RoutingAction.proxy,
+    );
+    const originalRouting = RoutingProfileConfig(
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: <RoutingPolicyGroup>[originalPolicyGroup],
+      rules: <RoutingRule>[originalRule],
+    );
+    final initial = ClientProfile(
+      id: 'profile-remove-1',
+      name: 'Remove Case',
+      serverHost: 'remove.example.com',
+      serverPort: 443,
+      sni: 'remove.example.com',
+      localSocksPort: 1080,
+      verifyTls: true,
+      updatedAt: DateTime.parse('2026-04-15T00:00:00.000Z'),
+      hasStoredPassword: true,
+      routing: originalRouting,
+    );
+
+    final completer = await _openEditorDialog(tester, initial: initial);
+
+    final removeRuleButton =
+        find.byKey(const Key('remove-routing-rule-rule-remove'));
+    await tester.ensureVisible(removeRuleButton);
+    await tester.pumpAndSettle();
+    await tester.tap(removeRuleButton, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    final removeGroupButton =
+        find.byKey(const Key('remove-policy-group-group-remove'));
+    await tester.ensureVisible(removeGroupButton);
+    await tester.pumpAndSettle();
+    await tester.tap(removeGroupButton, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.rules, isEmpty);
+    expect(profile.routing.policyGroups, isEmpty);
   });
 }
