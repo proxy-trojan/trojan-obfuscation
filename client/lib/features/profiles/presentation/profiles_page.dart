@@ -444,8 +444,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                 : connectionPolicy.primaryAction ==
                         ProfileConnectionPrimaryAction.openTroubleshooting
                     ? () => widget.onOpenAdvanced!(
-                        ReadinessAction.openTroubleshooting,
-                      )
+                          ReadinessAction.openTroubleshooting,
+                        )
                     : connectionPolicy.canToggleConnection
                         ? () async {
                             final messenger = ScaffoldMessenger.of(context);
@@ -512,6 +512,23 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             ),
             _detail('Runtime Endpoint',
                 services.controller.runtimeConfig.endpointHint),
+            _detail('Routing Mode', selected.routing.mode.name),
+            _detail(
+              'Routing Default Action',
+              selected.routing.defaultAction.name,
+            ),
+            _detail(
+              'Routing Global Action',
+              selected.routing.globalAction.name,
+            ),
+            _detail(
+              'Routing Rule Count',
+              '${selected.routing.rules.length}',
+            ),
+            _detail(
+              'Routing Policy Group Count',
+              '${selected.routing.policyGroups.length}',
+            ),
             _detail(
               'Trojan Password',
               selected.hasStoredPassword

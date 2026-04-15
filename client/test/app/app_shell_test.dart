@@ -200,11 +200,16 @@ void main() {
     expect(find.textContaining('Recommended next step: Open Troubleshooting'),
         findsOneWidget);
 
-    await tester
-        .tap(find.widgetWithText(OutlinedButton, 'Open Troubleshooting'));
+    final openTroubleshootingButton =
+        find.widgetWithText(OutlinedButton, 'Open Troubleshooting');
+    expect(openTroubleshootingButton, findsOneWidget);
+    await tester.ensureVisible(openTroubleshootingButton);
+    await tester.pumpAndSettle();
+    await tester.tap(openTroubleshootingButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Troubleshooting Overview'), findsOneWidget);
+    expect(find.text('Troubleshooting Overview', skipOffstage: false),
+        findsOneWidget);
 
     final supportPreviewFinder =
         find.text('Generate support preview', skipOffstage: false);

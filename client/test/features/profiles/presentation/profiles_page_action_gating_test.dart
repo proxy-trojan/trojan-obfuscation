@@ -202,10 +202,17 @@ void main() {
     expect(find.text('Server'), findsOneWidget);
     expect(find.text('Runtime Posture'), findsOneWidget);
     expect(find.text('Evidence Grade'), findsOneWidget);
+    expect(find.text('Routing Mode'), findsOneWidget);
+    expect(find.text('Routing Default Action'), findsOneWidget);
+    expect(find.text('Routing Global Action'), findsOneWidget);
+    expect(find.text('Routing Rule Count'), findsOneWidget);
+    expect(find.text('Routing Policy Group Count'), findsOneWidget);
     expect(find.text('Stub-only'), findsWidgets);
     expect(find.text('Shell-grade only'), findsWidgets);
     expect(find.text('${selected.serverHost}:${selected.serverPort}'),
         findsWidgets);
+    expect(find.text('${selected.routing.rules.length}'), findsWidgets);
+    expect(find.text('${selected.routing.policyGroups.length}'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -459,7 +466,8 @@ void main() {
     expect(find.text('Action safety'), findsOneWidget);
     expect(find.text('Revalidate before changing state'), findsOneWidget);
     expect(find.text('Revalidate in Troubleshooting'), findsOneWidget);
-    expect(find.textContaining('Open Troubleshooting to revalidate the runtime'),
+    expect(
+        find.textContaining('Open Troubleshooting to revalidate the runtime'),
         findsOneWidget);
     expect(find.textContaining('disconnect and reconnect'), findsOneWidget);
 
@@ -499,7 +507,8 @@ void main() {
     expect(find.textContaining('Shell validation is ready'), findsOneWidget);
   });
 
-  testWidgets('disconnecting stop-pending profile gates primary action to troubleshooting',
+  testWidgets(
+      'disconnecting stop-pending profile gates primary action to troubleshooting',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
     var openedAdvanced = false;
@@ -547,8 +556,11 @@ void main() {
 
     expect(find.text('Action safety'), findsOneWidget);
     expect(find.text('Wait for exit confirmation'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Open Troubleshooting'), findsOneWidget);
-    expect(find.textContaining('Primary state-changing action is temporarily withheld'),
+    expect(find.widgetWithText(FilledButton, 'Open Troubleshooting'),
+        findsOneWidget);
+    expect(
+        find.textContaining(
+            'Primary state-changing action is temporarily withheld'),
         findsNothing);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Open Troubleshooting'));
