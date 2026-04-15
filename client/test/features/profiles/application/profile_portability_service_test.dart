@@ -36,6 +36,7 @@ void main() {
     );
 
     final map = jsonDecode(exported) as Map<String, dynamic>;
+    expect(map['version'], 2);
     expect(map['kind'], 'trojan-pro-client-profile');
     final secrets = map['secrets'] as Map<String, dynamic>;
     expect(secrets['trojanPasswordIncluded'], false);
@@ -112,6 +113,7 @@ void main() {
     ]);
 
     final map = jsonDecode(exported) as Map<String, dynamic>;
+    expect(map['version'], 2);
     expect(map['kind'], 'trojan-pro-client-profile-bundle');
 
     final profiles = map['profiles'] as List<dynamic>;

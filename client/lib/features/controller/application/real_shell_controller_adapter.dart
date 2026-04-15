@@ -34,8 +34,8 @@ class RealShellControllerAdapter implements ShellControllerAdapter {
                     : binaryPathHint,
               ),
             ),
-        _connectPlanner = connectPlanner ?? const RealShellConnectPlanner(),
-        _configRenderer = configRenderer ?? const TrojanClientConfigRenderer();
+        _connectPlanner = connectPlanner ?? RealShellConnectPlanner(),
+        _configRenderer = configRenderer ?? TrojanClientConfigRenderer();
 
   final String binaryPathHint;
   final String transportEndpointHint;

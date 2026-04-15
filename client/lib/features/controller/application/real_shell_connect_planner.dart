@@ -1,4 +1,5 @@
 import '../../profiles/domain/client_profile.dart';
+import '../../routing/application/routing_profile_codec.dart';
 import '../domain/controller_command.dart';
 
 class RealShellConnectPlannerInput {
@@ -14,7 +15,10 @@ class RealShellConnectPlannerInput {
 }
 
 class RealShellConnectPlanner {
-  const RealShellConnectPlanner();
+  RealShellConnectPlanner({RoutingProfileCodec? routingCodec})
+      : _routingCodec = routingCodec ?? const RoutingProfileCodec();
+
+  final RoutingProfileCodec _routingCodec;
 
   RealShellConnectPlannerInput? parse(ControllerCommand command) {
     final profileName = command.arguments['profileName'] as String?;
@@ -46,6 +50,7 @@ class RealShellConnectPlanner {
         localSocksPort: localSocksPort,
         verifyTls: verifyTls ?? true,
         updatedAt: command.issuedAt,
+        routing: _routingCodec.decodeFromObject(command.arguments['routing']),
       ),
       configPath: configPath,
       password: password,

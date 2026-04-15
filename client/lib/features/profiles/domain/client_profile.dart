@@ -1,3 +1,5 @@
+import '../../routing/domain/routing_profile_config.dart';
+
 class ClientProfile {
   const ClientProfile({
     required this.id,
@@ -10,6 +12,7 @@ class ClientProfile {
     required this.updatedAt,
     this.notes = '',
     this.hasStoredPassword = false,
+    this.routing = RoutingProfileConfig.defaults,
   });
 
   final String id;
@@ -22,6 +25,7 @@ class ClientProfile {
   final String notes;
   final DateTime updatedAt;
   final bool hasStoredPassword;
+  final RoutingProfileConfig routing;
 
   ClientProfile copyWith({
     String? id,
@@ -34,6 +38,7 @@ class ClientProfile {
     String? notes,
     DateTime? updatedAt,
     bool? hasStoredPassword,
+    RoutingProfileConfig? routing,
   }) {
     return ClientProfile(
       id: id ?? this.id,
@@ -46,6 +51,7 @@ class ClientProfile {
       notes: notes ?? this.notes,
       updatedAt: updatedAt ?? this.updatedAt,
       hasStoredPassword: hasStoredPassword ?? this.hasStoredPassword,
+      routing: routing ?? this.routing,
     );
   }
 
@@ -63,7 +69,8 @@ class ClientProfile {
           verifyTls == other.verifyTls &&
           notes == other.notes &&
           updatedAt == other.updatedAt &&
-          hasStoredPassword == other.hasStoredPassword;
+          hasStoredPassword == other.hasStoredPassword &&
+          routing == other.routing;
 
   @override
   int get hashCode => Object.hash(
@@ -77,5 +84,6 @@ class ClientProfile {
         notes,
         updatedAt,
         hasStoredPassword,
+        routing,
       );
 }
