@@ -326,11 +326,22 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
         dense: true,
         title: Text('${group.id} · ${group.name}'),
         subtitle: Text('action: ${group.action.name}'),
-        trailing: IconButton(
-          key: Key('remove-policy-group-${group.id}'),
-          tooltip: 'Remove policy group',
-          onPressed: () => _removePolicyGroup(group.id),
-          icon: const Icon(Icons.delete_outline),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              key: Key('edit-policy-group-${group.id}'),
+              tooltip: 'Edit policy group',
+              onPressed: () => _onEditPolicyGroupPressed(group),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              key: Key('remove-policy-group-${group.id}'),
+              tooltip: 'Remove policy group',
+              onPressed: () => _removePolicyGroup(group.id),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
       ),
     );
@@ -349,11 +360,22 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
         subtitle: Text(
           'priority: ${rule.priority} · $actionSummary · match.keyword: ${rule.match.domainKeyword ?? '-'}',
         ),
-        trailing: IconButton(
-          key: Key('remove-routing-rule-${rule.id}'),
-          tooltip: 'Remove routing rule',
-          onPressed: () => _removeRoutingRule(rule.id),
-          icon: const Icon(Icons.delete_outline),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              key: Key('edit-routing-rule-${rule.id}'),
+              tooltip: 'Edit routing rule',
+              onPressed: () => _onEditRoutingRulePressed(rule),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              key: Key('remove-routing-rule-${rule.id}'),
+              tooltip: 'Remove routing rule',
+              onPressed: () => _removeRoutingRule(rule.id),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
       ),
     );
@@ -367,14 +389,28 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
     if (result == null) {
       return;
     }
+    _upsertPolicyGroup(result);
+  }
 
+  Future<void> _onEditPolicyGroupPressed(RoutingPolicyGroup current) async {
+    final result = await showDialog<_PolicyGroupDraft>(
+      context: context,
+      builder: (context) => _PolicyGroupEditorDialog(initial: current),
+    );
+    if (result == null) {
+      return;
+    }
+    _upsertPolicyGroup(result);
+  }
+
+  void _upsertPolicyGroup(_PolicyGroupDraft draft) {
     setState(() {
       final next = RoutingPolicyGroup(
-        id: result.id,
-        name: result.name,
-        action: result.action,
+        id: draft.id,
+        name: draft.name,
+        action: draft.action,
       );
-      final index = _routingPolicyGroups.indexWhere((g) => g.id == result.id);
+      final index = _routingPolicyGroups.indexWhere((g) => g.id == draft.id);
       if (index >= 0) {
         _routingPolicyGroups[index] = next;
       } else {
@@ -395,23 +431,42 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
     if (result == null) {
       return;
     }
+    _upsertRoutingRule(result);
+  }
 
-    final action = result.targetType == _RoutingRuleTargetType.policyGroup
-        ? RoutingRuleAction.policyGroup(result.policyGroupId)
+  Future<void> _onEditRoutingRulePressed(RoutingRule current) async {
+    final result = await showDialog<_RoutingRuleDraft>(
+      context: context,
+      builder: (context) => _RoutingRuleEditorDialog(
+        policyGroups: _routingPolicyGroups,
+        defaultAction: _routingDefaultAction,
+        initial: current,
+      ),
+    );
+    if (result == null) {
+      return;
+    }
+    _upsertRoutingRule(result);
+  }
+
+  void _upsertRoutingRule(_RoutingRuleDraft draft) {
+    final action = draft.targetType == _RoutingRuleTargetType.policyGroup
+        ? RoutingRuleAction.policyGroup(draft.policyGroupId)
         : RoutingRuleAction.direct(
-            result.directAction ?? _routingDefaultAction);
+            draft.directAction ?? _routingDefaultAction,
+          );
 
     final nextRule = RoutingRule(
-      id: result.id,
-      name: result.name,
+      id: draft.id,
+      name: draft.name,
       enabled: true,
-      priority: result.priority,
-      match: RoutingRuleMatch(domainKeyword: result.domainKeyword),
+      priority: draft.priority,
+      match: RoutingRuleMatch(domainKeyword: draft.domainKeyword),
       action: action,
     );
 
     setState(() {
-      final index = _routingRules.indexWhere((r) => r.id == result.id);
+      final index = _routingRules.indexWhere((r) => r.id == draft.id);
       if (index >= 0) {
         _routingRules[index] = nextRule;
       } else {
@@ -538,7 +593,9 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
 }
 
 class _PolicyGroupEditorDialog extends StatefulWidget {
-  const _PolicyGroupEditorDialog();
+  const _PolicyGroupEditorDialog({this.initial});
+
+  final RoutingPolicyGroup? initial;
 
   @override
   State<_PolicyGroupEditorDialog> createState() =>
@@ -559,8 +616,10 @@ class _PolicyGroupEditorDialogState extends State<_PolicyGroupEditorDialog> {
   @override
   void initState() {
     super.initState();
-    _idController = TextEditingController();
-    _nameController = TextEditingController();
+    final initial = widget.initial;
+    _idController = TextEditingController(text: initial?.id ?? '');
+    _nameController = TextEditingController(text: initial?.name ?? '');
+    _action = initial?.action ?? RoutingAction.proxy;
   }
 
   @override
@@ -573,7 +632,8 @@ class _PolicyGroupEditorDialogState extends State<_PolicyGroupEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add policy group'),
+      title: Text(
+          widget.initial == null ? 'Add policy group' : 'Edit policy group'),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -590,6 +650,7 @@ class _PolicyGroupEditorDialogState extends State<_PolicyGroupEditorDialog> {
             TextField(
               key: _idFieldKey,
               controller: _idController,
+              enabled: widget.initial == null,
               decoration: const InputDecoration(labelText: 'Policy group id'),
             ),
             TextField(
@@ -665,10 +726,12 @@ class _RoutingRuleEditorDialog extends StatefulWidget {
   const _RoutingRuleEditorDialog({
     required this.policyGroups,
     required this.defaultAction,
+    this.initial,
   });
 
   final List<RoutingPolicyGroup> policyGroups;
   final RoutingAction defaultAction;
+  final RoutingRule? initial;
 
   @override
   State<_RoutingRuleEditorDialog> createState() =>
@@ -701,12 +764,31 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
   @override
   void initState() {
     super.initState();
-    _idController = TextEditingController();
-    _nameController = TextEditingController();
-    _priorityController = TextEditingController(text: '100');
-    _domainKeywordController = TextEditingController();
-    _directAction = widget.defaultAction;
-    if (widget.policyGroups.isNotEmpty) {
+    final initial = widget.initial;
+    _idController = TextEditingController(text: initial?.id ?? '');
+    _nameController = TextEditingController(text: initial?.name ?? '');
+    _priorityController = TextEditingController(
+      text: '${initial?.priority ?? 100}',
+    );
+    _domainKeywordController = TextEditingController(
+      text: initial?.match.domainKeyword ?? '',
+    );
+
+    if (initial == null) {
+      _targetType = _RoutingRuleTargetType.direct;
+      _directAction = widget.defaultAction;
+      if (widget.policyGroups.isNotEmpty) {
+        _policyGroupId = widget.policyGroups.first.id;
+      }
+      return;
+    }
+
+    _targetType = initial.action.usesPolicyGroup
+        ? _RoutingRuleTargetType.policyGroup
+        : _RoutingRuleTargetType.direct;
+    _directAction = initial.action.directAction ?? widget.defaultAction;
+    _policyGroupId = initial.action.policyGroupId;
+    if (_policyGroupId == null && widget.policyGroups.isNotEmpty) {
       _policyGroupId = widget.policyGroups.first.id;
     }
   }
@@ -723,7 +805,8 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add routing rule'),
+      title: Text(
+          widget.initial == null ? 'Add routing rule' : 'Edit routing rule'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -742,6 +825,7 @@ class _RoutingRuleEditorDialogState extends State<_RoutingRuleEditorDialog> {
               TextField(
                 key: _idFieldKey,
                 controller: _idController,
+                enabled: widget.initial == null,
                 decoration: const InputDecoration(labelText: 'Rule id'),
               ),
               TextField(

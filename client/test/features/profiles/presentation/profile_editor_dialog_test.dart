@@ -375,6 +375,133 @@ void main() {
     expect(profile.routing.rules.single.action.policyGroupId, 'group-proxy');
   });
 
+  testWidgets('editing profile can update existing policy group fields',
+      (WidgetTester tester) async {
+    const originalPolicyGroup = RoutingPolicyGroup(
+      id: 'group-edit',
+      name: 'Before Edit',
+      action: RoutingAction.proxy,
+    );
+    const originalRouting = RoutingProfileConfig(
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: <RoutingPolicyGroup>[originalPolicyGroup],
+      rules: <RoutingRule>[],
+    );
+    final initial = ClientProfile(
+      id: 'profile-edit-group',
+      name: 'Edit Group Case',
+      serverHost: 'edit-group.example.com',
+      serverPort: 443,
+      sni: 'edit-group.example.com',
+      localSocksPort: 1080,
+      verifyTls: true,
+      updatedAt: DateTime.parse('2026-04-15T00:00:00.000Z'),
+      hasStoredPassword: true,
+      routing: originalRouting,
+    );
+
+    final completer = await _openEditorDialog(tester, initial: initial);
+
+    final editGroupButton =
+        find.byKey(const Key('edit-policy-group-group-edit'));
+    await tester.ensureVisible(editGroupButton);
+    await tester.pumpAndSettle();
+    await tester.tap(editGroupButton, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const Key('policy-group-name-field')), 'After Edit');
+    await _selectDropdownValue(
+      tester,
+      dropdownKey: const Key('policy-group-action-dropdown'),
+      valueText: RoutingAction.direct.name,
+    );
+    await tester.tap(find.byKey(const Key('save-policy-group-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.policyGroups, hasLength(1));
+    expect(profile.routing.policyGroups.single.id, 'group-edit');
+    expect(profile.routing.policyGroups.single.name, 'After Edit');
+    expect(profile.routing.policyGroups.single.action, RoutingAction.direct);
+  });
+
+  testWidgets('editing profile can update existing routing rule fields',
+      (WidgetTester tester) async {
+    const originalRule = RoutingRule(
+      id: 'rule-edit',
+      name: 'Before Rule Edit',
+      enabled: true,
+      priority: 20,
+      match: RoutingRuleMatch(domainKeyword: 'before-keyword'),
+      action: RoutingRuleAction.direct(RoutingAction.proxy),
+    );
+    const originalRouting = RoutingProfileConfig(
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[originalRule],
+    );
+    final initial = ClientProfile(
+      id: 'profile-edit-rule',
+      name: 'Edit Rule Case',
+      serverHost: 'edit-rule.example.com',
+      serverPort: 443,
+      sni: 'edit-rule.example.com',
+      localSocksPort: 1080,
+      verifyTls: true,
+      updatedAt: DateTime.parse('2026-04-15T00:00:00.000Z'),
+      hasStoredPassword: true,
+      routing: originalRouting,
+    );
+
+    final completer = await _openEditorDialog(tester, initial: initial);
+
+    final editRuleButton = find.byKey(const Key('edit-routing-rule-rule-edit'));
+    await tester.ensureVisible(editRuleButton);
+    await tester.pumpAndSettle();
+    await tester.tap(editRuleButton, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-name-field')), 'After Rule Edit');
+    await tester.enterText(
+        find.byKey(const Key('routing-rule-priority-field')), '5');
+    await tester.enterText(
+      find.byKey(const Key('routing-rule-domain-keyword-field')),
+      'after-keyword',
+    );
+    await _selectDropdownValue(
+      tester,
+      dropdownKey: const Key('routing-rule-direct-action-dropdown'),
+      valueText: RoutingAction.block.name,
+    );
+    await tester.tap(find.byKey(const Key('save-routing-rule-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.rules, hasLength(1));
+    final rule = profile.routing.rules.single;
+    expect(rule.id, 'rule-edit');
+    expect(rule.name, 'After Rule Edit');
+    expect(rule.priority, 5);
+    expect(rule.match.domainKeyword, 'after-keyword');
+    expect(rule.action.directAction, RoutingAction.block);
+  });
+
   testWidgets('editing profile can remove policy group and routing rule',
       (WidgetTester tester) async {
     const originalRule = RoutingRule(
