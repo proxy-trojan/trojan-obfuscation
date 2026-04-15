@@ -2,7 +2,7 @@
 
 ## Current answer
 
-Desktop client packaging is now **real**, and the current `v1.4.0-beta.3` lane has **executable CI gates** for release truth and packaged smoke.
+Desktop client packaging is now **real**, and the current `v1.4.0` stable lane has **executable CI gates** for release truth and packaged smoke.
 
 ## Verified status
 
@@ -45,7 +45,7 @@ cd ..
 python3 scripts/validate_client_release_truth.py
 python3 scripts/client_packaged_smoke.py \
   --platform linux \
-  --artifact-root packaging/linux/artifacts/v1.4.0-beta.3 \
+  --artifact-root packaging/linux/artifacts/v1.4.0 \
   --mode smoke \
   --allow-skip
 ```

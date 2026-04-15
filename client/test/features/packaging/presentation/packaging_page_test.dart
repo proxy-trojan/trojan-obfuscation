@@ -134,11 +134,12 @@ void main() {
     expect(find.text('Check for Updates (Stub)'), findsOneWidget);
     expect(find.textContaining('Metadata Contract'), findsOneWidget);
     expect(find.textContaining('Contract Version'), findsOneWidget);
-    expect(find.text('1.4.0-beta.3'), findsOneWidget);
-    expect(find.text('beta'), findsWidgets);
+    expect(find.text('1.4.0'), findsOneWidget);
+    expect(find.text('stable'), findsWidgets);
   });
 
-  testWidgets('packaging page reflects packaged smoke and release truth posture',
+  testWidgets(
+      'packaging page reflects packaged smoke and release truth posture',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
     final services = _buildServices();
@@ -154,9 +155,13 @@ void main() {
 
     expect(find.textContaining('release truth + packaged smoke gates'),
         findsOneWidget);
-    expect(find.textContaining('Validated locally; packaged smoke gate is in place'),
+    expect(
+        find.textContaining(
+            'Validated locally; packaged smoke gate is in place'),
         findsOneWidget);
-    expect(find.textContaining('packaged smoke gate is wired in CI'), findsNWidgets(2));
-    expect(find.textContaining('before CI/runtime validation exists'), findsNothing);
+    expect(find.textContaining('packaged smoke gate is wired in CI'),
+        findsNWidgets(2));
+    expect(find.textContaining('before CI/runtime validation exists'),
+        findsNothing);
   });
 }

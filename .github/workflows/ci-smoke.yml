@@ -42,3 +42,30 @@ jobs:
       - name: Run smoke tests
         run: |
           ctest --test-dir build/ci --output-on-failure -j"$(nproc)"
+
+  flutter-client-gate:
+    runs-on: ubuntu-22.04
+    name: Flutter client gate (domain/application)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: Flutter analyze + targeted tests
+        working-directory: client
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test \
+            test/features/controller/application/adapter_backed_client_controller_test.dart \
+            test/features/controller/application/real_shell_controller_adapter_test.dart \
+            test/features/diagnostics/application/diagnostics_export_service_test.dart \
+            test/features/settings/application/settings_serialization_test.dart \
+            test/features/packaging/application/packaging_store_test.dart \
+            test/features/packaging/presentation/packaging_page_test.dart

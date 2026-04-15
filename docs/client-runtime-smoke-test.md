@@ -37,7 +37,7 @@ Automation helpers:
 # packaged desktop smoke (artifact-first)
 python3 scripts/client_packaged_smoke.py \
   --platform linux \
-  --artifact-root packaging/linux/artifacts/v1.4.0-beta.3 \
+  --artifact-root packaging/linux/artifacts/v1.4.0 \
   --mode smoke
 ```
 
@@ -176,7 +176,7 @@ Expected:
 
 ## Packaged smoke policy
 
-For `v1.4.0-beta.3`, packaged smoke is intentionally narrower than the full manual runtime checklist above.
+For `v1.4.0`, packaged smoke is intentionally narrower than the full manual runtime checklist above.
 
 Latest runner-backed result:
 - `Client Packaging` run `24404269034` is green on all desktop packaged smoke lanes (macOS/Linux/Windows)

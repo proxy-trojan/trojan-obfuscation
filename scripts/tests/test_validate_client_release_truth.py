@@ -20,19 +20,19 @@ class ReleaseTruthValidationTest(unittest.TestCase):
             metadata = root / 'release-metadata.env'
             workflow_state = root / 'update_workflow_state.dart'
 
-            pubspec.write_text('version: 1.4.0-beta.3+1\n')
-            metadata.write_text('VERSION_LABEL="1.4.0-beta.3"\n')
+            pubspec.write_text('version: 1.4.0+1\n')
+            metadata.write_text('VERSION_LABEL="1.4.0"\n')
             workflow_state.write_text(textwrap.dedent('''
                 static const UpdateWorkflowState initial = UpdateWorkflowState(
-                  currentVersionLabel: '1.4.0-beta.3',
+                  currentVersionLabel: '1.4.0',
                 );
             '''))
 
-            self.assertEqual(parse_pubspec_version_label(pubspec), '1.4.0-beta.3')
-            self.assertEqual(parse_release_metadata_label(metadata), '1.4.0-beta.3')
+            self.assertEqual(parse_pubspec_version_label(pubspec), '1.4.0')
+            self.assertEqual(parse_release_metadata_label(metadata), '1.4.0')
             self.assertEqual(
                 parse_update_workflow_state_label(workflow_state),
-                '1.4.0-beta.3',
+                '1.4.0',
             )
 
     def test_rejects_mismatched_release_truth(self) -> None:
@@ -42,9 +42,9 @@ class ReleaseTruthValidationTest(unittest.TestCase):
             metadata = root / 'release-metadata.env'
             workflow_state = root / 'update_workflow_state.dart'
 
-            pubspec.write_text('version: 1.4.0-beta.3+1\n')
-            metadata.write_text('VERSION_LABEL="1.4.0-beta.2"\n')
-            workflow_state.write_text("currentVersionLabel: '1.4.0-beta.3',\n")
+            pubspec.write_text('version: 1.4.0+1\n')
+            metadata.write_text('VERSION_LABEL="1.3.9"\n')
+            workflow_state.write_text("currentVersionLabel: '1.4.0',\n")
 
             with self.assertRaises(ReleaseTruthMismatch) as ctx:
                 validate_release_truth(

@@ -113,6 +113,17 @@ jobs:
           flutter pub get
           flutter analyze
 
+      - name: Flutter test gate (domain/application)
+        working-directory: client
+        run: |
+          flutter test \
+            test/features/controller/application/adapter_backed_client_controller_test.dart \
+            test/features/controller/application/real_shell_controller_adapter_test.dart \
+            test/features/diagnostics/application/diagnostics_export_service_test.dart \
+            test/features/settings/application/settings_serialization_test.dart \
+            test/features/packaging/application/packaging_store_test.dart \
+            test/features/packaging/presentation/packaging_page_test.dart
+
       - name: Build Linux bundle
         working-directory: client
         run: flutter build linux --release
