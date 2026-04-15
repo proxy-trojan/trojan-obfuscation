@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../routing/domain/routing_models.dart';
 import '../../routing/domain/routing_profile_config.dart';
 import '../domain/client_profile.dart';
 
@@ -23,6 +24,12 @@ class _ProfileEditorDialog extends StatefulWidget {
 }
 
 class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
+  static const _routingModeDropdownKey = Key('routing-mode-dropdown');
+  static const _routingDefaultActionDropdownKey =
+      Key('routing-default-action-dropdown');
+  static const _routingGlobalActionDropdownKey =
+      Key('routing-global-action-dropdown');
+
   late final TextEditingController _nameController;
   late final TextEditingController _serverHostController;
   late final TextEditingController _serverPortController;
@@ -31,6 +38,9 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
   late final TextEditingController _notesController;
   bool _verifyTls = true;
   String? _validationError;
+  late RoutingMode _routingMode;
+  late RoutingAction _routingDefaultAction;
+  late RoutingAction _routingGlobalAction;
 
   @override
   void initState() {
@@ -46,6 +56,10 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
         TextEditingController(text: '${initial?.localSocksPort ?? 1080}');
     _notesController = TextEditingController(text: initial?.notes ?? '');
     _verifyTls = initial?.verifyTls ?? true;
+    final initialRouting = initial?.routing ?? RoutingProfileConfig.defaults;
+    _routingMode = initialRouting.mode;
+    _routingDefaultAction = initialRouting.defaultAction;
+    _routingGlobalAction = initialRouting.globalAction;
   }
 
   @override
@@ -125,6 +139,70 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
                 onChanged: (bool value) => setState(() => _verifyTls = value),
                 title: const Text('Verify TLS'),
               ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<RoutingMode>(
+                key: _routingModeDropdownKey,
+                initialValue: _routingMode,
+                decoration: const InputDecoration(labelText: 'Routing mode'),
+                items: RoutingMode.values
+                    .map(
+                      (mode) => DropdownMenuItem<RoutingMode>(
+                        value: mode,
+                        child: Text(mode.name),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() => _routingMode = value);
+                },
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<RoutingAction>(
+                key: _routingDefaultActionDropdownKey,
+                initialValue: _routingDefaultAction,
+                decoration: const InputDecoration(
+                  labelText: 'Routing default action',
+                ),
+                items: RoutingAction.values
+                    .map(
+                      (action) => DropdownMenuItem<RoutingAction>(
+                        value: action,
+                        child: Text(action.name),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() => _routingDefaultAction = value);
+                },
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<RoutingAction>(
+                key: _routingGlobalActionDropdownKey,
+                initialValue: _routingGlobalAction,
+                decoration: const InputDecoration(
+                  labelText: 'Routing global action',
+                ),
+                items: RoutingAction.values
+                    .map(
+                      (action) => DropdownMenuItem<RoutingAction>(
+                        value: action,
+                        child: Text(action.name),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() => _routingGlobalAction = value);
+                },
+              ),
             ],
           ),
         ),
@@ -182,7 +260,14 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       notes: _notesController.text.trim(),
       updatedAt: DateTime.now(),
       hasStoredPassword: initial?.hasStoredPassword ?? false,
-      routing: initial?.routing ?? RoutingProfileConfig.defaults,
+      routing: RoutingProfileConfig(
+        mode: _routingMode,
+        defaultAction: _routingDefaultAction,
+        globalAction: _routingGlobalAction,
+        policyGroups: initial?.routing.policyGroups ??
+            RoutingProfileConfig.defaults.policyGroups,
+        rules: initial?.routing.rules ?? RoutingProfileConfig.defaults.rules,
+      ),
     );
     Navigator.of(context).pop(profile);
   }

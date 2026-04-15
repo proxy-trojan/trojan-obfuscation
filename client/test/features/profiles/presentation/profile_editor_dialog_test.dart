@@ -100,6 +100,53 @@ void main() {
     expect(profile.notes, 'primary edge');
   });
 
+  testWidgets('submits selected routing defaults for new profile',
+      (WidgetTester tester) async {
+    final completer = await _openEditorDialog(tester);
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'JP Edge');
+    await tester.enterText(fields.at(1), 'jp.edge.example.com');
+    await tester.enterText(fields.at(2), '443');
+    await tester.enterText(fields.at(4), '1080');
+
+    final routingModeDropdown = find.byKey(const Key('routing-mode-dropdown'));
+    await tester.ensureVisible(routingModeDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(routingModeDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('global').last, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    final routingDefaultActionDropdown =
+        find.byKey(const Key('routing-default-action-dropdown'));
+    await tester.ensureVisible(routingDefaultActionDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(routingDefaultActionDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('direct').last, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    final routingGlobalActionDropdown =
+        find.byKey(const Key('routing-global-action-dropdown'));
+    await tester.ensureVisible(routingGlobalActionDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(routingGlobalActionDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('block').last, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing.mode, RoutingMode.global);
+    expect(profile.routing.defaultAction, RoutingAction.direct);
+    expect(profile.routing.globalAction, RoutingAction.block);
+  });
+
   testWidgets('editing profile keeps existing routing configuration',
       (WidgetTester tester) async {
     const routing = RoutingProfileConfig(
