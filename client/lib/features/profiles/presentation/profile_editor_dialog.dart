@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../routing/domain/routing_profile_config.dart';
 import '../domain/client_profile.dart';
 
 Future<ClientProfile?> showProfileEditorDialog(
@@ -181,6 +182,7 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       notes: _notesController.text.trim(),
       updatedAt: DateTime.now(),
       hasStoredPassword: initial?.hasStoredPassword ?? false,
+      routing: initial?.routing ?? RoutingProfileConfig.defaults,
     );
     Navigator.of(context).pop(profile);
   }

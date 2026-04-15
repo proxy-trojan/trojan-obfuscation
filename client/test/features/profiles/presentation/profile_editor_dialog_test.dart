@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/features/profiles/presentation/profile_editor_dialog.dart';
+import 'package:trojan_pro_client/features/routing/domain/routing_models.dart';
+import 'package:trojan_pro_client/features/routing/domain/routing_profile_config.dart';
 
-Future<Completer<ClientProfile?>> _openEditorDialog(WidgetTester tester) async {
+Future<Completer<ClientProfile?>> _openEditorDialog(
+  WidgetTester tester, {
+  ClientProfile? initial,
+}) async {
   final resultCompleter = Completer<ClientProfile?>();
 
   await tester.pumpWidget(
@@ -15,7 +20,10 @@ Future<Completer<ClientProfile?>> _openEditorDialog(WidgetTester tester) async {
           builder: (BuildContext context) {
             return FilledButton(
               onPressed: () {
-                showProfileEditorDialog(context).then(resultCompleter.complete);
+                showProfileEditorDialog(
+                  context,
+                  initial: initial,
+                ).then(resultCompleter.complete);
               },
               child: const Text('Open Editor'),
             );
@@ -90,5 +98,37 @@ void main() {
     expect(profile.sni, 'prod.example.com');
     expect(profile.localSocksPort, 2080);
     expect(profile.notes, 'primary edge');
+  });
+
+  testWidgets('editing profile keeps existing routing configuration',
+      (WidgetTester tester) async {
+    const routing = RoutingProfileConfig(
+      mode: RoutingMode.global,
+      defaultAction: RoutingAction.direct,
+      globalAction: RoutingAction.block,
+      policyGroups: <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[],
+    );
+    final initial = ClientProfile(
+      id: 'profile-hk-1',
+      name: 'HK Edge',
+      serverHost: 'hk.edge.example.com',
+      serverPort: 443,
+      sni: 'hk.edge.example.com',
+      localSocksPort: 1080,
+      verifyTls: true,
+      updatedAt: DateTime.parse('2026-04-15T00:00:00.000Z'),
+      hasStoredPassword: true,
+      routing: routing,
+    );
+    final completer = await _openEditorDialog(tester, initial: initial);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+    final profile = await completer.future;
+    expect(profile, isNotNull);
+    expect(profile!.routing, routing);
   });
 }
