@@ -13,6 +13,9 @@ import 'package:trojan_pro_client/features/controller/domain/controller_runtime_
 import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
 import 'package:trojan_pro_client/features/profiles/application/profile_secrets_service.dart';
 import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
+import 'package:trojan_pro_client/features/routing/testing/application/routing_probe_runner.dart';
+import 'package:trojan_pro_client/features/routing/testing/domain/routing_probe_models.dart';
+import 'package:trojan_pro_client/features/routing/testing/platform/routing_probe_adapter.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
 import 'package:trojan_pro_client/platform/services/client_filesystem_layout.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
@@ -77,9 +80,34 @@ class _ControllableShellControllerAdapter implements ShellControllerAdapter {
   }
 }
 
-ClientProfile _demoProfile() {
+class _ConfigurableRoutingProbeAdapter implements RoutingProbeAdapter {
+  _ConfigurableRoutingProbeAdapter({this.shouldFail = false});
+
+  bool shouldFail;
+
+  @override
+  RoutingProbePlatform get platform => RoutingProbePlatform.linux;
+
+  @override
+  Future<RoutingProbeObservation> executeProbe(
+    RoutingProbeScenario scenario,
+  ) async {
+    return RoutingProbeObservation(
+      platform: platform,
+      scenarioId: scenario.id,
+      observedResult: shouldFail
+          ? RoutingProbeObservedResult.unknown
+          : scenario.expected.expectedObservedResult,
+      rawSummary: shouldFail
+          ? 'forced mini smoke failure for ${scenario.id}'
+          : 'mini smoke pass for ${scenario.id}',
+    );
+  }
+}
+
+ClientProfile _demoProfile({String id = 'profile-demo'}) {
   return ClientProfile(
-    id: 'profile-demo',
+    id: id,
     name: 'demo-profile',
     serverHost: 'example.com',
     serverPort: 443,
@@ -914,5 +942,163 @@ void main() {
 
     expect(controller.status.phase, ClientConnectionPhase.disconnected);
     expect(controller.lastRuntimeFailure, isNull);
+  });
+
+  test('connect apply should rollback and enter safe mode on smoke failure',
+      () async {
+    final localState = MemoryLocalStateStore();
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(profileId: 'profile-stable', password: 'ok');
+    await secrets.saveTrojanPassword(profileId: 'profile-candidate', password: 'ok');
+
+    final probeAdapter = _ConfigurableRoutingProbeAdapter(shouldFail: false);
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      localStateStore: localState,
+      routingProbeRunner: RoutingProbeRunner(
+        adapters: <RoutingProbeAdapter>[probeAdapter],
+      ),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final stableResult =
+        await controller.connect(_demoProfile(id: 'profile-stable'));
+    expect(stableResult.accepted, isTrue);
+
+    probeAdapter.shouldFail = true;
+
+    final candidateResult =
+        await controller.connect(_demoProfile(id: 'profile-candidate'));
+
+    expect(candidateResult.accepted, isFalse);
+    expect(candidateResult.error, 'ROUTING_APPLY_ROLLED_BACK');
+    expect(controller.status.phase, ClientConnectionPhase.error);
+    expect(controller.status.safeModeActive, isTrue);
+    expect(controller.status.rollbackReason, isNotEmpty);
+    expect(controller.status.quarantineKey, isNull);
+    expect(controller.status.activeProfileId, 'profile-candidate');
+    expect(
+      controller.recentEvents
+          .any((event) => event.title == 'Routing rollback applied'),
+      isTrue,
+    );
+
+    final persisted = await localState.read('controller.routingSafetyState');
+    expect(persisted, isNotNull);
+    final payload = jsonDecode(persisted!) as Map<String, Object?>;
+    expect(payload['safeModeActive'], isTrue);
+    expect(payload['rollbackReason'], isNotNull);
+  });
+
+  test('second rollback in window should quarantine candidate', () async {
+    final localState = MemoryLocalStateStore();
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+
+    final probeAdapter = _ConfigurableRoutingProbeAdapter(shouldFail: false);
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(profileId: 'profile-stable', password: 'ok');
+    await secrets.saveTrojanPassword(profileId: 'profile-candidate', password: 'ok');
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      localStateStore: localState,
+      routingProbeRunner: RoutingProbeRunner(
+        adapters: <RoutingProbeAdapter>[probeAdapter],
+      ),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final stableResult =
+        await controller.connect(_demoProfile(id: 'profile-stable'));
+    expect(stableResult.accepted, isTrue);
+
+    probeAdapter.shouldFail = true;
+
+    final firstFailure = await controller.connect(_demoProfile(id: 'profile-candidate'));
+    expect(firstFailure.accepted, isFalse);
+    expect(firstFailure.error, 'ROUTING_APPLY_ROLLED_BACK');
+
+    final secondFailure = await controller.connect(_demoProfile(id: 'profile-candidate'));
+    expect(secondFailure.accepted, isFalse);
+    expect(secondFailure.error, 'ROUTING_APPLY_ROLLED_BACK_QUARANTINED');
+    expect(controller.status.safeModeActive, isTrue);
+    expect(controller.status.quarantineKey, 'profile-candidate');
+
+    final blockedAfterQuarantine =
+        await controller.connect(_demoProfile(id: 'profile-candidate'));
+    expect(blockedAfterQuarantine.accepted, isFalse);
+    expect(blockedAfterQuarantine.error, 'ROUTING_QUARANTINED');
+  });
+
+  test('quarantined candidate should be blocked before connect command',
+      () async {
+    final localState = MemoryLocalStateStore();
+    await localState.write(
+      'controller.routingSafetyState',
+      jsonEncode(<String, Object?>{
+        'safeModeActive': true,
+        'quarantineKey': 'profile-candidate',
+        'rollbackReason': 'prior rollback',
+        'lastKnownGoodProfileId': 'profile-stable',
+      }),
+    );
+
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(profileId: 'profile-candidate', password: 'ok');
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      localStateStore: localState,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.restorePersistedState();
+
+    final result = await controller.connect(_demoProfile(id: 'profile-candidate'));
+
+    expect(result.accepted, isFalse);
+    expect(result.error, 'ROUTING_QUARANTINED');
+    expect(controller.status.safeModeActive, isTrue);
+    expect(controller.status.quarantineKey, 'profile-candidate');
+    expect(adapter.lastCommand, isNull);
   });
 }

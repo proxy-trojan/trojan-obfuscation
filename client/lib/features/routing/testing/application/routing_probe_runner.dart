@@ -33,4 +33,51 @@ class RoutingProbeRunner {
 
     return output;
   }
+
+  Future<RoutingMiniSmokeResult> runMiniSmoke(
+    List<RoutingProbeScenario> scenarios,
+  ) async {
+    final evidence = await runBatch(scenarios);
+    var passed = true;
+    String reason = 'Mini smoke passed for all routing scenarios.';
+
+    for (final record in evidence) {
+      if (!_matchesExpectation(record)) {
+        passed = false;
+        reason =
+            'Mini smoke failed for ${record.scenarioId} on ${record.platform.name}: expected ${record.decisionAction.name}, observed ${record.observedResult.name}.';
+        break;
+      }
+    }
+
+    return RoutingMiniSmokeResult(
+      passed: passed,
+      reason: reason,
+      evidence: evidence,
+    );
+  }
+
+  bool _matchesExpectation(RoutingProbeEvidenceRecord record) {
+    final expected = record.decisionAction;
+    final observed = record.observedResult;
+
+    return switch (expected) {
+      RoutingProbeAction.direct => observed == RoutingProbeObservedResult.direct,
+      RoutingProbeAction.proxy => observed == RoutingProbeObservedResult.proxy,
+      RoutingProbeAction.block =>
+        observed == RoutingProbeObservedResult.blocked,
+    };
+  }
+}
+
+class RoutingMiniSmokeResult {
+  const RoutingMiniSmokeResult({
+    required this.passed,
+    required this.reason,
+    required this.evidence,
+  });
+
+  final bool passed;
+  final String reason;
+  final List<RoutingProbeEvidenceRecord> evidence;
 }

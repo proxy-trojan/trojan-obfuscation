@@ -7,6 +7,15 @@ import '../../../platform/services/local_state_store.dart';
 import '../../profiles/application/profile_secrets_service.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../../routing/application/routing_profile_codec.dart';
+import '../../routing/domain/routing_runtime_safety.dart';
+import '../../routing/testing/application/routing_probe_runner.dart';
+import '../../routing/testing/application/routing_probe_scenarios.dart';
+import '../../routing/testing/application/routing_probe_verdict_service.dart';
+import '../../routing/testing/domain/routing_probe_models.dart';
+import '../../routing/testing/platform/routing_probe_adapter.dart';
+import '../../routing/testing/platform/routing_probe_adapter_linux.dart';
+import '../../routing/testing/platform/routing_probe_adapter_macos.dart';
+import '../../routing/testing/platform/routing_probe_adapter_windows.dart';
 import '../domain/client_connection_status.dart';
 import '../domain/client_controller_event.dart';
 import '../domain/controller_command.dart';
@@ -27,12 +36,23 @@ class AdapterBackedClientController extends ClientControllerApi {
     LocalStateStore? localStateStore,
     ClientFilesystemLayout? filesystemLayout,
     RoutingProfileCodec? routingCodec,
+    RoutingProbeRunner? routingProbeRunner,
+    RoutingProbeVerdictService? routingProbeVerdictService,
+    RoutingRollbackWindowTracker? rollbackWindowTracker,
+    RoutingQuarantineRegistry? quarantineRegistry,
     Duration sessionPollInterval = const Duration(milliseconds: 600),
   })  : _adapter = adapter,
         _profileSecrets = profileSecrets,
         _localStateStore = localStateStore,
         _filesystemLayout = filesystemLayout,
-        _routingCodec = routingCodec ?? const RoutingProfileCodec() {
+        _routingCodec = routingCodec ?? const RoutingProfileCodec(),
+        _routingProbeRunner = routingProbeRunner ??
+            RoutingProbeRunner(adapters: _defaultRoutingProbeAdapters()),
+        _routingProbeVerdictService =
+            routingProbeVerdictService ?? const RoutingProbeVerdictService(),
+        _rollbackWindowTracker =
+            rollbackWindowTracker ?? RoutingRollbackWindowTracker(),
+        _quarantineRegistry = quarantineRegistry ?? RoutingQuarantineRegistry() {
     _lastSessionUpdatedAt = _adapter.session.updatedAt;
     _sessionWatcher = Timer.periodic(sessionPollInterval, (_) {
       final session = _adapter.session;
@@ -49,18 +69,25 @@ class AdapterBackedClientController extends ClientControllerApi {
   static const String _lastRuntimeFailureKey =
       'controller.lastRuntimeFailureSummary';
   static const String _runtimeSnapshotKey = 'controller.runtimeSessionSnapshot';
+  static const String _routingSafetyStateKey =
+      'controller.routingSafetyState';
 
   final ShellControllerAdapter _adapter;
   final ProfileSecretsService _profileSecrets;
   final LocalStateStore? _localStateStore;
   final ClientFilesystemLayout? _filesystemLayout;
   final RoutingProfileCodec _routingCodec;
+  final RoutingProbeRunner _routingProbeRunner;
+  final RoutingProbeVerdictService _routingProbeVerdictService;
+  final RoutingRollbackWindowTracker _rollbackWindowTracker;
+  final RoutingQuarantineRegistry _quarantineRegistry;
   late final Timer _sessionWatcher;
   DateTime? _lastSessionUpdatedAt;
   int _operationCounter = 0;
   int _eventCounter = 0;
   bool _disposed = false;
   bool _operationInProgress = false;
+  String? _lastKnownGoodProfileId;
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
   LastRuntimeFailureSummary? _lastRuntimeFailure;
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
@@ -97,6 +124,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     final store = _localStateStore;
     if (store == null) return;
 
+    await _restoreRoutingSafetyState(store);
+
     var changed = false;
     final restoredFailure = await _readLastRuntimeFailure(store);
     if (restoredFailure != null) {
@@ -116,6 +145,9 @@ class AdapterBackedClientController extends ClientControllerApi {
         activeProfileId: snapshot.activeProfileId,
         errorCode: 'RUNTIME_RECOVERY_INTERRUPTED_SESSION',
         failureFamilyHint: FailureFamily.launch.label,
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       _recordEvent(
         title: 'Recovered interrupted session state',
@@ -199,6 +231,43 @@ class AdapterBackedClientController extends ClientControllerApi {
 
   Future<ControllerCommandResult> _connectInner(ClientProfile profile) async {
     final operationId = 'connect-${++_operationCounter}';
+
+    if (_quarantineRegistry.isQuarantined(profile.id)) {
+      final result = ControllerCommandResult(
+        commandId: operationId,
+        accepted: false,
+        completedAt: DateTime.now(),
+        summary: 'Routing candidate is quarantined. Manual unlock required.',
+        error: 'ROUTING_QUARANTINED',
+      );
+      _recordEvent(
+        title: 'Connect blocked by quarantine',
+        message: result.summary,
+        phase: ClientConnectionPhase.error,
+        profileId: profile.id,
+        kind: ClientControllerEventKind.result,
+        operationId: operationId,
+        step: 0,
+        level: ClientControllerEventLevel.error,
+        quarantineKey: profile.id,
+      );
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: result.summary,
+        updatedAt: DateTime.now(),
+        activeProfileId: profile.id,
+        errorCode: result.error,
+        failureFamilyHint: FailureFamily.connect.label,
+        safeModeActive: true,
+        quarantineKey: profile.id,
+        rollbackReason: _status.rollbackReason,
+      );
+      await _persistRoutingSafetyState();
+      await _persistRuntimeSnapshot();
+      _notifyIfActive();
+      return result;
+    }
+
     final password = await _profileSecrets.readTrojanPassword(profile.id);
     if (password == null || password.trim().isEmpty) {
       final result = ControllerCommandResult(
@@ -226,6 +295,9 @@ class AdapterBackedClientController extends ClientControllerApi {
         activeProfileId: profile.id,
         errorCode: result.error,
         failureFamilyHint: FailureFamily.userInput.label,
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       await _persistRuntimeSnapshot();
       _notifyIfActive();
@@ -294,6 +366,9 @@ class AdapterBackedClientController extends ClientControllerApi {
           detail: commandResult.error ?? commandResult.summary,
           phase: 'launch',
         ).label,
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       await _recordLastRuntimeFailure(
         profileId: profile.id,
@@ -313,7 +388,85 @@ class AdapterBackedClientController extends ClientControllerApi {
       message: acceptedMessage,
       updatedAt: DateTime.now(),
       activeProfileId: profile.id,
+      safeModeActive: false,
+      rollbackReason: null,
+      quarantineKey: _status.quarantineKey,
     );
+    _notifyIfActive();
+
+    final miniSmoke = await _runRoutingMiniSmoke();
+    if (!miniSmoke.passed) {
+      final quarantined = _rollbackWindowTracker.recordFailure(
+        candidateKey: profile.id,
+        at: DateTime.now(),
+      );
+      if (quarantined) {
+        _quarantineRegistry.quarantine(profile.id);
+      }
+
+      await _rollbackToLastKnownGood(
+        profileId: profile.id,
+        reason: miniSmoke.reason,
+        operationId: operationId,
+      );
+
+      final summary = quarantined
+          ? 'Routing apply failed, rolled back, and candidate is now quarantined.'
+          : 'Routing apply failed and has been rolled back in Safe Mode.';
+      _status = ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: summary,
+        updatedAt: DateTime.now(),
+        activeProfileId: profile.id,
+        errorCode: 'ROUTING_APPLY_ROLLED_BACK',
+        failureFamilyHint: FailureFamily.connect.label,
+        safeModeActive: true,
+        quarantineKey: quarantined ? profile.id : _status.quarantineKey,
+        rollbackReason: miniSmoke.reason,
+      );
+      _recordEvent(
+        title: 'Routing rollback applied',
+        message: miniSmoke.reason,
+        phase: ClientConnectionPhase.error,
+        profileId: profile.id,
+        kind: ClientControllerEventKind.result,
+        operationId: operationId,
+        step: 2,
+        level: ClientControllerEventLevel.error,
+        rollbackReason: miniSmoke.reason,
+        quarantineKey: quarantined ? profile.id : null,
+      );
+      await _persistRoutingSafetyState();
+      await _recordLastRuntimeFailure(
+        profileId: profile.id,
+        phase: 'routing',
+        headline: 'Routing apply rolled back by mini smoke safety gate',
+        detail: miniSmoke.reason,
+        errorCode: 'ROUTING_APPLY_ROLLED_BACK',
+        summary: summary,
+      );
+      await _persistRuntimeSnapshot();
+      _notifyIfActive();
+      return ControllerCommandResult(
+        commandId: operationId,
+        accepted: false,
+        completedAt: DateTime.now(),
+        summary: summary,
+        error: quarantined
+            ? 'ROUTING_APPLY_ROLLED_BACK_QUARANTINED'
+            : 'ROUTING_APPLY_ROLLED_BACK',
+        details: <String, Object?>{
+          'rollbackReason': miniSmoke.reason,
+          'safeModeActivated': true,
+          'quarantined': quarantined,
+          'quarantineKey': quarantined ? profile.id : null,
+        },
+      );
+    }
+
+    _lastKnownGoodProfileId = profile.id;
+    _rollbackWindowTracker.clear(profile.id);
+    await _persistRoutingSafetyState();
     await _clearLastRuntimeFailure();
     await _persistRuntimeSnapshot();
     _notifyIfActive();
@@ -348,6 +501,9 @@ class AdapterBackedClientController extends ClientControllerApi {
       message: 'Disconnecting current session...',
       updatedAt: DateTime.now(),
       activeProfileId: activeProfileId,
+      safeModeActive: _status.safeModeActive,
+      quarantineKey: _status.quarantineKey,
+      rollbackReason: _status.rollbackReason,
     );
     await _persistRuntimeSnapshot();
     _notifyIfActive();
@@ -384,6 +540,9 @@ class AdapterBackedClientController extends ClientControllerApi {
           detail: commandResult.error ?? commandResult.summary,
           phase: 'disconnect',
         ).label,
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       await _recordLastRuntimeFailure(
         profileId: activeProfileId,
@@ -423,12 +582,18 @@ class AdapterBackedClientController extends ClientControllerApi {
             phase: ClientConnectionPhase.disconnected,
             message: nextMessage,
             updatedAt: DateTime.now(),
+            safeModeActive: _status.safeModeActive,
+            quarantineKey: _status.quarantineKey,
+            rollbackReason: _status.rollbackReason,
           )
         : ClientConnectionStatus(
             phase: ClientConnectionPhase.disconnecting,
             message: nextMessage,
             updatedAt: DateTime.now(),
             activeProfileId: activeProfileId,
+            safeModeActive: _status.safeModeActive,
+            quarantineKey: _status.quarantineKey,
+            rollbackReason: _status.rollbackReason,
           );
 
     if (nextPhase == ClientConnectionPhase.disconnected) {
@@ -518,6 +683,8 @@ class AdapterBackedClientController extends ClientControllerApi {
             updatedAt: DateTime.now(),
             clearErrorCode: true,
             clearFailureFamilyHint: true,
+            safeModeActive: false,
+            clearRollbackReason: true,
           );
           _recordEvent(
             title: 'Runtime session ready',
@@ -616,6 +783,9 @@ class AdapterBackedClientController extends ClientControllerApi {
         phase: ClientConnectionPhase.disconnected,
         message: summary,
         updatedAt: DateTime.now(),
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       _recordEvent(
         title: 'Disconnect completed',
@@ -641,6 +811,9 @@ class AdapterBackedClientController extends ClientControllerApi {
         activeProfileId: activeProfileId,
         errorCode: 'RUNTIME_SESSION_ERROR',
         failureFamilyHint: FailureFamily.connect.label,
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       _recordEvent(
         title: 'Runtime session ended',
@@ -670,6 +843,9 @@ class AdapterBackedClientController extends ClientControllerApi {
         activeProfileId: activeProfileId,
         errorCode: 'RUNTIME_SESSION_EXIT_NONZERO',
         failureFamilyHint: FailureFamily.connect.label,
+        safeModeActive: _status.safeModeActive,
+        quarantineKey: _status.quarantineKey,
+        rollbackReason: _status.rollbackReason,
       );
       _recordEvent(
         title: 'Runtime session ended',
@@ -697,6 +873,9 @@ class AdapterBackedClientController extends ClientControllerApi {
       phase: ClientConnectionPhase.disconnected,
       message: summary,
       updatedAt: DateTime.now(),
+      safeModeActive: _status.safeModeActive,
+      quarantineKey: _status.quarantineKey,
+      rollbackReason: _status.rollbackReason,
     );
     _recordEvent(
       title: 'Runtime session ended',
@@ -936,6 +1115,8 @@ class AdapterBackedClientController extends ClientControllerApi {
     ClientControllerEventKind kind = ClientControllerEventKind.lifecycle,
     String? operationId,
     int? step,
+    String? rollbackReason,
+    String? quarantineKey,
   }) {
     final event = ClientControllerEvent(
       id: 'event-${++_eventCounter}',
@@ -948,11 +1129,132 @@ class AdapterBackedClientController extends ClientControllerApi {
       profileId: profileId,
       operationId: operationId,
       step: step,
+      rollbackReason: rollbackReason,
+      quarantineKey: quarantineKey,
     );
     _events.insert(0, event);
     if (_events.length > _maxEvents) {
       _events.removeRange(_maxEvents, _events.length);
     }
+  }
+
+  Future<RoutingMiniSmokeResult> _runRoutingMiniSmoke() async {
+    final smoke = await _routingProbeRunner.runMiniSmoke(routingProbeCoreScenarios);
+    if (!smoke.passed) {
+      return smoke;
+    }
+
+    for (final record in smoke.evidence) {
+      final verdict = _routingProbeVerdictService.evaluateSingle(record);
+      if (verdict.status == RoutingProbeVerdictStatus.fail) {
+        return RoutingMiniSmokeResult(
+          passed: false,
+          reason: verdict.reason,
+          evidence: smoke.evidence,
+        );
+      }
+    }
+
+    return smoke;
+  }
+
+  Future<void> _rollbackToLastKnownGood({
+    required String profileId,
+    required String reason,
+    required String operationId,
+  }) async {
+    _recordEvent(
+      title: 'Routing rollback in progress',
+      message: reason,
+      phase: ClientConnectionPhase.error,
+      profileId: profileId,
+      kind: ClientControllerEventKind.progress,
+      level: ClientControllerEventLevel.warning,
+      operationId: operationId,
+      rollbackReason: reason,
+    );
+
+    final fallbackProfileId = _lastKnownGoodProfileId;
+    if (fallbackProfileId == null || fallbackProfileId == profileId) {
+      return;
+    }
+
+    final rollbackResult = await _adapter.execute(
+      ControllerCommand(
+        id: 'rollback-${++_operationCounter}',
+        kind: ControllerCommandKind.connect,
+        issuedAt: DateTime.now(),
+        profileId: fallbackProfileId,
+        arguments: <String, Object?>{
+          'rollback': true,
+          'reason': reason,
+        },
+      ),
+    );
+
+    _recordEvent(
+      title: 'Routing rollback attempted',
+      message: rollbackResult.summary,
+      phase: rollbackResult.accepted
+          ? ClientConnectionPhase.connecting
+          : ClientConnectionPhase.error,
+      profileId: fallbackProfileId,
+      kind: ClientControllerEventKind.result,
+      level: rollbackResult.accepted
+          ? ClientControllerEventLevel.info
+          : ClientControllerEventLevel.error,
+      operationId: rollbackResult.commandId,
+      rollbackReason: reason,
+    );
+  }
+
+  Future<void> _persistRoutingSafetyState() async {
+    final store = _localStateStore;
+    if (store == null) return;
+
+    final payload = <String, Object?>{
+      'safeModeActive': _status.safeModeActive,
+      'quarantineKey': _status.quarantineKey,
+      'rollbackReason': _status.rollbackReason,
+      'lastKnownGoodProfileId': _lastKnownGoodProfileId,
+    };
+
+    await store.write(_routingSafetyStateKey, jsonEncode(payload));
+  }
+
+  Future<void> _restoreRoutingSafetyState(LocalStateStore store) async {
+    final raw = await store.read(_routingSafetyStateKey);
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) return;
+
+    final map = Map<String, Object?>.from(decoded);
+    final safeModeActive = map['safeModeActive'] == true;
+    final quarantineKey = map['quarantineKey'] as String?;
+    final rollbackReason = map['rollbackReason'] as String?;
+    final lastKnownGoodProfileId = map['lastKnownGoodProfileId'] as String?;
+
+    _status = _status.copyWith(
+      safeModeActive: safeModeActive,
+      quarantineKey: quarantineKey,
+      rollbackReason: rollbackReason,
+      clearQuarantineKey: quarantineKey == null || quarantineKey.trim().isEmpty,
+      clearRollbackReason:
+          rollbackReason == null || rollbackReason.trim().isEmpty,
+    );
+    _lastKnownGoodProfileId = lastKnownGoodProfileId;
+    if (quarantineKey != null && quarantineKey.trim().isNotEmpty) {
+      _quarantineRegistry.quarantine(quarantineKey);
+    }
+  }
+
+  static List<RoutingProbeAdapter> _defaultRoutingProbeAdapters() {
+    return const <RoutingProbeAdapter>[
+      RoutingProbeAdapterLinux(),
+      RoutingProbeAdapterWindows(),
+      RoutingProbeAdapterMacos(),
+    ];
   }
 }
 
