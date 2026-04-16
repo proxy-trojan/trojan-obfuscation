@@ -231,4 +231,143 @@ void main() {
     expect(decision.matchedRuleId, isNull);
     expect(decision.explain, contains('mode=direct'));
   });
+
+  test('domain regex rule should match normalized host with case-insensitive pattern', () {
+    final profile = RoutingProfile(
+      id: 'routing-7',
+      name: 'Regex Routing',
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: const <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[
+        _rule(
+          id: 'rule-regex-block',
+          priority: 5,
+          match: const RoutingRuleMatch(domainRegex: r'^api\.example\.com$'),
+          action: const RoutingRuleAction.direct(RoutingAction.block),
+        ),
+      ],
+      updatedAt: DateTime.parse('2026-04-16T00:00:00.000Z'),
+    );
+
+    final decision = engine.resolve(
+      profile: profile,
+      request: const RoutingRequestMetadata(
+        host: 'API.Example.COM',
+        port: 443,
+        protocol: 'tcp',
+      ),
+    );
+
+    expect(decision.action, RoutingAction.block);
+    expect(decision.matchedRuleId, 'rule-regex-block');
+  });
+
+  test('invalid domain regex should not accidentally match and must fallback to default action', () {
+    final profile = RoutingProfile(
+      id: 'routing-8',
+      name: 'Invalid Regex Routing',
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.direct,
+      globalAction: RoutingAction.proxy,
+      policyGroups: const <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[
+        _rule(
+          id: 'rule-invalid-regex',
+          priority: 1,
+          match: const RoutingRuleMatch(domainRegex: '('),
+          action: const RoutingRuleAction.direct(RoutingAction.block),
+        ),
+      ],
+      updatedAt: DateTime.parse('2026-04-16T00:00:00.000Z'),
+    );
+
+    final decision = engine.resolve(
+      profile: profile,
+      request: const RoutingRequestMetadata(
+        host: 'any.example.com',
+        port: 443,
+        protocol: 'tcp',
+      ),
+    );
+
+    expect(decision.action, RoutingAction.direct);
+    expect(decision.matchedRuleId, isNull);
+    expect(decision.explain, contains('no_rule_matched'));
+  });
+
+  test('processName and protocol constraints should match case-insensitively', () {
+    final profile = RoutingProfile(
+      id: 'routing-9',
+      name: 'Process And Protocol Routing',
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: const <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[
+        _rule(
+          id: 'rule-process-protocol',
+          priority: 3,
+          match: const RoutingRuleMatch(
+            processName: 'curl',
+            protocol: 'tcp',
+            domainKeyword: 'example',
+          ),
+          action: const RoutingRuleAction.direct(RoutingAction.block),
+        ),
+      ],
+      updatedAt: DateTime.parse('2026-04-16T00:00:00.000Z'),
+    );
+
+    final decision = engine.resolve(
+      profile: profile,
+      request: const RoutingRequestMetadata(
+        host: 'api.example.com',
+        port: 443,
+        protocol: 'TCP',
+        processName: 'CURL',
+      ),
+    );
+
+    expect(decision.action, RoutingAction.block);
+    expect(decision.matchedRuleId, 'rule-process-protocol');
+    expect(decision.explain, contains('protocol=tcp'));
+    expect(decision.explain, contains('processName=curl'));
+  });
+
+  test('policy-group rule with missing group should fallback to default action and keep explain token', () {
+    final profile = RoutingProfile(
+      id: 'routing-10',
+      name: 'Missing Policy Group Routing',
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.direct,
+      globalAction: RoutingAction.proxy,
+      policyGroups: const <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[
+        _rule(
+          id: 'rule-missing-group',
+          priority: 1,
+          match: const RoutingRuleMatch(domainKeyword: 'example'),
+          action: const RoutingRuleAction.policyGroup('group-not-found'),
+        ),
+      ],
+      updatedAt: DateTime.parse('2026-04-16T00:00:00.000Z'),
+    );
+
+    final decision = engine.resolve(
+      profile: profile,
+      request: const RoutingRequestMetadata(
+        host: 'api.example.com',
+        port: 443,
+        protocol: 'tcp',
+      ),
+    );
+
+    expect(decision.action, RoutingAction.direct);
+    expect(decision.matchedRuleId, 'rule-missing-group');
+    expect(decision.policyGroupId, 'group-not-found');
+    expect(decision.explain, contains('missingPolicyGroup=group-not-found'));
+    expect(decision.explain, contains('fallback=defaultAction:direct'));
+  });
 }
