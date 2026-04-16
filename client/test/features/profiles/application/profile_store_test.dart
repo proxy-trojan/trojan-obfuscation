@@ -23,6 +23,68 @@ ClientProfile _profile({
 }
 
 void main() {
+  test('withSampleProfiles seeds selected profile and deterministic ids',
+      () {
+    final store = ProfileStore.withSampleProfiles(
+      localStateStore: MemoryLocalStateStore(),
+      serialization: ProfileSerialization(),
+      saveDebounceDuration: Duration.zero,
+    );
+
+    expect(store.profiles, hasLength(2));
+    expect(store.profiles.first.id, 'sample-hk-1');
+    expect(store.profiles.last.id, 'sample-us-1');
+    expect(store.selectedProfileId, 'sample-hk-1');
+    expect(store.selectedProfile?.name, 'Sample • Hong Kong');
+  });
+
+  test('load restores selected profile id when persisted id exists', () async {
+    final localState = MemoryLocalStateStore();
+    final serialization = ProfileSerialization();
+    final payload = serialization.encodeProfileList(<ClientProfile>[
+      _profile(id: 'sel-1', name: 'Selected One'),
+      _profile(id: 'sel-2', name: 'Selected Two'),
+    ]);
+    await localState.write('profiles.json', payload);
+    await localState.write('profiles.selectedId', 'sel-2');
+
+    final store = ProfileStore(
+      initialProfiles: const <ClientProfile>[],
+      localStateStore: localState,
+      serialization: serialization,
+      saveDebounceDuration: Duration.zero,
+    );
+
+    await store.load();
+
+    expect(store.selectedProfileId, 'sel-2');
+    expect(store.selectedProfile?.id, 'sel-2');
+  });
+
+  test('load falls back to first profile when persisted selected id is missing',
+      () async {
+    final localState = MemoryLocalStateStore();
+    final serialization = ProfileSerialization();
+    final payload = serialization.encodeProfileList(<ClientProfile>[
+      _profile(id: 'first', name: 'First'),
+      _profile(id: 'second', name: 'Second'),
+    ]);
+    await localState.write('profiles.json', payload);
+    await localState.write('profiles.selectedId', 'gone-id');
+
+    final store = ProfileStore(
+      initialProfiles: const <ClientProfile>[],
+      localStateStore: localState,
+      serialization: serialization,
+      saveDebounceDuration: Duration.zero,
+    );
+
+    await store.load();
+
+    expect(store.selectedProfileId, 'first');
+    expect(store.selectedProfile?.id, 'first');
+  });
+
   test('upsertProfile persists profile list into local state store', () async {
     final localState = MemoryLocalStateStore();
     final store = ProfileStore(
