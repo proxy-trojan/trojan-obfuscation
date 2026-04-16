@@ -7,6 +7,7 @@ import '../../controller/application/client_controller_api.dart';
 import '../../controller/domain/controller_command_result.dart';
 import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_posture.dart';
+import '../../diagnostics/domain/routing_evidence_record.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
@@ -36,6 +37,7 @@ class DiagnosticsExportService {
     AppRuntimeErrorStore? appRuntimeErrors,
     this.adapterSelectionReason,
     this.expectedRealRuntimePath,
+    this.routingEvidenceRecords = const <RoutingEvidenceRecord>[],
   }) : appRuntimeErrors = appRuntimeErrors ?? AppRuntimeErrorStore();
 
   final ProfileStore profileStore;
@@ -49,6 +51,7 @@ class DiagnosticsExportService {
   final AppRuntimeErrorStore appRuntimeErrors;
   final String? adapterSelectionReason;
   final bool? expectedRealRuntimePath;
+  final List<RoutingEvidenceRecord> routingEvidenceRecords;
 
   Future<String> buildPreviewBundle() {
     return _buildBundle(bundleKind: 'support-bundle');
@@ -217,6 +220,8 @@ class DiagnosticsExportService {
       },
       'profilesExport':
           jsonDecode(profilePortability.exportProfiles(profileStore.profiles)),
+      'routingEvidence':
+          routingEvidenceRecords.map((record) => record.toJson()).toList(),
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);
