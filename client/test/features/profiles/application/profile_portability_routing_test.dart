@@ -110,4 +110,57 @@ void main() {
     expect(bundle.profile.routing.rules, hasLength(1));
     expect(bundle.profile.routing.rules.first.id, 'rule-cn');
   });
+
+  test('importBundle from profile-bundle shape fails with format error', () {
+    expect(
+      () => service.importBundle('''
+{
+  "version": 2,
+  "kind": "trojan-pro-client-profile-bundle",
+  "profiles": [
+    {
+      "profile": {
+        "id": "bundle-1",
+        "name": "Bundle 1",
+        "serverHost": "bundle-1.example.com",
+        "serverPort": 443,
+        "sni": "bundle-1.example.com",
+        "localSocksPort": 1080,
+        "verifyTls": true,
+        "updatedAt": "2026-04-16T00:00:00.000Z"
+      },
+      "secrets": {
+        "trojanPasswordIncluded": false,
+        "sourceDeviceHadStoredPassword": false,
+        "importBehavior": "reenter_or_restore_secure_storage"
+      }
+    }
+  ]
+}
+'''),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('importBundle rejects kind mismatch even if profile object exists', () {
+    expect(
+      () => service.importBundle('''
+{
+  "version": 2,
+  "kind": "trojan-pro-client-profile-bundle",
+  "profile": {
+    "id": "wrong-shape",
+    "name": "Wrong Shape",
+    "serverHost": "wrong.example.com",
+    "serverPort": 443,
+    "sni": "wrong.example.com",
+    "localSocksPort": 1080,
+    "verifyTls": true,
+    "updatedAt": "2026-04-16T00:00:00.000Z"
+  }
+}
+'''),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }

@@ -64,9 +64,27 @@ class ProfilePortabilityService {
 
   ProfileImportBundle importBundle(String text) {
     final decoded = jsonDecode(text) as Map<String, dynamic>;
-    final profile = decoded['profile'] as Map<String, dynamic>;
-    final secrets = (decoded['secrets'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
+    final kind = (decoded['kind'] as String?)?.trim();
+    if (kind != null &&
+        kind.isNotEmpty &&
+        kind != 'trojan-pro-client-profile') {
+      throw const FormatException(
+        'Import failed: only trojan-pro-client-profile payload is supported.',
+      );
+    }
+
+    final profileObj = decoded['profile'];
+    if (profileObj is! Map) {
+      throw const FormatException(
+        'Import failed: profile payload is missing or invalid.',
+      );
+    }
+    final profile = Map<String, dynamic>.from(profileObj);
+
+    final secretsObj = decoded['secrets'];
+    final secrets = secretsObj is Map
+        ? Map<String, dynamic>.from(secretsObj)
+        : const <String, dynamic>{};
 
     return ProfileImportBundle(
       profile: ClientProfile(
