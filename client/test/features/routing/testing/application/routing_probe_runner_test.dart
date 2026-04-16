@@ -14,4 +14,16 @@ void main() {
     expect(records, isNotEmpty);
     expect(records.first.scenarioId, isNotEmpty);
   });
+
+  test('mini smoke returns pass when all scenarios match expectation', () async {
+    const runner = RoutingProbeRunner(
+      adapters: [RoutingProbeAdapterLinux()],
+    );
+
+    final result = await runner.runMiniSmoke(routingProbeCoreScenarios);
+
+    expect(result.passed, isTrue);
+    expect(result.reason, contains('passed'));
+    expect(result.evidence, isNotEmpty);
+  });
 }

@@ -70,7 +70,7 @@ jobs:
             test/features/packaging/application/packaging_store_test.dart \
             test/features/packaging/presentation/packaging_page_test.dart
 
-      - name: Routing dataplane evidence gate
+      - name: Routing safety and dataplane evidence gate
         working-directory: client
         run: |
           flutter test \
@@ -79,4 +79,9 @@ jobs:
             test/features/routing/testing/application/routing_probe_runner_test.dart \
             test/features/routing/testing/platform/routing_probe_adapter_linux_test.dart \
             test/features/routing/testing/platform/routing_probe_windows_macos_fallback_test.dart \
-            test/features/diagnostics/application/diagnostics_export_routing_evidence_test.dart
+            test/features/diagnostics/application/diagnostics_export_routing_evidence_test.dart \
+            test/features/routing/application/routing_guardrail_service_test.dart \
+            test/features/routing/application/routing_dry_run_service_test.dart \
+            test/features/routing/domain/routing_runtime_safety_test.dart \
+            test/features/controller/application/adapter_backed_client_controller_test.dart \
+            test/features/diagnostics/application/diagnostics_export_routing_recovery_test.dart

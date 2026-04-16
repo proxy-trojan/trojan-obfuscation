@@ -566,6 +566,26 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             ),
             const SizedBox(height: 12),
             Text('Controller status: ${connectionPolicy.statusHint}'),
+            if (status.safeModeActive) ...<Widget>[
+              const SizedBox(height: 8),
+              const Text(
+                'Safe Mode active: routing rollback protection is enabled.',
+                style: TextStyle(
+                  color: Colors.deepOrange,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            if ((status.quarantineKey ?? '').isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                'Quarantined candidate: ${status.quarantineKey}',
+                style: const TextStyle(
+                  color: Colors.deepOrange,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               width: double.infinity,

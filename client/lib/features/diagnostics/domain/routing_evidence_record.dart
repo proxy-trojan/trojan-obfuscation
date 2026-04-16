@@ -12,6 +12,10 @@ class RoutingEvidenceRecord {
     this.matchedRuleId,
     this.policyGroupId,
     this.explain,
+    this.operationId,
+    this.rollbackReason,
+    this.safeModeActive,
+    this.quarantineKey,
   });
 
   final String scenarioId;
@@ -26,6 +30,10 @@ class RoutingEvidenceRecord {
   final String? matchedRuleId;
   final String? policyGroupId;
   final String? explain;
+  final String? operationId;
+  final String? rollbackReason;
+  final bool? safeModeActive;
+  final String? quarantineKey;
 
   Map<String, Object?> toJson() {
     return <String, Object?>{
@@ -41,6 +49,10 @@ class RoutingEvidenceRecord {
       'matchedRuleId': matchedRuleId,
       'policyGroupId': policyGroupId,
       'explain': explain,
+      'operationId': operationId,
+      'rollbackReason': rollbackReason,
+      'safeModeActive': safeModeActive,
+      'quarantineKey': quarantineKey,
     };
   }
 }

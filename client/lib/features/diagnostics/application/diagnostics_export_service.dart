@@ -8,6 +8,7 @@ import '../../controller/domain/controller_command_result.dart';
 import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_posture.dart';
 import '../../diagnostics/domain/routing_evidence_record.dart';
+import '../../diagnostics/domain/routing_recovery_record.dart';
 import '../../packaging/application/packaging_store.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
@@ -38,6 +39,7 @@ class DiagnosticsExportService {
     this.adapterSelectionReason,
     this.expectedRealRuntimePath,
     this.routingEvidenceRecords = const <RoutingEvidenceRecord>[],
+    this.routingRecoveryRecords = const <RoutingRecoveryRecord>[],
   }) : appRuntimeErrors = appRuntimeErrors ?? AppRuntimeErrorStore();
 
   final ProfileStore profileStore;
@@ -52,6 +54,7 @@ class DiagnosticsExportService {
   final String? adapterSelectionReason;
   final bool? expectedRealRuntimePath;
   final List<RoutingEvidenceRecord> routingEvidenceRecords;
+  final List<RoutingRecoveryRecord> routingRecoveryRecords;
 
   Future<String> buildPreviewBundle() {
     return _buildBundle(bundleKind: 'support-bundle');
@@ -121,6 +124,9 @@ class DiagnosticsExportService {
         'message': controllerStatus.message,
         'activeProfileId': controllerStatus.activeProfileId,
         'updatedAt': controllerStatus.updatedAt.toIso8601String(),
+        'safeModeActive': controllerStatus.safeModeActive,
+        'quarantineKey': controllerStatus.quarantineKey,
+        'rollbackReason': controllerStatus.rollbackReason,
         'telemetry': {
           'backendKind': controllerTelemetry.backendKind,
           'backendVersion': controllerTelemetry.backendVersion,
@@ -182,6 +188,8 @@ class DiagnosticsExportService {
                 'profileId': event.profileId,
                 'operationId': event.operationId,
                 'step': event.step,
+                'rollbackReason': event.rollbackReason,
+                'quarantineKey': event.quarantineKey,
               },
             )
             .toList(),
@@ -222,6 +230,8 @@ class DiagnosticsExportService {
           jsonDecode(profilePortability.exportProfiles(profileStore.profiles)),
       'routingEvidence':
           routingEvidenceRecords.map((record) => record.toJson()).toList(),
+      'routingRecoveryEvidence':
+          routingRecoveryRecords.map((record) => record.toJson()).toList(),
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);

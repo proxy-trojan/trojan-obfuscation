@@ -25,6 +25,8 @@ class ClientControllerEvent {
     this.profileId,
     this.operationId,
     this.step,
+    this.rollbackReason,
+    this.quarantineKey,
   });
 
   final String id;
@@ -37,4 +39,6 @@ class ClientControllerEvent {
   final String? profileId;
   final String? operationId;
   final int? step;
+  final String? rollbackReason;
+  final String? quarantineKey;
 }

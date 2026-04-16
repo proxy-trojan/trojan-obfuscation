@@ -93,6 +93,20 @@ class _StaleConnectedController extends FakeClientController {
   ControllerRuntimeSession get session => sessionOverride;
 }
 
+class _SafeModeController extends FakeClientController {
+  @override
+  ClientConnectionStatus get status => ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Routing apply failed and has been rolled back in Safe Mode.',
+        updatedAt: DateTime.parse('2026-04-16T10:00:00.000Z'),
+        activeProfileId: 'sample-hk-1',
+        errorCode: 'ROUTING_APPLY_ROLLED_BACK_QUARANTINED',
+        safeModeActive: true,
+        quarantineKey: 'sample-hk-1',
+        rollbackReason: 'mini smoke failed on routing rule smoke/direct',
+      );
+}
+
 ClientServiceRegistry _buildServices({
   ClientControllerApi? controllerOverride,
   LocalStateStore? localStateOverride,
@@ -506,6 +520,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Shell validation is ready'), findsOneWidget);
+  });
+
+  testWidgets('profiles page surfaces safe mode and quarantine banner',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(controllerOverride: _SafeModeController());
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.textContaining('Safe Mode active'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Quarantined candidate:'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
