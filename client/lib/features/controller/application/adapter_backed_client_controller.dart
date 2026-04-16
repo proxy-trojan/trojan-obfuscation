@@ -11,7 +11,6 @@ import '../../routing/domain/routing_runtime_safety.dart';
 import '../../routing/testing/application/routing_probe_runner.dart';
 import '../../routing/testing/application/routing_probe_scenarios.dart';
 import '../../routing/testing/application/routing_probe_verdict_service.dart';
-import '../../routing/testing/domain/routing_probe_models.dart';
 import '../../routing/testing/platform/routing_probe_adapter.dart';
 import '../../routing/testing/platform/routing_probe_adapter_linux.dart';
 import '../../routing/testing/platform/routing_probe_adapter_macos.dart';
