@@ -60,6 +60,10 @@ Future<String> exportDiagnosticsFixtureWithRoutingEvidence() async {
         matchedRuleId: 'rule-1',
         policyGroupId: null,
         explain: 'matched direct rule',
+        operationId: 'connect-17',
+        rollbackReason: null,
+        safeModeActive: false,
+        quarantineKey: null,
       ),
     ],
   );
@@ -75,7 +79,9 @@ void main() {
     expect(payload['routingEvidence'], isNotNull);
     final evidence = payload['routingEvidence'] as List<dynamic>;
     expect(evidence, hasLength(1));
-    expect(
-        (evidence.first as Map<String, dynamic>)['scenarioId'], 'rule-direct');
+    final first = evidence.first as Map<String, dynamic>;
+    expect(first['scenarioId'], 'rule-direct');
+    expect(first['operationId'], 'connect-17');
+    expect(first['safeModeActive'], isFalse);
   });
 }

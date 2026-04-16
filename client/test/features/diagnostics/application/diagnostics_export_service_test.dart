@@ -154,6 +154,9 @@ void main() {
       isTrue,
     );
     expect(lastRuntimeFailure, isNull);
+    expect(controllerPayload['safeModeActive'], isFalse);
+    expect(controllerPayload['quarantineKey'], isNull);
+    expect(controllerPayload['rollbackReason'], isNull);
 
     final appRuntime = payload['appRuntime'] as Map<String, dynamic>;
     final lastUnhandledError =
