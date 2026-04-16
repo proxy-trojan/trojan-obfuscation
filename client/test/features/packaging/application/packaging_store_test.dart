@@ -8,7 +8,7 @@ void main() {
     final store = PackagingStore();
 
     expect(store.state.selectedChannel, UpdateChannel.beta);
-    expect(store.state.currentVersionLabel, '1.5.0-beta.1');
+    expect(store.state.currentVersionLabel, '1.5.0-beta.2');
   });
 
   test('stub update check records status and timestamp', () {
