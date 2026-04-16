@@ -5,8 +5,8 @@ import 'package:trojan_pro_client/features/routing/testing/platform/routing_prob
 
 void main() {
   test('runner executes core scenarios and emits evidence list', () async {
-    final runner = RoutingProbeRunner(
-      adapters: const [RoutingProbeAdapterLinux()],
+    const runner = RoutingProbeRunner(
+      adapters: [RoutingProbeAdapterLinux()],
     );
 
     final records = await runner.runBatch(routingProbeCoreScenarios);

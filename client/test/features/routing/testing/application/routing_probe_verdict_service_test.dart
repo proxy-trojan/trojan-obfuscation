@@ -4,7 +4,7 @@ import 'package:trojan_pro_client/features/routing/testing/domain/routing_probe_
 
 void main() {
   test('decision mismatch should fail case verdict', () {
-    final service = RoutingProbeVerdictService();
+    const service = RoutingProbeVerdictService();
     final evidence = RoutingProbeEvidenceRecord(
       scenarioId: 'case-1',
       platform: RoutingProbePlatform.linux,
@@ -22,7 +22,7 @@ void main() {
   });
 
   test('platform capability gap should produce not_applicable', () {
-    final service = RoutingProbeVerdictService();
+    const service = RoutingProbeVerdictService();
     final evidence = RoutingProbeEvidenceRecord(
       scenarioId: 'case-2',
       platform: RoutingProbePlatform.macos,
