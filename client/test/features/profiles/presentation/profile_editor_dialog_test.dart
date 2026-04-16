@@ -647,6 +647,65 @@ void main() {
     expect(profile!.routing.rules, isEmpty);
   });
 
+  testWidgets('routing rule row summary shows expanded match constraints',
+      (WidgetTester tester) async {
+    const originalRule = RoutingRule(
+      id: 'rule-summary',
+      name: 'Summary Rule',
+      enabled: true,
+      priority: 7,
+      match: RoutingRuleMatch(
+        domainExact: 'api.example.com',
+        domainSuffix: '.example.com',
+        domainKeyword: 'api',
+        domainRegex: '^api\\.example\\.com\\\$',
+        ipCidr: '10.0.0.0/8',
+        port: 443,
+        protocol: 'tcp',
+        processName: 'curl',
+        processPath: '/usr/bin/curl',
+      ),
+      action: RoutingRuleAction.direct(RoutingAction.block),
+    );
+    const originalRouting = RoutingProfileConfig(
+      mode: RoutingMode.rule,
+      defaultAction: RoutingAction.proxy,
+      globalAction: RoutingAction.proxy,
+      policyGroups: <RoutingPolicyGroup>[],
+      rules: <RoutingRule>[originalRule],
+    );
+    final initial = ClientProfile(
+      id: 'profile-summary',
+      name: 'Summary Case',
+      serverHost: 'summary.example.com',
+      serverPort: 443,
+      sni: 'summary.example.com',
+      localSocksPort: 1080,
+      verifyTls: true,
+      updatedAt: DateTime.parse('2026-04-16T00:00:00.000Z'),
+      hasStoredPassword: true,
+      routing: originalRouting,
+    );
+
+    final completer = await _openEditorDialog(tester, initial: initial);
+
+    expect(find.textContaining('match.exact: api.example.com'), findsOneWidget);
+    expect(find.textContaining('match.suffix: .example.com'), findsOneWidget);
+    expect(find.textContaining('match.keyword: api'), findsOneWidget);
+    expect(find.textContaining('match.regex: ^api\\.example\\.com\\\$'),
+        findsOneWidget);
+    expect(find.textContaining('match.ip: 10.0.0.0/8'), findsOneWidget);
+    expect(find.textContaining('match.port: 443'), findsOneWidget);
+    expect(find.textContaining('match.protocol: tcp'), findsOneWidget);
+    expect(find.textContaining('match.process: curl'), findsOneWidget);
+    expect(find.textContaining('match.path: /usr/bin/curl'), findsOneWidget);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(completer.isCompleted, isTrue);
+  });
+
   testWidgets('editing profile can remove policy group and routing rule',
       (WidgetTester tester) async {
     const originalRule = RoutingRule(

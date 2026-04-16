@@ -367,6 +367,29 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
     final actionSummary = rule.action.usesPolicyGroup
         ? 'policy-group:${rule.action.policyGroupId}'
         : 'direct:${(rule.action.directAction ?? _routingDefaultAction).name}';
+    final matchSummary = <String>[
+      if (rule.match.domainExact != null && rule.match.domainExact!.isNotEmpty)
+        'match.exact: ${rule.match.domainExact}',
+      if (rule.match.domainSuffix != null &&
+          rule.match.domainSuffix!.isNotEmpty)
+        'match.suffix: ${rule.match.domainSuffix}',
+      if (rule.match.domainKeyword != null &&
+          rule.match.domainKeyword!.isNotEmpty)
+        'match.keyword: ${rule.match.domainKeyword}',
+      if (rule.match.domainRegex != null && rule.match.domainRegex!.isNotEmpty)
+        'match.regex: ${rule.match.domainRegex}',
+      if (rule.match.ipCidr != null && rule.match.ipCidr!.isNotEmpty)
+        'match.ip: ${rule.match.ipCidr}',
+      if (rule.match.port != null) 'match.port: ${rule.match.port}',
+      if (rule.match.protocol != null && rule.match.protocol!.isNotEmpty)
+        'match.protocol: ${rule.match.protocol}',
+      if (rule.match.processName != null && rule.match.processName!.isNotEmpty)
+        'match.process: ${rule.match.processName}',
+      if (rule.match.processPath != null && rule.match.processPath!.isNotEmpty)
+        'match.path: ${rule.match.processPath}',
+    ];
+    final matchText =
+        matchSummary.isEmpty ? 'match: -' : matchSummary.join(' · ');
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -374,7 +397,7 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
         dense: true,
         title: Text('${rule.id} · ${rule.name}'),
         subtitle: Text(
-          'priority: ${rule.priority} · $actionSummary · match.keyword: ${rule.match.domainKeyword ?? '-'}',
+          'priority: ${rule.priority} · $actionSummary · $matchText',
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
