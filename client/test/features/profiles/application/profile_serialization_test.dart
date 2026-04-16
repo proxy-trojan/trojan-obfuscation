@@ -102,4 +102,105 @@ void main() {
     expect(text, contains('"defaultAction": "proxy"'));
     expect(text, contains('"globalAction": "proxy"'));
   });
+
+  test('decode normalizes routing rules by priority then id', () {
+    const payload = '''
+{
+  "version": 2,
+  "profiles": [
+    {
+      "id": "p-sort",
+      "name": "Sort",
+      "serverHost": "sort.example.com",
+      "serverPort": 443,
+      "sni": "sort.example.com",
+      "localSocksPort": 1080,
+      "verifyTls": true,
+      "updatedAt": "2026-04-16T00:00:00.000Z",
+      "routing": {
+        "mode": "rule",
+        "defaultAction": "proxy",
+        "globalAction": "proxy",
+        "policyGroups": [],
+        "rules": [
+          {
+            "id": "r-z",
+            "name": "Rule Z",
+            "enabled": true,
+            "priority": 10,
+            "match": {"domainKeyword": "z"},
+            "action": {"kind": "direct", "directAction": "proxy"}
+          },
+          {
+            "id": "r-a",
+            "name": "Rule A",
+            "enabled": true,
+            "priority": 10,
+            "match": {"domainKeyword": "a"},
+            "action": {"kind": "direct", "directAction": "proxy"}
+          },
+          {
+            "id": "r-1",
+            "name": "Rule 1",
+            "enabled": true,
+            "priority": 1,
+            "match": {"domainKeyword": "first"},
+            "action": {"kind": "direct", "directAction": "proxy"}
+          }
+        ]
+      }
+    }
+  ]
+}
+''';
+
+    final decoded = serialization.decodeProfileList(payload);
+    final rules = decoded.single.routing.rules;
+
+    expect(rules.map((r) => r.id).toList(), <String>['r-1', 'r-a', 'r-z']);
+  });
+
+  test('decode currently preserves policy-group reference even when target group is missing', () {
+    const payload = '''
+{
+  "version": 2,
+  "profiles": [
+    {
+      "id": "p-fallback",
+      "name": "Fallback",
+      "serverHost": "fallback.example.com",
+      "serverPort": 443,
+      "sni": "fallback.example.com",
+      "localSocksPort": 1080,
+      "verifyTls": true,
+      "updatedAt": "2026-04-16T00:00:00.000Z",
+      "routing": {
+        "mode": "rule",
+        "defaultAction": "direct",
+        "globalAction": "proxy",
+        "policyGroups": [
+          {"id": "group-live", "name": "Live", "action": "proxy"}
+        ],
+        "rules": [
+          {
+            "id": "rule-missing-group",
+            "name": "Missing Group",
+            "enabled": true,
+            "priority": 10,
+            "match": {"domainKeyword": "example"},
+            "action": {"kind": "policyGroup", "policyGroupId": "group-gone"}
+          }
+        ]
+      }
+    }
+  ]
+}
+''';
+
+    final decoded = serialization.decodeProfileList(payload);
+    final rule = decoded.single.routing.rules.single;
+
+    expect(rule.action.usesPolicyGroup, isTrue);
+    expect(rule.action.policyGroupId, 'group-gone');
+  });
 }
