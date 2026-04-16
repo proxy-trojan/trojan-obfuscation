@@ -12,6 +12,44 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.5.0-beta.2] - 2026-04-16
+
+### EN
+
+#### Added
+- Promoted `Routing Safety & UX P0` completion to `main` via PR #16, including:
+  - routing guardrail preflight risk checks before profile apply
+  - routing dry-run diff impact reporting
+  - profile editor submit gate integrating preflight + dry-run evidence
+  - runtime rollback registry with anti-flap quarantine (`2 / 30m`) and safe-mode signaling
+  - diagnostics export closure for routing recovery evidence
+  - profiles surface for safe-mode and quarantined status visibility
+- CI smoke targeted gate expanded to continuously enforce routing safety + dataplane evidence slices in one deterministic lane.
+
+#### Changed
+- Packaging release truth defaults advanced for this cut:
+  - version label: `1.5.0-beta.2`
+  - channel: `beta`
+
+### 中文
+
+#### 新增
+- 已将 `Routing Safety & UX P0`（PR #16）提升到 `main`，核心包括：
+  - profile 提交前 routing guardrail preflight 风险拦截
+  - routing dry-run 差异影响预演
+  - editor submit 与 preflight + dry-run 证据联动门禁
+  - 运行期 rollback 注册与 anti-flap quarantine（`30 分钟内 2 次`）+ safe-mode 信号
+  - diagnostics 导出补齐 routing recovery evidence
+  - Profiles 页面可视化 safe-mode / quarantined 状态
+- CI smoke 的 targeted gate 已扩展，持续覆盖 routing safety 与 dataplane evidence 关键切片。
+
+#### 变更
+- 本次发版将 packaging release truth 默认值推进到：
+  - version label：`1.5.0-beta.2`
+  - channel：`beta`
+
+---
+
 ## [v1.5.0-beta.1] - 2026-04-16
 
 ### EN

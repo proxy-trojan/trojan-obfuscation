@@ -40,6 +40,7 @@ This directory only keeps the current, useful project documentation.
 - `v1.4.0-sprint-5-plan.md` — execution plan for the release truth & beta validation sprint
 - `v1.4.0-roadmap.md` — milestone sequence for the runtime-true desktop client line
 - `v1.4.0-release-gates.md` — completion and release gates for the v1.4.0 milestone
+- `v1.5.0-release-gates.md` — completion and release gates for the v1.5.0 milestone
 - `../CHANGELOG.md` — versioned release history
 
 ## Decisions

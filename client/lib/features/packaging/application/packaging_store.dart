@@ -185,6 +185,6 @@ class PackagingStore extends ChangeNotifier {
   }
 
   static String _stubUpdateSummaryFor(UpdateChannel channel) {
-    return 'Update check stub executed for ${channel.name}. No remote release feed is wired in v1.5.0-beta.1 yet; use exported release metadata + packaging docs instead.';
+    return 'Update check stub executed for ${channel.name}. No remote release feed is wired in v1.5.0-beta.2 yet; use exported release metadata + packaging docs instead.';
   }
 }
