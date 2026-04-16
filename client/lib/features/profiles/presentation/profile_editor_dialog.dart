@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../routing/application/routing_dry_run_service.dart';
+import '../../routing/application/routing_guardrail_service.dart';
+import '../../routing/domain/routing_change_gate.dart';
 import '../../routing/domain/routing_models.dart';
 import '../../routing/domain/routing_profile_config.dart';
+import '../../routing/testing/application/routing_probe_scenarios.dart';
 import '../domain/client_profile.dart';
 
 Future<ClientProfile?> showProfileEditorDialog(
@@ -84,6 +88,13 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       Key('routing-global-action-dropdown');
   static const _addPolicyGroupButtonKey = Key('add-policy-group-button');
   static const _addRoutingRuleButtonKey = Key('add-routing-rule-button');
+  static const _routingGuardrailBlockingPrefix =
+      'Blocked by routing guardrail:';
+
+  static const RoutingGuardrailService _routingGuardrailService =
+      RoutingGuardrailService();
+  static const RoutingDryRunService _routingDryRunService =
+      RoutingDryRunService();
 
   late final TextEditingController _nameController;
   late final TextEditingController _serverHostController;
@@ -584,7 +595,7 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
     return normalized.isEmpty ? null : normalized;
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final name = _nameController.text.trim();
     final serverHost = _serverHostController.text.trim();
     final serverPort = int.tryParse(_serverPortController.text.trim());
@@ -610,17 +621,48 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       return;
     }
 
-    final policyGroupIds = _routingPolicyGroups.map((g) => g.id).toSet();
-    final normalizedRules = _routingRules.map((rule) {
-      if (rule.action.usesPolicyGroup &&
-          !policyGroupIds.contains(rule.action.policyGroupId)) {
-        return _copyRoutingRuleWithAction(
-          rule,
-          RoutingRuleAction.direct(_routingDefaultAction),
-        );
+    final candidateRouting = RoutingProfileConfig(
+      mode: _routingMode,
+      defaultAction: _routingDefaultAction,
+      globalAction: _routingGlobalAction,
+      policyGroups: List<RoutingPolicyGroup>.unmodifiable(_routingPolicyGroups),
+      rules: List<RoutingRule>.unmodifiable(_routingRules),
+    );
+
+    final guardrailReport = _routingGuardrailService.evaluate(candidateRouting);
+    if (guardrailReport.applyDisposition == RoutingApplyDisposition.blocked) {
+      setState(() {
+        _validationError =
+            '$_routingGuardrailBlockingPrefix ${_joinIssueMessages(guardrailReport)}';
+      });
+      return;
+    }
+
+    final initialRouting = widget.initial?.routing ?? RoutingProfileConfig.defaults;
+    final dryRunReport = _routingDryRunService.compare(
+      before: initialRouting,
+      after: candidateRouting,
+      scenarios: routingProbeCoreScenarios,
+    );
+
+    if (guardrailReport.applyDisposition ==
+        RoutingApplyDisposition.requiresConfirm) {
+      final shouldProceed = await _confirmRoutingRisk(
+        guardrailReport: guardrailReport,
+        dryRunReport: dryRunReport,
+      );
+      if (!shouldProceed) {
+        setState(() {
+          _validationError =
+              'Routing risk confirmation was cancelled. Review the changes and try again.';
+        });
+        return;
       }
-      return rule;
-    }).toList(growable: false);
+    }
+
+    if (!mounted) {
+      return;
+    }
 
     final initial = widget.initial;
     final profile = ClientProfile(
@@ -636,16 +678,59 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
       notes: _notesController.text.trim(),
       updatedAt: DateTime.now(),
       hasStoredPassword: initial?.hasStoredPassword ?? false,
-      routing: RoutingProfileConfig(
-        mode: _routingMode,
-        defaultAction: _routingDefaultAction,
-        globalAction: _routingGlobalAction,
-        policyGroups:
-            List<RoutingPolicyGroup>.unmodifiable(_routingPolicyGroups),
-        rules: List<RoutingRule>.unmodifiable(normalizedRules),
-      ),
+      routing: candidateRouting,
     );
     Navigator.of(context).pop(profile);
+  }
+
+  String _joinIssueMessages(RoutingGuardrailReport report) {
+    return report.issues.map((issue) => issue.message).join('; ');
+  }
+
+  Future<bool> _confirmRoutingRisk({
+    required RoutingGuardrailReport guardrailReport,
+    required RoutingDryRunReport dryRunReport,
+  }) async {
+    final changedCaseSummary = dryRunReport.changedCases
+        .take(5)
+        .map(
+          (changedCase) =>
+              '- ${changedCase.scenarioId}: ${changedCase.beforeAction.name} -> ${changedCase.afterAction.name}',
+        )
+        .join('\n');
+
+    final message = StringBuffer()
+      ..writeln('Routing preflight raised warnings:')
+      ..writeln(_joinIssueMessages(guardrailReport));
+
+    if (changedCaseSummary.isNotEmpty) {
+      message
+        ..writeln('')
+        ..writeln('Dry-run impact summary:')
+        ..writeln(changedCaseSummary);
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm routing risk changes'),
+          content: Text(message.toString().trim()),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Proceed'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return confirmed == true;
   }
 }
 
