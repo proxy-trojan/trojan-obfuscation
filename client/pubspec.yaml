@@ -1,7 +1,7 @@
 name: trojan_pro_client
 description: Desktop-first, mobile-ready client shell for Trojan-Pro.
 publish_to: "none"
-version: 1.4.0+1
+version: 1.5.0-beta.1+1
 
 environment:
   sdk: ^3.3.0

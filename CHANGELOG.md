@@ -8,6 +8,50 @@ All notable changes to this project will be documented in this file.
 
 ### EN
 
+### 中文
+
+---
+
+## [v1.5.0-beta.1] - 2026-04-16
+
+### EN
+
+#### Added
+- Client routing capability now includes full rule/policy editing baseline:
+  - routing controls in profile editor
+  - policy group + rule create/edit/remove flows
+  - expanded rule match constraints in profile details and editor summaries
+- Routing decision-engine coverage expanded for key matching semantics and fallback behavior.
+
+#### Fixed
+- Preserve routing configuration when editing profiles.
+- Profile portability import now validates payload `kind` and profile shape, failing with readable format errors for unsupported/mismatched input.
+
+#### Changed
+- Packaging release truth defaults aligned to beta lane for this cut:
+  - version label: `1.5.0-beta.1`
+  - channel: `beta`
+
+### 中文
+
+#### 新增
+- 客户端分流能力完成首轮可用基线：
+  - profile editor 支持 routing controls
+  - policy group / rule 的新增、编辑、删除流程
+  - profile details 与 editor summary 展示更完整的规则匹配约束
+- routing decision engine 测试覆盖扩展，补齐关键匹配语义与 fallback 行为。
+
+#### 修复
+- 修复编辑 profile 时 routing 配置被覆盖的问题。
+- profile portability 导入链路增加 `kind` 与 payload shape 校验；对不支持/不匹配输入返回可读格式错误。
+
+#### 变更
+- 本次发版将 packaging release truth 默认值切到 beta 轨道：
+  - version label：`1.5.0-beta.1`
+  - channel：`beta`
+
+---
+
 #### Added
 - One-click deployment script upgraded to **v3.0** (`deploy_caddy_trojan.sh`):
   - IP certificate support via Let's Encrypt short-lived certificates (6-day validity, auto-renewal).

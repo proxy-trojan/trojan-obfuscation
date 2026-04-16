@@ -134,8 +134,8 @@ void main() {
     expect(find.text('Check for Updates (Stub)'), findsOneWidget);
     expect(find.textContaining('Metadata Contract'), findsOneWidget);
     expect(find.textContaining('Contract Version'), findsOneWidget);
-    expect(find.text('1.4.0'), findsOneWidget);
-    expect(find.text('stable'), findsWidgets);
+    expect(find.text('1.5.0-beta.1'), findsOneWidget);
+    expect(find.text('beta'), findsWidgets);
   });
 
   testWidgets(
