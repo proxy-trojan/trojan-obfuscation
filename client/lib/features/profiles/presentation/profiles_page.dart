@@ -530,6 +530,10 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
               '${selected.routing.policyGroups.length}',
             ),
             _detail(
+              'Routing Match Constraints',
+              _routingMatchSummary(selected),
+            ),
+            _detail(
               'Trojan Password',
               selected.hasStoredPassword
                   ? services.profileSecrets.isSecureStorageReady
@@ -793,6 +797,66 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     );
 
     return result ?? false;
+  }
+
+  String _routingMatchSummary(ClientProfile profile) {
+    final counters = <String, int>{
+      'domainExact': 0,
+      'domainSuffix': 0,
+      'domainKeyword': 0,
+      'domainRegex': 0,
+      'ipCidr': 0,
+      'port': 0,
+      'protocol': 0,
+      'processName': 0,
+      'processPath': 0,
+    };
+
+    for (final rule in profile.routing.rules) {
+      final match = rule.match;
+      if (match.domainExact != null && match.domainExact!.trim().isNotEmpty) {
+        counters['domainExact'] = counters['domainExact']! + 1;
+      }
+      if (match.domainSuffix != null && match.domainSuffix!.trim().isNotEmpty) {
+        counters['domainSuffix'] = counters['domainSuffix']! + 1;
+      }
+      if (match.domainKeyword != null &&
+          match.domainKeyword!.trim().isNotEmpty) {
+        counters['domainKeyword'] = counters['domainKeyword']! + 1;
+      }
+      if (match.domainRegex != null && match.domainRegex!.trim().isNotEmpty) {
+        counters['domainRegex'] = counters['domainRegex']! + 1;
+      }
+      if (match.ipCidr != null && match.ipCidr!.trim().isNotEmpty) {
+        counters['ipCidr'] = counters['ipCidr']! + 1;
+      }
+      if (match.port != null) {
+        counters['port'] = counters['port']! + 1;
+      }
+      if (match.protocol != null && match.protocol!.trim().isNotEmpty) {
+        counters['protocol'] = counters['protocol']! + 1;
+      }
+      if (match.processName != null && match.processName!.trim().isNotEmpty) {
+        counters['processName'] = counters['processName']! + 1;
+      }
+      if (match.processPath != null && match.processPath!.trim().isNotEmpty) {
+        counters['processPath'] = counters['processPath']! + 1;
+      }
+    }
+
+    final details = <String>[
+      'exact:${counters['domainExact']}',
+      'suffix:${counters['domainSuffix']}',
+      'keyword:${counters['domainKeyword']}',
+      'regex:${counters['domainRegex']}',
+      'ip:${counters['ipCidr']}',
+      'port:${counters['port']}',
+      'protocol:${counters['protocol']}',
+      'process:${counters['processName']}',
+      'path:${counters['processPath']}',
+    ];
+
+    return details.join(' · ');
   }
 
   Widget _detail(String label, String value) {

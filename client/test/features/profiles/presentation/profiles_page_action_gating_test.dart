@@ -207,6 +207,7 @@ void main() {
     expect(find.text('Routing Global Action'), findsOneWidget);
     expect(find.text('Routing Rule Count'), findsOneWidget);
     expect(find.text('Routing Policy Group Count'), findsOneWidget);
+    expect(find.text('Routing Match Constraints'), findsOneWidget);
     expect(find.text('Stub-only'), findsWidgets);
     expect(find.text('Shell-grade only'), findsWidgets);
     expect(find.text('${selected.serverHost}:${selected.serverPort}'),
