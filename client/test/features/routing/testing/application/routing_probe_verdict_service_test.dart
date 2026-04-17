@@ -14,6 +14,7 @@ void main() {
       errorType: RoutingProbeErrorType.decisionMismatch,
       errorDetail: 'expected=direct actual=proxy',
       fallbackApplied: false,
+      runtimePosture: RoutingProbeRuntimePosture.runtimeTrue,
       timestamp: DateTime.now(),
     );
 
@@ -21,7 +22,7 @@ void main() {
     expect(verdict.status, RoutingProbeVerdictStatus.fail);
   });
 
-  test('platform capability gap should produce not_applicable', () {
+  test('platform capability gap should fail when runtime posture mismatches', () {
     const service = RoutingProbeVerdictService();
     final evidence = RoutingProbeEvidenceRecord(
       scenarioId: 'case-2',
@@ -31,11 +32,13 @@ void main() {
       observedResult: RoutingProbeObservedResult.unknown,
       errorType: RoutingProbeErrorType.platformCapabilityGap,
       errorDetail: 'processPath probe unsupported',
-      fallbackApplied: false,
+      fallbackApplied: true,
+      runtimePosture: RoutingProbeRuntimePosture.fallbackStub,
       timestamp: DateTime.now(),
     );
 
     final verdict = service.evaluateSingle(evidence);
-    expect(verdict.status, RoutingProbeVerdictStatus.notApplicable);
+    expect(verdict.status, RoutingProbeVerdictStatus.fail);
+    expect(verdict.reason, contains('runtime posture mismatch'));
   });
 }
