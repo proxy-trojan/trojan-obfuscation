@@ -8,6 +8,7 @@ import '../../controller/domain/runtime_posture.dart';
 import '../application/support_issue_descriptor.dart';
 import '../../profiles/presentation/import_export_dialog.dart';
 import 'diagnostics_support_policy.dart';
+import 'export_summary_sheet.dart';
 
 class DiagnosticsPage extends StatefulWidget {
   const DiagnosticsPage({super.key, required this.services});
@@ -98,6 +99,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               exportBackend:
                   widget.services.diagnosticsFileExporter.backendName,
               runtimePosture: runtimePosture,
+            ),
+            const SizedBox(height: 12),
+            ExportSummarySheet.fromRuntimePosture(
+              posture: runtimePosture,
+              recoveryHint: supportPolicy.currentTruthMessage,
             ),
             const SizedBox(height: 16),
             _RuntimeTruthSupportCard(

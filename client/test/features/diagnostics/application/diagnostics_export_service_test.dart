@@ -164,6 +164,12 @@ void main() {
     expect(lastUnhandledError['source'], 'zone_guard');
     expect(lastUnhandledError['message'], contains('background task exploded'));
 
+    final exportSummary = payload['exportSummary'] as Map<String, dynamic>;
+    expect(exportSummary['evidenceGrade'], runtimePosture['evidenceGrade']);
+    expect(exportSummary['runtimePostureLabel'], runtimePosture['label']);
+    expect(exportSummary['runtimeTruth'], runtimeSession['truth']);
+    expect(exportSummary['recoveryHint'], isNotEmpty);
+
     final profilesExport = payload['profilesExport'] as Map<String, dynamic>;
     expect(profilesExport['kind'], 'trojan-pro-client-profile-bundle');
     final profiles = profilesExport['profiles'] as List<dynamic>;

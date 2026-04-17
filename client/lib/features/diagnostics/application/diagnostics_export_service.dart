@@ -101,6 +101,15 @@ class DiagnosticsExportService {
     final appUnhandledError = appRuntimeErrors.lastUnhandledError;
 
     final payload = <String, Object?>{
+      'exportSummary': {
+        'runtimePostureLabel': runtimePosture.postureLabel,
+        'evidenceGrade': runtimePosture.evidenceGradeLabel,
+        'runtimeTruth': runtimeSession.truth.label,
+        'recoveryHint': runtimeSession.recoveryGuidance,
+        'usageHint': runtimePosture.isRuntimeTrue
+            ? 'Use as runtime-true evidence when posture remains evidence-grade.'
+            : 'Treat as support context rather than proof of runtime-true execution.',
+      },
       'bundleKind': bundleKind,
       'generatedAt': DateTime.now().toIso8601String(),
       'profileCount': profileStore.profiles.length,
