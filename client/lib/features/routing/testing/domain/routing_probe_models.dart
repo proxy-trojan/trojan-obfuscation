@@ -4,6 +4,14 @@ enum RoutingProbeAction { proxy, direct, block }
 
 enum RoutingProbeObservedResult { proxy, direct, blocked, unknown }
 
+enum RoutingProbeRuntimePosture {
+  runtimeTrue,
+  fallbackStub,
+  explicitStub,
+  nonDesktopStub,
+  unknown,
+}
+
 enum RoutingProbePhase { connect, probe, decision, observe, export }
 
 enum RoutingProbeErrorType {
@@ -52,6 +60,7 @@ class RoutingProbeEvidenceRecord {
     required this.errorType,
     required this.errorDetail,
     required this.fallbackApplied,
+    required this.runtimePosture,
     required this.timestamp,
     this.matchedRuleId,
     this.policyGroupId,
@@ -66,8 +75,12 @@ class RoutingProbeEvidenceRecord {
   final RoutingProbeErrorType errorType;
   final String errorDetail;
   final bool fallbackApplied;
+  final RoutingProbeRuntimePosture runtimePosture;
   final DateTime timestamp;
   final String? matchedRuleId;
   final String? policyGroupId;
   final String? explain;
+
+  bool get isRuntimeTrueDataplane =>
+      runtimePosture == RoutingProbeRuntimePosture.runtimeTrue;
 }
