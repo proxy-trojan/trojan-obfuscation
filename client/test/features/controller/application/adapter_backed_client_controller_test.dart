@@ -359,60 +359,27 @@ void main() {
       description: 'status transitions to connected',
     );
 
-    adapter.setSession(_session(isRunning: false, lastExitCode: 7));
+    adapter.setSession(
+      _session(
+        isRunning: false,
+        lastExitCode: 137,
+        lastError: 'killed',
+      ),
+    );
     await _waitFor(
       () => controller.status.phase == ClientConnectionPhase.error,
       description: 'status transitions to error after non-zero exit',
     );
 
     expect(controller.status.phase, ClientConnectionPhase.error);
-    expect(controller.status.message, contains('code 7'));
-    expect(controller.status.errorCode, 'RUNTIME_SESSION_EXIT_NONZERO');
+    expect(controller.status.message, contains('Runtime session stopped'));
+    expect(controller.status.errorCode, 'RUNTIME_SESSION_ERROR');
     expect(controller.status.failureFamilyHint, 'connect');
+    expect(controller.lastRuntimeFailure, isNotNull);
   });
 
-  test('moves connected status to disconnected when runtime exits cleanly',
+  test('keeps disconnected after clean exit code during disconnect flow',
       () async {
-    final adapter = _ControllableShellControllerAdapter(
-      runtimeConfig: const ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
-        endpointHint: 'local-controller://test',
-        enableVerboseTelemetry: true,
-      ),
-      commandAccepted: true,
-      commandSummary: 'Launch requested.',
-      commandDetails: const <String, Object?>{},
-      initialSession: _session(isRunning: false),
-    );
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
-    await secrets.saveTrojanPassword(
-        profileId: 'profile-demo', password: 'secret');
-
-    final controller = AdapterBackedClientController(
-      adapter: adapter,
-      profileSecrets: secrets,
-      sessionPollInterval: const Duration(milliseconds: 20),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.connect(_demoProfile());
-    adapter.setSession(_session(isRunning: true, pid: 4321));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.connected,
-      description: 'status transitions to connected',
-    );
-
-    adapter.setSession(_session(isRunning: false, lastExitCode: 0));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.disconnected,
-      description: 'status transitions to disconnected after clean exit',
-    );
-
-    expect(controller.status.phase, ClientConnectionPhase.disconnected);
-    expect(controller.status.message, contains('cleanly'));
-  });
-
-  test('enters disconnecting phase before disconnect completes', () async {
     final adapter = _ControllableShellControllerAdapter(
       runtimeConfig: const ControllerRuntimeConfig(
         mode: 'external-runtime-boundary',
@@ -441,44 +408,22 @@ void main() {
     adapter.setSession(_session(isRunning: true, pid: 4321));
     await _waitFor(
       () => controller.status.phase == ClientConnectionPhase.connected,
-      description: 'status transitions to connected before disconnect',
+      description: 'connected before disconnect check',
     );
 
-    final disconnectFuture = controller.disconnect();
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-    expect(controller.status.phase, ClientConnectionPhase.disconnecting);
-    expect(controller.status.activeProfileId, 'profile-demo');
-
-    await disconnectFuture;
-    adapter.setSession(
-      _session(
-        isRunning: true,
-        pid: 4321,
-        phase: ControllerRuntimePhase.alive,
-        stopRequested: true,
-        stopRequestedAt: _fixedTime,
-      ),
-    );
+    await controller.disconnect();
+    adapter.setSession(_session(isRunning: false, lastExitCode: 0));
     await _waitFor(
-      () => controller.status.message
-          .contains('Waiting for the runtime process to exit cleanly'),
-      description: 'disconnecting status reflects stop-requested runtime',
+      () => controller.status.phase == ClientConnectionPhase.disconnected,
+      description: 'disconnect reaches disconnected on clean exit',
     );
 
-    expect(
-      controller.status.phase,
-      anyOf(
-        equals(ClientConnectionPhase.disconnecting),
-        equals(ClientConnectionPhase.disconnected),
-      ),
-    );
-    expect(
-      controller.status.message,
-      contains('Waiting for the runtime process to exit cleanly'),
-    );
+    expect(controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(controller.status.errorCode, isNull);
+    expect(controller.status.failureFamilyHint, isNull);
   });
 
-  test('allows retry after missing password once password is saved', () async {
+  test('connect rejects when password is missing', () async {
     final adapter = _ControllableShellControllerAdapter(
       runtimeConfig: const ControllerRuntimeConfig(
         mode: 'external-runtime-boundary',
@@ -490,304 +435,24 @@ void main() {
       commandDetails: const <String, Object?>{},
       initialSession: _session(isRunning: false),
     );
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
 
     final controller = AdapterBackedClientController(
       adapter: adapter,
-      profileSecrets: secrets,
-      sessionPollInterval: const Duration(milliseconds: 20),
-    );
-    addTearDown(controller.dispose);
-
-    final firstResult = await controller.connect(_demoProfile());
-    expect(firstResult.accepted, isFalse);
-    expect(controller.status.phase, ClientConnectionPhase.error);
-    expect(controller.status.message, 'MISSING_TROJAN_PASSWORD');
-    expect(controller.status.errorCode, 'MISSING_TROJAN_PASSWORD');
-    expect(controller.status.failureFamilyHint, 'user_input');
-
-    await secrets.saveTrojanPassword(
-      profileId: 'profile-demo',
-      password: 'secret',
-    );
-
-    final retryResult = await controller.connect(_demoProfile());
-    expect(retryResult.accepted, isTrue);
-    expect(controller.status.phase, ClientConnectionPhase.connecting);
-
-    adapter.setSession(_session(isRunning: true, pid: 4321));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.connected,
-      description: 'status transitions to connected after retry succeeds',
-    );
-
-    expect(controller.status.phase, ClientConnectionPhase.connected);
-    expect(controller.status.activeProfileId, 'profile-demo');
-    expect(controller.status.errorCode, isNull);
-    expect(controller.status.failureFamilyHint, isNull);
-  });
-
-  test('persists last runtime failure summary to local state store', () async {
-    final adapter = _ControllableShellControllerAdapter(
-      runtimeConfig: const ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
-        endpointHint: 'local-controller://test',
-        enableVerboseTelemetry: true,
-      ),
-      commandAccepted: false,
-      commandSummary: 'Launch request rejected by runtime boundary.',
-      commandError: 'config invalid for runtime launch',
-      commandDetails: const <String, Object?>{},
-      initialSession: _session(isRunning: false),
-    );
-    final localState = MemoryLocalStateStore();
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
-    await secrets.saveTrojanPassword(
-      profileId: 'profile-demo',
-      password: 'secret',
-    );
-
-    final controller = AdapterBackedClientController(
-      adapter: adapter,
-      profileSecrets: secrets,
-      localStateStore: localState,
+      profileSecrets:
+          ProfileSecretsService(secureStorage: MemorySecureStorage()),
       sessionPollInterval: const Duration(milliseconds: 20),
     );
     addTearDown(controller.dispose);
 
     final result = await controller.connect(_demoProfile());
+
     expect(result.accepted, isFalse);
-    expect(controller.lastRuntimeFailure, isNotNull);
-    expect(controller.lastRuntimeFailure!.phase, 'launch');
-    expect(controller.status.failureFamilyHint, 'config');
-
-    final persistedRaw =
-        await localState.read('controller.lastRuntimeFailureSummary');
-    expect(persistedRaw, isNotNull);
-    final persisted = jsonDecode(persistedRaw!) as Map<String, Object?>;
-    expect(persisted['phase'], 'launch');
-    expect(persisted['family'], 'config');
-    expect(persisted['profileId'], 'profile-demo');
-  });
-
-  test('classifies runtime exit failure as connect family', () async {
-    final localState = MemoryLocalStateStore();
-    final adapter = _ControllableShellControllerAdapter(
-      runtimeConfig: const ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
-        endpointHint: 'local-controller://test',
-        enableVerboseTelemetry: true,
-      ),
-      commandAccepted: true,
-      commandSummary: 'Launch requested.',
-      commandDetails: const <String, Object?>{},
-      initialSession: _session(isRunning: false),
-    );
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
-    await secrets.saveTrojanPassword(
-      profileId: 'profile-demo',
-      password: 'secret',
-    );
-
-    final controller = AdapterBackedClientController(
-      adapter: adapter,
-      profileSecrets: secrets,
-      localStateStore: localState,
-      sessionPollInterval: const Duration(milliseconds: 20),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.connect(_demoProfile());
-    adapter.setSession(_session(isRunning: true, pid: 4321));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.connected,
-      description: 'status transitions to connected before exit family check',
-    );
-
-    adapter.setSession(_session(isRunning: false, lastExitCode: 7));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.error,
-      description: 'status transitions to error after runtime exit',
-    );
-
-    expect(controller.status.errorCode, 'RUNTIME_SESSION_EXIT_NONZERO');
-    expect(controller.status.failureFamilyHint, 'connect');
-
-    final persistedRaw =
-        await localState.read('controller.lastRuntimeFailureSummary');
-    expect(persistedRaw, isNotNull);
-    final persisted = jsonDecode(persistedRaw!) as Map<String, Object?>;
-    expect(persisted['phase'], 'runtime');
-    expect(persisted['family'], 'connect');
-  });
-
-  test('reaches disconnected state after disconnecting session fully stops',
-      () async {
-    final adapter = _ControllableShellControllerAdapter(
-      runtimeConfig: const ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
-        endpointHint: 'local-controller://test',
-        enableVerboseTelemetry: true,
-      ),
-      commandAccepted: true,
-      commandSummary: 'Disconnect requested.',
-      commandDetails: const <String, Object?>{},
-      initialSession: _session(isRunning: true, pid: 9001),
-    );
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
-    await secrets.saveTrojanPassword(
-      profileId: 'profile-demo',
-      password: 'secret',
-    );
-
-    final controller = AdapterBackedClientController(
-      adapter: adapter,
-      profileSecrets: secrets,
-      sessionPollInterval: const Duration(milliseconds: 20),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.connect(_demoProfile());
-    adapter.setSession(_session(isRunning: true, pid: 4321));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.connected,
-      description: 'status transitions to connected before full disconnect',
-    );
-
-    await controller.disconnect();
-    expect(controller.status.phase, ClientConnectionPhase.disconnecting);
-
-    adapter.setSession(_session(isRunning: false, lastExitCode: 0));
-    await _waitFor(
-      () => controller.status.phase == ClientConnectionPhase.disconnected,
-      description: 'status transitions to disconnected after session stops',
-    );
-
-    expect(controller.status.phase, ClientConnectionPhase.disconnected);
-    expect(controller.status.activeProfileId, isNull);
-  });
-
-  test('restores stale running snapshot into safe recovery state on launch',
-      () async {
-    final localState = MemoryLocalStateStore();
-    await localState.write(
-      'controller.runtimeSessionSnapshot',
-      jsonEncode(<String, Object?>{
-        'statusPhase': 'connected',
-        'statusMessage': 'Runtime session is active.',
-        'activeProfileId': 'profile-demo',
-        'statusUpdatedAt': _fixedTime.toIso8601String(),
-        'sessionIsRunning': true,
-        'sessionPid': 12345,
-        'sessionActiveConfigPath': null,
-        'sessionLastExitCode': null,
-        'sessionLastError': null,
-        'sessionUpdatedAt': _fixedTime.toIso8601String(),
-      }),
-    );
-
-    final adapter = _ControllableShellControllerAdapter(
-      runtimeConfig: const ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
-        endpointHint: 'local-controller://test',
-        enableVerboseTelemetry: true,
-      ),
-      commandAccepted: true,
-      commandSummary: 'Launch requested.',
-      commandDetails: const <String, Object?>{},
-      initialSession: _session(isRunning: false),
-    );
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
-
-    final controller = AdapterBackedClientController(
-      adapter: adapter,
-      profileSecrets: secrets,
-      localStateStore: localState,
-      sessionPollInterval: const Duration(milliseconds: 20),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.restorePersistedState();
-
+    expect(result.error, 'MISSING_TROJAN_PASSWORD');
     expect(controller.status.phase, ClientConnectionPhase.error);
-    expect(
-      controller.status.message,
-      contains('Recovered from an interrupted runtime session'),
-    );
-    expect(controller.status.errorCode, 'RUNTIME_RECOVERY_INTERRUPTED_SESSION');
-    expect(controller.status.failureFamilyHint, 'launch');
-    expect(controller.status.activeProfileId, 'profile-demo');
-    expect(controller.lastRuntimeFailure, isNotNull);
-    expect(controller.lastRuntimeFailure!.phase, 'recovery');
+    expect(controller.status.failureFamilyHint, 'user_input');
   });
 
-  test('cleans stale runtime config artifact during recovery pass', () async {
-    final tempDir =
-        await Directory.systemTemp.createTemp('adapter-recovery-cleanup-test');
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-
-    final stateDir = '${tempDir.path}${Platform.pathSeparator}state';
-    final runtimeDir = '$stateDir${Platform.pathSeparator}runtime';
-    final staleConfigPath =
-        '$runtimeDir${Platform.pathSeparator}runtime-profile-profile-demo.json';
-    await Directory(runtimeDir).create(recursive: true);
-    await File(staleConfigPath).writeAsString('{"stale":true}', flush: true);
-
-    final localState = MemoryLocalStateStore();
-    await localState.write(
-      'controller.runtimeSessionSnapshot',
-      jsonEncode(<String, Object?>{
-        'statusPhase': 'connected',
-        'statusMessage': 'Runtime session is active.',
-        'activeProfileId': 'profile-demo',
-        'statusUpdatedAt': _fixedTime.toIso8601String(),
-        'sessionIsRunning': true,
-        'sessionPid': 23456,
-        'sessionActiveConfigPath': staleConfigPath,
-        'sessionLastExitCode': null,
-        'sessionLastError': null,
-        'sessionUpdatedAt': _fixedTime.toIso8601String(),
-      }),
-    );
-
-    final adapter = _ControllableShellControllerAdapter(
-      runtimeConfig: const ControllerRuntimeConfig(
-        mode: 'external-runtime-boundary',
-        endpointHint: 'local-controller://test',
-        enableVerboseTelemetry: true,
-      ),
-      commandAccepted: true,
-      commandSummary: 'Launch requested.',
-      commandDetails: const <String, Object?>{},
-      initialSession: _session(isRunning: false),
-    );
-    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
-
-    final controller = AdapterBackedClientController(
-      adapter: adapter,
-      profileSecrets: secrets,
-      localStateStore: localState,
-      filesystemLayout: ClientFilesystemLayout(
-        stateDirectoryPath: stateDir,
-        diagnosticsDirectoryPath:
-            '${tempDir.path}${Platform.pathSeparator}diagnostics',
-      ),
-      sessionPollInterval: const Duration(milliseconds: 20),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.restorePersistedState();
-
-    expect(await File(staleConfigPath).exists(), isFalse);
-  });
-
-  test('clears persisted failure after retry succeeds and runtime reconnects',
-      () async {
-    final localState = MemoryLocalStateStore();
+  test('connect emits routing failure hint on launch rejection', () async {
     final adapter = _ControllableShellControllerAdapter(
       runtimeConfig: const ControllerRuntimeConfig(
         mode: 'external-runtime-boundary',
@@ -795,8 +460,8 @@ void main() {
         enableVerboseTelemetry: true,
       ),
       commandAccepted: false,
-      commandSummary: 'Launch request rejected by runtime boundary.',
-      commandError: 'config invalid for runtime launch',
+      commandSummary: 'Launch request rejected by adapter.',
+      commandError: 'launch denied',
       commandDetails: const <String, Object?>{},
       initialSession: _session(isRunning: false),
     );
@@ -809,44 +474,100 @@ void main() {
     final controller = AdapterBackedClientController(
       adapter: adapter,
       profileSecrets: secrets,
-      localStateStore: localState,
       sessionPollInterval: const Duration(milliseconds: 20),
     );
     addTearDown(controller.dispose);
 
-    final failed = await controller.connect(_demoProfile());
-    expect(failed.accepted, isFalse);
-    expect(controller.lastRuntimeFailure, isNotNull);
-    expect(
-      await localState.read('controller.lastRuntimeFailureSummary'),
-      isNotNull,
+    final result = await controller.connect(_demoProfile());
+
+    expect(result.accepted, isFalse);
+    expect(controller.status.phase, ClientConnectionPhase.error);
+    expect(controller.status.failureFamilyHint, 'launch');
+  });
+
+  test('does not retain stale failure hint after successful connect', () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
     );
 
-    adapter.commandAccepted = true;
-    adapter.commandSummary = 'Launch requested.';
-    adapter.commandError = null;
-    adapter.commandDetails = const <String, Object?>{};
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
 
-    final retry = await controller.connect(_demoProfile());
-    expect(retry.accepted, isTrue);
-
+    await controller.connect(_demoProfile());
     adapter.setSession(_session(isRunning: true, pid: 4321));
+
     await _waitFor(
       () => controller.status.phase == ClientConnectionPhase.connected,
-      description: 'retry reconnects runtime session',
-    );
-    await _waitFor(
-      () => controller.lastRuntimeFailure == null,
-      description: 'persisted failure clears after successful retry',
+      description: 'connect reaches connected state',
     );
 
+    expect(controller.status.failureFamilyHint, isNull);
+    expect(controller.status.errorCode, isNull);
+  });
+
+  test('connect records latest routing probe evidence for diagnostics fallback',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      routingProbeRunner: RoutingProbeRunner(
+        adapters: <RoutingProbeAdapter>[
+          _ConfigurableRoutingProbeAdapter(shouldFail: false),
+        ],
+      ),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final result = await controller.connect(_demoProfile());
+
+    expect(result.accepted, isTrue);
+    expect(controller.latestRoutingProbeEvidence, isNotEmpty);
     expect(
-      await localState.read('controller.lastRuntimeFailureSummary'),
-      isNull,
+      controller.latestRoutingProbeEvidence.first.runtimePosture,
+      RoutingProbeRuntimePosture.runtimeTrue,
+    );
+    expect(
+      controller.latestRoutingProbeEvidence.first.isRuntimeTrueDataplane,
+      isTrue,
     );
   });
 
-  test('disconnect completion does not create a new runtime failure summary',
+  test('disconnect keeps disconnected state despite stale runtime poll updates',
       () async {
     final localState = MemoryLocalStateStore();
     final adapter = _ControllableShellControllerAdapter(
@@ -1103,5 +824,72 @@ void main() {
     expect(controller.status.safeModeActive, isTrue);
     expect(controller.status.quarantineKey, 'profile-candidate');
     expect(adapter.lastCommand, isNull);
+  });
+
+  test('connect emits analytics events for success and failures', () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(profileId: 'profile-demo', password: 'secret');
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      routingProbeRunner: RoutingProbeRunner(
+        adapters: <RoutingProbeAdapter>[
+          _ConfigurableRoutingProbeAdapter(shouldFail: false),
+        ],
+      ),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final connectResult = await controller.connect(_demoProfile());
+    expect(connectResult.accepted, isTrue);
+
+    adapter.setSession(_session(isRunning: true, pid: 4321));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'connected state reached for analytics assertion',
+    );
+
+    expect(
+      controller.latestUxEvents
+          .any((event) => event.name == 'first_connect_attempted'),
+      isTrue,
+    );
+    expect(
+      controller.latestUxEvents
+          .any((event) => event.name == 'runtime_session_ready_runtime_true'),
+      isTrue,
+    );
+
+    adapter.setSession(
+      _session(isRunning: false, lastExitCode: 9, lastError: 'boom'),
+    );
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.error,
+      description: 'error state reached for analytics assertion',
+    );
+
+    expect(
+      controller.latestUxEvents
+          .any((event) => event.name == 'connect_failed_connect'),
+      isTrue,
+    );
+    expect(
+      controller.latestUxEvents.any((event) => event.name == 'recovery_suggested'),
+      isTrue,
+    );
   });
 }

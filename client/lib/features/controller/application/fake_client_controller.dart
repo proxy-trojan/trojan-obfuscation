@@ -1,3 +1,4 @@
+import '../../analytics/domain/ux_metric_models.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../../routing/testing/domain/routing_probe_models.dart';
 import '../domain/client_connection_status.dart';
@@ -52,6 +53,9 @@ class FakeClientController extends ClientControllerApi {
   @override
   List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
       const <RoutingProbeEvidenceRecord>[];
+
+  @override
+  List<UxEvent> get latestUxEvents => const <UxEvent>[];
 
   @override
   Future<ControllerRuntimeHealth> checkHealth() => _adapter.checkHealth();
