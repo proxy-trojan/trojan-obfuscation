@@ -14,6 +14,7 @@ import '../../readiness/domain/readiness_report.dart';
 import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../domain/client_profile.dart';
 import 'first_connect_guidance_card.dart';
+import 'high_frequency_actions_strip.dart';
 import 'import_export_dialog.dart';
 import 'profile_editor_dialog.dart';
 import 'profile_secret_dialog.dart';
@@ -587,6 +588,92 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                             context,
                             report!.recommendation!,
                           ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            HighFrequencyActionsStrip(
+              enabled: connectionPolicy.canToggleConnection,
+              onQuickConnect: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                if (status.phase == ClientConnectionPhase.connected) {
+                  final result = await services.controller.disconnect();
+                  if (!mounted) return;
+                  final feedback = buildRuntimeActionFeedback(
+                    action: RuntimeActionKind.disconnect,
+                    result: result,
+                    status: services.controller.status,
+                    session: services.controller.session,
+                    posture: _runtimePosture,
+                  );
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(feedback)),
+                  );
+                  return;
+                }
+
+                final readinessReport =
+                    await services.readiness.buildReport(profileOverride: selected);
+                if (!mounted) return;
+                _readinessController.replaceLatestReport(readinessReport);
+                if (readinessReport.overallLevel == ReadinessLevel.blocked) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Connect blocked: ${readinessReport.summary}',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+
+                final result = await services.controller.connect(selected);
+                if (!mounted) return;
+                final feedback = buildRuntimeActionFeedback(
+                  action: RuntimeActionKind.connect,
+                  result: result,
+                  status: services.controller.status,
+                  session: services.controller.session,
+                  posture: _runtimePosture,
+                );
+                messenger.showSnackBar(
+                  SnackBar(content: Text(feedback)),
+                );
+              },
+              onQuickDisconnect: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final result = await services.controller.disconnect();
+                if (!mounted) return;
+                final feedback = buildRuntimeActionFeedback(
+                  action: RuntimeActionKind.disconnect,
+                  result: result,
+                  status: services.controller.status,
+                  session: services.controller.session,
+                  posture: _runtimePosture,
+                );
+                messenger.showSnackBar(
+                  SnackBar(content: Text(feedback)),
+                );
+              },
+              onSwitchProfile: () {
+                final profiles = services.profileStore.profiles;
+                if (profiles.length < 2) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Need at least 2 profiles to switch quickly.'),
+                    ),
+                  );
+                  return;
+                }
+                final currentIndex = profiles.indexWhere((p) => p.id == selected.id);
+                final nextIndex = currentIndex < 0
+                    ? 0
+                    : (currentIndex + 1) % profiles.length;
+                services.profileStore.selectProfile(profiles[nextIndex].id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Switched to profile: ${profiles[nextIndex].name}'),
+                  ),
                 );
               },
             ),
