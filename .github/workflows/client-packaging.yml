@@ -124,6 +124,15 @@ jobs:
             test/features/packaging/application/packaging_store_test.dart \
             test/features/packaging/presentation/packaging_page_test.dart
 
+      - name: Dataplane runtime-truth gate
+        working-directory: client
+        run: |
+          flutter test \
+            test/features/routing/testing/domain/routing_probe_runtime_posture_test.dart \
+            test/features/routing/testing/platform/routing_probe_adapter_runtime_posture_test.dart \
+            test/features/routing/testing/application/routing_probe_runner_runtime_truth_gate_test.dart \
+            test/features/diagnostics/application/diagnostics_export_routing_runtime_posture_test.dart
+
       - name: Build Linux bundle
         working-directory: client
         run: flutter build linux --release
