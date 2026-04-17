@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/adapter_backed_client_controller.dart';
 import 'package:trojan_pro_client/features/controller/application/shell_controller_adapter.dart';
@@ -17,7 +15,6 @@ import 'package:trojan_pro_client/features/routing/testing/application/routing_p
 import 'package:trojan_pro_client/features/routing/testing/domain/routing_probe_models.dart';
 import 'package:trojan_pro_client/features/routing/testing/platform/routing_probe_adapter.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
-import 'package:trojan_pro_client/platform/services/client_filesystem_layout.dart';
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 
 final _fixedTime = DateTime.parse('2026-03-13T00:00:00.000Z');

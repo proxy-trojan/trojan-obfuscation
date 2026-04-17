@@ -13,6 +13,7 @@ import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../domain/client_profile.dart';
+import 'first_connect_guidance_card.dart';
 import 'import_export_dialog.dart';
 import 'profile_editor_dialog.dart';
 import 'profile_secret_dialog.dart';
@@ -544,6 +545,31 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             _detail('Secret Storage', services.profileSecrets.storageSummary),
             _detail('Updated', selected.updatedAt.toIso8601String()),
             if (selected.notes.isNotEmpty) _detail('Notes', selected.notes),
+            const SizedBox(height: 12),
+            FutureBuilder<ReadinessReport>(
+              future: _readinessController.future,
+              builder: (BuildContext context,
+                  AsyncSnapshot<ReadinessReport> snapshot) {
+                final report =
+                    snapshot.data ?? _readinessController.latestReport;
+                final blockingCheck = report?.checks
+                    .where((check) => check.level == ReadinessLevel.blocked)
+                    .cast<ReadinessCheck?>()
+                    .firstWhere(
+                      (check) => check != null,
+                      orElse: () => null,
+                    );
+                final nextAction = report?.recommendation?.detail ??
+                    (blockingCheck?.detail ??
+                        (blockingCheck?.summary ??
+                            'Try connect now and check diagnostics if needed.'));
+
+                return FirstConnectGuidanceCard(
+                  blockingReason: blockingCheck?.summary,
+                  nextAction: nextAction,
+                );
+              },
+            ),
             const SizedBox(height: 12),
             FutureBuilder<ReadinessReport>(
               future: _readinessController.future,
