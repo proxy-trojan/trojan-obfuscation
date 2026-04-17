@@ -101,6 +101,9 @@ class _ConfigurableRoutingProbeAdapter implements RoutingProbeAdapter {
       rawSummary: shouldFail
           ? 'forced mini smoke failure for ${scenario.id}'
           : 'mini smoke pass for ${scenario.id}',
+      runtimePosture: shouldFail
+          ? RoutingProbeRuntimePosture.fallbackStub
+          : RoutingProbeRuntimePosture.runtimeTrue,
     );
   }
 }

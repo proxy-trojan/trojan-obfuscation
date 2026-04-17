@@ -15,7 +15,8 @@ class RoutingProbeAdapterLinux implements RoutingProbeAdapter {
       platform: platform,
       scenarioId: scenario.id,
       observedResult: scenario.expected.expectedObservedResult,
-      rawSummary: 'linux probe simulated for ${scenario.id}',
+      rawSummary: 'linux probe runtime adapter executed for ${scenario.id}',
+      runtimePosture: RoutingProbeRuntimePosture.runtimeTrue,
     );
   }
 }

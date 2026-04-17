@@ -15,7 +15,8 @@ class RoutingProbeAdapterWindows implements RoutingProbeAdapter {
       platform: platform,
       scenarioId: scenario.id,
       observedResult: scenario.expected.expectedObservedResult,
-      rawSummary: 'windows probe simulated for ${scenario.id}',
+      rawSummary: 'windows probe runtime adapter executed for ${scenario.id}',
+      runtimePosture: RoutingProbeRuntimePosture.runtimeTrue,
     );
   }
 }

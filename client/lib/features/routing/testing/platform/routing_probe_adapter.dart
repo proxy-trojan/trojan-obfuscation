@@ -12,10 +12,12 @@ class RoutingProbeObservation {
     required this.scenarioId,
     required this.observedResult,
     required this.rawSummary,
+    required this.runtimePosture,
   });
 
   final RoutingProbePlatform platform;
   final String scenarioId;
   final RoutingProbeObservedResult observedResult;
   final String rawSummary;
+  final RoutingProbeRuntimePosture runtimePosture;
 }

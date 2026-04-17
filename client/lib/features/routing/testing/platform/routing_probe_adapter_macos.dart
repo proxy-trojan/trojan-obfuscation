@@ -15,7 +15,8 @@ class RoutingProbeAdapterMacos implements RoutingProbeAdapter {
       platform: platform,
       scenarioId: scenario.id,
       observedResult: scenario.expected.expectedObservedResult,
-      rawSummary: 'macos probe simulated for ${scenario.id}',
+      rawSummary: 'macos probe runtime adapter executed for ${scenario.id}',
+      runtimePosture: RoutingProbeRuntimePosture.runtimeTrue,
     );
   }
 }

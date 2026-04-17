@@ -10,6 +10,7 @@ import '../../controller/domain/runtime_posture.dart';
 import '../../diagnostics/domain/routing_evidence_record.dart';
 import '../../diagnostics/domain/routing_recovery_record.dart';
 import '../../packaging/application/packaging_store.dart';
+import '../../routing/testing/domain/routing_probe_models.dart';
 import '../../profiles/application/profile_portability_service.dart';
 import '../../profiles/application/profile_store.dart';
 import '../../readiness/application/readiness_service.dart';
@@ -88,6 +89,8 @@ class DiagnosticsExportService {
     final controllerTelemetry = controller.telemetry;
     final controllerRuntimeConfig = controller.runtimeConfig;
     final runtimeSession = controller.session;
+    final resolvedRoutingEvidenceRecords = _resolvedRoutingEvidenceRecords();
+    final resolvedRoutingRecoveryRecords = _resolvedRoutingRecoveryRecords();
     final runtimePosture = describeRuntimePosture(
       runtimeMode: controllerRuntimeConfig.mode,
       backendKind: controllerTelemetry.backendKind,
@@ -229,9 +232,9 @@ class DiagnosticsExportService {
       'profilesExport':
           jsonDecode(profilePortability.exportProfiles(profileStore.profiles)),
       'routingEvidence':
-          routingEvidenceRecords.map((record) => record.toJson()).toList(),
+          resolvedRoutingEvidenceRecords.map((record) => record.toJson()).toList(),
       'routingRecoveryEvidence':
-          routingRecoveryRecords.map((record) => record.toJson()).toList(),
+          resolvedRoutingRecoveryRecords.map((record) => record.toJson()).toList(),
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);
@@ -305,6 +308,61 @@ class DiagnosticsExportService {
       'evidence': evidence,
       'rawDetails': rawDetails,
     };
+  }
+
+  List<RoutingEvidenceRecord> _resolvedRoutingEvidenceRecords() {
+    if (routingEvidenceRecords.isNotEmpty) {
+      return routingEvidenceRecords;
+    }
+
+    return controller.latestRoutingProbeEvidence
+        .map(_mapProbeEvidenceToDiagnostics)
+        .toList();
+  }
+
+  RoutingEvidenceRecord _mapProbeEvidenceToDiagnostics(
+    RoutingProbeEvidenceRecord record,
+  ) {
+    return RoutingEvidenceRecord(
+      scenarioId: record.scenarioId,
+      platform: record.platform.name,
+      phase: record.phase.name,
+      decisionAction: record.decisionAction.name,
+      observedResult: record.observedResult.name,
+      errorType: record.errorType.name,
+      errorDetail: record.errorDetail,
+      fallbackApplied: record.fallbackApplied,
+      runtimePosture: record.runtimePosture.name,
+      runtimeTrueDataplane: record.isRuntimeTrueDataplane,
+      timestamp: record.timestamp,
+      matchedRuleId: record.matchedRuleId,
+      policyGroupId: record.policyGroupId,
+      explain: record.explain,
+    );
+  }
+
+  List<RoutingRecoveryRecord> _resolvedRoutingRecoveryRecords() {
+    if (routingRecoveryRecords.isNotEmpty) {
+      return routingRecoveryRecords;
+    }
+
+    final status = controller.status;
+    final rollbackReason = status.rollbackReason;
+    if (!status.safeModeActive || rollbackReason == null || rollbackReason.isEmpty) {
+      return const <RoutingRecoveryRecord>[];
+    }
+
+    return <RoutingRecoveryRecord>[
+      RoutingRecoveryRecord(
+        operationId: 'runtime-safe-mode',
+        profileId: status.activeProfileId ?? 'unknown',
+        rollbackReason: rollbackReason,
+        safeModeActivated: true,
+        quarantined: status.quarantineKey != null,
+        quarantineKey: status.quarantineKey,
+        timestamp: status.updatedAt,
+      ),
+    ];
   }
 
   @Deprecated('Use exportSupportBundle instead.')

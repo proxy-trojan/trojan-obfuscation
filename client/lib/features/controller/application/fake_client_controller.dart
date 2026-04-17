@@ -1,4 +1,5 @@
 import '../../profiles/domain/client_profile.dart';
+import '../../routing/testing/domain/routing_probe_models.dart';
 import '../domain/client_connection_status.dart';
 import '../domain/client_controller_event.dart';
 import '../domain/controller_command.dart';
@@ -47,6 +48,10 @@ class FakeClientController extends ClientControllerApi {
 
   @override
   LastRuntimeFailureSummary? get lastRuntimeFailure => null;
+
+  @override
+  List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
+      const <RoutingProbeEvidenceRecord>[];
 
   @override
   Future<ControllerRuntimeHealth> checkHealth() => _adapter.checkHealth();

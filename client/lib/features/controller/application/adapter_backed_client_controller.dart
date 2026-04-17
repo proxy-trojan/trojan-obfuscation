@@ -11,6 +11,7 @@ import '../../routing/domain/routing_runtime_safety.dart';
 import '../../routing/testing/application/routing_probe_runner.dart';
 import '../../routing/testing/application/routing_probe_scenarios.dart';
 import '../../routing/testing/application/routing_probe_verdict_service.dart';
+import '../../routing/testing/domain/routing_probe_models.dart';
 import '../../routing/testing/platform/routing_probe_adapter.dart';
 import '../../routing/testing/platform/routing_probe_adapter_linux.dart';
 import '../../routing/testing/platform/routing_probe_adapter_macos.dart';
@@ -89,6 +90,8 @@ class AdapterBackedClientController extends ClientControllerApi {
   String? _lastKnownGoodProfileId;
   ClientConnectionStatus _status = ClientConnectionStatus.disconnected();
   LastRuntimeFailureSummary? _lastRuntimeFailure;
+  List<RoutingProbeEvidenceRecord> _latestRoutingProbeEvidence =
+      const <RoutingProbeEvidenceRecord>[];
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
     ClientControllerEvent(
       id: 'boot',
@@ -118,6 +121,12 @@ class AdapterBackedClientController extends ClientControllerApi {
 
   @override
   LastRuntimeFailureSummary? get lastRuntimeFailure => _lastRuntimeFailure;
+
+  @override
+  List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
+      List<RoutingProbeEvidenceRecord>.unmodifiable(
+        _latestRoutingProbeEvidence,
+      );
 
   Future<void> restorePersistedState() async {
     final store = _localStateStore;
@@ -1138,7 +1147,11 @@ class AdapterBackedClientController extends ClientControllerApi {
   }
 
   Future<RoutingMiniSmokeResult> _runRoutingMiniSmoke() async {
-    final smoke = await _routingProbeRunner.runMiniSmoke(routingProbeCoreScenarios);
+    final smoke = await _routingProbeRunner.runMiniSmoke(
+      routingProbeCoreScenarios,
+    );
+    _latestRoutingProbeEvidence =
+        List<RoutingProbeEvidenceRecord>.from(smoke.evidence);
     if (!smoke.passed) {
       return smoke;
     }

@@ -14,6 +14,8 @@ class RoutingProbeRunner {
     for (final adapter in adapters) {
       for (final scenario in scenarios) {
         final observation = await adapter.executeProbe(scenario);
+        final runtimeTrue =
+            observation.runtimePosture == RoutingProbeRuntimePosture.runtimeTrue;
         output.add(
           RoutingProbeEvidenceRecord(
             scenarioId: scenario.id,
@@ -21,9 +23,14 @@ class RoutingProbeRunner {
             phase: RoutingProbePhase.observe,
             decisionAction: scenario.expected.expectedAction,
             observedResult: observation.observedResult,
-            errorType: RoutingProbeErrorType.none,
-            errorDetail: '',
-            fallbackApplied: false,
+            errorType: runtimeTrue
+                ? RoutingProbeErrorType.none
+                : RoutingProbeErrorType.platformCapabilityGap,
+            errorDetail: runtimeTrue
+                ? ''
+                : 'dataplane evidence is not runtime-true on ${observation.platform.name}',
+            fallbackApplied: !runtimeTrue,
+            runtimePosture: observation.runtimePosture,
             timestamp: DateTime.now(),
             explain: observation.rawSummary,
           ),
@@ -42,6 +49,13 @@ class RoutingProbeRunner {
     String reason = 'Mini smoke passed for all routing scenarios.';
 
     for (final record in evidence) {
+      if (!record.isRuntimeTrueDataplane) {
+        passed = false;
+        reason =
+            'Mini smoke failed for ${record.scenarioId} on ${record.platform.name}: dataplane evidence is not runtime-true (${record.runtimePosture.name}).';
+        break;
+      }
+
       if (!_matchesExpectation(record)) {
         passed = false;
         reason =

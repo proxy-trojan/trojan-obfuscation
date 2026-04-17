@@ -16,10 +16,11 @@ class RoutingProbeVerdictService {
   const RoutingProbeVerdictService();
 
   RoutingProbeCaseVerdict evaluateSingle(RoutingProbeEvidenceRecord record) {
-    if (record.errorType == RoutingProbeErrorType.platformCapabilityGap) {
-      return const RoutingProbeCaseVerdict(
-        status: RoutingProbeVerdictStatus.notApplicable,
-        reason: 'platform capability gap',
+    if (!record.isRuntimeTrueDataplane) {
+      return RoutingProbeCaseVerdict(
+        status: RoutingProbeVerdictStatus.fail,
+        reason:
+            'runtime posture mismatch: ${record.platform.name} reported ${record.runtimePosture.name}',
       );
     }
 
@@ -27,7 +28,8 @@ class RoutingProbeVerdictService {
         record.errorType == RoutingProbeErrorType.observationMismatch ||
         record.errorType == RoutingProbeErrorType.controllerFailure ||
         record.errorType == RoutingProbeErrorType.probeExecutionFailure ||
-        record.errorType == RoutingProbeErrorType.exportFailure) {
+        record.errorType == RoutingProbeErrorType.exportFailure ||
+        record.errorType == RoutingProbeErrorType.platformCapabilityGap) {
       return RoutingProbeCaseVerdict(
         status: RoutingProbeVerdictStatus.fail,
         reason: record.errorDetail,
