@@ -8,6 +8,8 @@ class RoutingEvidenceRecord {
     required this.errorType,
     required this.errorDetail,
     required this.fallbackApplied,
+    required this.runtimePosture,
+    required this.runtimeTrueDataplane,
     required this.timestamp,
     this.matchedRuleId,
     this.policyGroupId,
@@ -26,6 +28,8 @@ class RoutingEvidenceRecord {
   final String errorType;
   final String errorDetail;
   final bool fallbackApplied;
+  final String runtimePosture;
+  final bool runtimeTrueDataplane;
   final DateTime timestamp;
   final String? matchedRuleId;
   final String? policyGroupId;
@@ -45,6 +49,8 @@ class RoutingEvidenceRecord {
       'errorType': errorType,
       'errorDetail': errorDetail,
       'fallbackApplied': fallbackApplied,
+      'runtimePosture': runtimePosture,
+      'runtimeTrueDataplane': runtimeTrueDataplane,
       'timestamp': timestamp.toIso8601String(),
       'matchedRuleId': matchedRuleId,
       'policyGroupId': policyGroupId,

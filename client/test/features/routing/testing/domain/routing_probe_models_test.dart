@@ -28,6 +28,7 @@ void main() {
       errorType: RoutingProbeErrorType.observationMismatch,
       errorDetail: 'decision=proxy observed=direct',
       fallbackApplied: true,
+      runtimePosture: RoutingProbeRuntimePosture.fallbackStub,
       timestamp: DateTime.parse('2026-04-16T00:00:00.000Z'),
     );
 

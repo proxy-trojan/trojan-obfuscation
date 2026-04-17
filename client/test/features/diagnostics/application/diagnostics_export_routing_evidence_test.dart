@@ -56,6 +56,8 @@ Future<String> exportDiagnosticsFixtureWithRoutingEvidence() async {
         errorType: 'none',
         errorDetail: '',
         fallbackApplied: false,
+        runtimePosture: 'runtimeTrue',
+        runtimeTrueDataplane: true,
         timestamp: DateTime.parse('2026-04-16T06:30:00.000Z'),
         matchedRuleId: 'rule-1',
         policyGroupId: null,

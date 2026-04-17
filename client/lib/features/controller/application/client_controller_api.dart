@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../profiles/domain/client_profile.dart';
+import '../../routing/testing/domain/routing_probe_models.dart';
 import '../domain/client_connection_status.dart';
 import '../domain/client_controller_event.dart';
 import '../domain/controller_command_result.dart';
@@ -21,6 +22,9 @@ abstract class ClientControllerApi extends ChangeNotifier {
 
   ControllerRuntimeSession get session;
   LastRuntimeFailureSummary? get lastRuntimeFailure;
+
+  List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
+      const <RoutingProbeEvidenceRecord>[];
 
   Future<ControllerRuntimeHealth> checkHealth();
 
