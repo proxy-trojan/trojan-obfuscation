@@ -109,6 +109,10 @@ class DiagnosticsExportService {
         'usageHint': runtimePosture.isRuntimeTrue
             ? 'Use as runtime-true evidence when posture remains evidence-grade.'
             : 'Treat as support context rather than proof of runtime-true execution.',
+        'secretStorageSummary': storageStatus.userFacingSummary,
+        'secretStorageMode': storageStatus.storageModeLabel,
+        'secretStoragePersistent': storageStatus.isPersistent,
+        'secretStorageSecure': storageStatus.isSecure,
       },
       'bundleKind': bundleKind,
       'generatedAt': DateTime.now().toIso8601String(),

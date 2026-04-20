@@ -32,6 +32,8 @@ void main() {
               backendKind: 'fake-shell-controller',
             ),
             recoveryHint: 'Safe mode rollback is active.',
+            secretStorageSummary: 'Temporary session-only fallback',
+            secretStorageMode: 'Session-only',
           ),
         ),
       ),
@@ -42,5 +44,10 @@ void main() {
       find.textContaining('support triage only'),
       findsOneWidget,
     );
+    expect(
+      find.textContaining('Secret storage: Temporary session-only fallback'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Storage mode: Session-only'), findsOneWidget);
   });
 }

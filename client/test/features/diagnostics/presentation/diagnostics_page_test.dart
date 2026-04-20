@@ -207,6 +207,8 @@ void main() {
     expect(find.text('Current runtime truth: Residual snapshot'), findsOneWidget);
     expect(find.text('Needs attention: Yes'), findsOneWidget);
     expect(find.textContaining('support context rather than proof'), findsOneWidget);
+    expect(find.textContaining('Secret storage: Session-only storage'), findsOneWidget);
+    expect(find.textContaining('Storage mode: Session-only'), findsOneWidget);
     expect(
       find.widgetWithText(OutlinedButton, 'Export runtime-proof artifact'),
       findsNothing,

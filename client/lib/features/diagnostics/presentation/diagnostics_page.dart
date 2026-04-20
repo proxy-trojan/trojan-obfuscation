@@ -104,6 +104,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             ExportSummarySheet.fromRuntimePosture(
               posture: runtimePosture,
               recoveryHint: supportPolicy.currentTruthMessage,
+              secretStorageSummary:
+                  widget.services.profileSecrets.storageSummary,
+              secretStorageMode:
+                  widget.services.profileSecrets.storageStatus.storageModeLabel,
             ),
             const SizedBox(height: 16),
             _RuntimeTruthSupportCard(

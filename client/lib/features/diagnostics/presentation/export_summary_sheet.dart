@@ -10,11 +10,15 @@ class ExportSummarySheet extends StatelessWidget {
     this.evidenceGradeLabel,
     this.evidenceNote,
     this.exportUsageHint,
+    this.secretStorageSummary,
+    this.secretStorageMode,
   });
 
   factory ExportSummarySheet.fromRuntimePosture({
     required RuntimePosture posture,
     required String recoveryHint,
+    String? secretStorageSummary,
+    String? secretStorageMode,
   }) {
     return ExportSummarySheet(
       runtimePostureLabel: posture.postureLabel,
@@ -24,6 +28,8 @@ class ExportSummarySheet extends StatelessWidget {
       exportUsageHint: posture.isRuntimeTrue
           ? 'Use this export for operator handoff and evidence packaging.'
           : 'Use this export for support triage only.',
+      secretStorageSummary: secretStorageSummary,
+      secretStorageMode: secretStorageMode,
     );
   }
 
@@ -32,6 +38,8 @@ class ExportSummarySheet extends StatelessWidget {
   final String? evidenceGradeLabel;
   final String? evidenceNote;
   final String? exportUsageHint;
+  final String? secretStorageSummary;
+  final String? secretStorageMode;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +79,17 @@ class ExportSummarySheet extends StatelessWidget {
               exportUsageHint!,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+          ],
+          if ((secretStorageSummary ?? '').isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              'Secret storage: $secretStorageSummary',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if ((secretStorageMode ?? '').isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text('Storage mode: $secretStorageMode'),
+            ],
           ],
         ],
       ),
