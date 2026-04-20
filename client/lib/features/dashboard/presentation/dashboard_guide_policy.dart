@@ -1,5 +1,7 @@
 import '../../controller/domain/client_connection_status.dart';
 import '../../controller/domain/controller_runtime_session.dart';
+import '../../controller/domain/failure_family.dart';
+import '../../controller/domain/recovery_ladder_policy.dart';
 import '../../controller/domain/runtime_action_matrix.dart';
 import '../../controller/domain/runtime_action_safety.dart';
 import '../../controller/domain/runtime_operator_advice.dart';
@@ -49,6 +51,7 @@ class DashboardGuidePolicy {
     required ControllerRuntimeSession runtimeSession,
     required RuntimeOperatorAdvice operatorAdvice,
     required ReadinessReport? readiness,
+    required bool settingsAvailable,
   }) {
     final actionSafety = RuntimeActionSafety.resolve(
       status: status,
@@ -71,9 +74,18 @@ class DashboardGuidePolicy {
       );
     }
 
-    if (activeProfile == null &&
-        selectedProfile != null &&
-        !selectedProfile.hasStoredPassword) {
+    final profileContext = activeProfile ?? selectedProfile;
+    if (profileContext == null) {
+      return DashboardGuidePolicy(
+        title: 'Start by adding one profile',
+        body: 'Open Profiles and create one profile before testing.',
+        primaryLabel: 'Open Profiles',
+        primaryAction: DashboardGuideAction.openProfiles,
+        actionSafety: actionSafety,
+      );
+    }
+
+    if (activeProfile == null && !profileContext.hasStoredPassword) {
       return DashboardGuidePolicy(
         title: 'Save the password before testing',
         body:
@@ -84,96 +96,33 @@ class DashboardGuidePolicy {
       );
     }
 
-    if (readiness != null &&
-        readiness.overallLevel == ReadinessLevel.blocked &&
-        status.phase != ClientConnectionPhase.error &&
-        status.phase != ClientConnectionPhase.connected &&
-        status.phase != ClientConnectionPhase.connecting &&
-        status.phase != ClientConnectionPhase.disconnecting) {
-      final recommendation = readiness.recommendation;
-      return DashboardGuidePolicy(
-        title: readiness.headline,
-        body: readiness.summary,
-        primaryLabel: recommendation?.label ?? 'Open Troubleshooting',
-        primaryAction: recommendation == null
-            ? DashboardGuideAction.openAdvanced
-            : _guideActionFor(recommendation.action),
-        actionSafety: actionSafety,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: DashboardGuideAction.openProfiles,
-      );
-    }
+    final parsedFamily = parseFailureFamily(status.failureFamilyHint);
+    final failureFamily = parsedFamily == FailureFamily.unknown
+        ? classifyFailureFamily(
+            errorCode: status.errorCode,
+            summary: status.message,
+            detail: status.message,
+            phase: status.phase.name,
+          )
+        : parsedFamily;
 
-    if (status.phase == ClientConnectionPhase.error) {
-      final errorBody = operatorAdvice.actionableSessionTruth
-          ? operatorAdvice.message ??
-              '${lifecycle.detail} ${runtimeSession.recoveryGuidance}'
-          : lifecycle.detail;
-      final evidenceFirst = actionMatrix.preferredEvidenceAction ==
-          RuntimePreferredEvidenceAction.generateSupportPreview;
-      return DashboardGuidePolicy(
-        title: lifecycle.headline,
-        body: errorBody,
-        primaryLabel: evidenceFirst
-            ? (operatorAdvice.primaryLabel ?? 'Open Troubleshooting')
-            : lifecycle.showRetry
-                ? posture.qualifyAction('Retry now')
-                : 'Open Profiles',
-        primaryAction: evidenceFirst
-            ? (actionMatrix.preferredOperatorAction ==
-                    RuntimePreferredOperatorAction.openTroubleshooting
-                ? DashboardGuideAction.openAdvanced
-                : DashboardGuideAction.openProfiles)
-            : lifecycle.showRetry
-                ? DashboardGuideAction.retryNow
-                : DashboardGuideAction.openProfiles,
-        actionSafety: actionSafety,
-        secondaryLabel: evidenceFirst
-            ? null
-            : lifecycle.showOpenTroubleshooting
-                ? 'Open Troubleshooting'
-                : null,
-        secondaryAction: evidenceFirst
-            ? null
-            : lifecycle.showOpenTroubleshooting
-                ? DashboardGuideAction.openAdvanced
-                : null,
-        operatorTitle: evidenceFirst
-            ? 'Recommended right now: capture a support snapshot first'
-            : null,
-        operatorBody: evidenceFirst
-            ? 'Open Troubleshooting and preserve the current runtime evidence before retrying. A fast retry now may erase the signal that explains this failure.'
-            : null,
-      );
-    }
+    final ladderDecision = RecoveryLadderPolicy.resolve(
+      input: RecoveryLadderPolicyInput(
+        status: status,
+        readinessReport: readiness,
+        failureFamily: failureFamily,
+        runtimePosture: posture,
+        runtimeSession: runtimeSession,
+        recentAction: _recentActionFor(status),
+        troubleshootingAvailable: operatorAdvice.primaryEnabled,
+        settingsAvailable: settingsAvailable,
+      ),
+    );
 
-    if (status.phase == ClientConnectionPhase.connected) {
-      if (operatorAdvice.actionableSessionTruth) {
-        return DashboardGuidePolicy(
-          title: operatorAdvice.headline ?? 'Connection state needs revalidation',
-          body: operatorAdvice.message ??
-              '${runtimeSession.truthNote} ${runtimeSession.recoveryGuidance}',
-          primaryLabel: operatorAdvice.primaryLabel ?? 'Open Troubleshooting',
-          primaryAction: actionMatrix.preferredOperatorAction ==
-                  RuntimePreferredOperatorAction.openTroubleshooting
-              ? DashboardGuideAction.openAdvanced
-              : DashboardGuideAction.openProfiles,
-          actionSafety: actionSafety,
-          secondaryLabel: actionMatrix.secondaryStateChangeContract ==
-                  RuntimeSecondaryStateChangeContract.withholdFallback
-              ? null
-              : 'Disconnect now',
-          secondaryAction: actionMatrix.secondaryStateChangeContract ==
-                  RuntimeSecondaryStateChangeContract.withholdFallback
-              ? null
-              : DashboardGuideAction.disconnectNow,
-          operatorTitle: 'Recommended right now',
-          operatorBody: actionMatrix.nextStepContract ==
-                  RuntimeNextStepContract.openTroubleshooting
-              ? 'Open Troubleshooting first, confirm whether the session is still trustworthy, and only then decide whether to disconnect or reconnect.'
-              : 'Review the current runtime state before making another state-changing move.',
-        );
-      }
+    final guideAction = _mapLadderAction(ladderDecision.primaryAction);
+
+    if (status.phase == ClientConnectionPhase.connected &&
+        !operatorAdvice.actionableSessionTruth) {
       return DashboardGuidePolicy(
         title: 'Connection is active',
         body:
@@ -186,64 +135,170 @@ class DashboardGuidePolicy {
       );
     }
 
-    if (status.phase == ClientConnectionPhase.disconnecting) {
+    if (status.phase == ClientConnectionPhase.disconnected &&
+        readiness?.overallLevel != ReadinessLevel.blocked) {
       return DashboardGuidePolicy(
-        title: operatorAdvice.headline ?? lifecycle.headline,
-        body: operatorAdvice.message ?? lifecycle.detail,
-        primaryLabel: operatorAdvice.primaryLabel ?? 'Open Troubleshooting',
-        primaryAction: actionMatrix.preferredOperatorAction ==
-                RuntimePreferredOperatorAction.openTroubleshooting
-            ? DashboardGuideAction.openAdvanced
-            : DashboardGuideAction.openProfiles,
+        title: 'You are ready for a quick test',
+        body:
+            'Use one clear Connect action here, or open Profiles if you want to review the selected profile first.',
+        primaryLabel: posture.qualifyAction('Connect now'),
+        primaryAction: DashboardGuideAction.connectNow,
         actionSafety: actionSafety,
         secondaryLabel: 'Open Profiles',
         secondaryAction: DashboardGuideAction.openProfiles,
-        operatorTitle: actionMatrix.evidenceCaptureContract ==
-                RuntimeEvidenceCaptureContract.preferBeforeMutation
-            ? 'Recommended right now: capture a support snapshot first'
-            : 'Recommended right now',
-        operatorBody: actionMatrix.nextStepContract ==
-                RuntimeNextStepContract.captureSupportEvidence
-            ? 'Open Troubleshooting and capture the current support evidence before you retry or assume shutdown has finished. This keeps the stop-pending state visible while it is still fresh.'
-            : 'Open Troubleshooting before making another change.',
       );
     }
 
-    if (status.phase == ClientConnectionPhase.connecting) {
-      return DashboardGuidePolicy(
-        title: lifecycle.headline,
-        body: operatorAdvice.message ?? lifecycle.detail,
-        primaryLabel: operatorAdvice.primaryLabel ?? 'Open Troubleshooting',
-        primaryAction: actionMatrix.preferredOperatorAction ==
-                RuntimePreferredOperatorAction.openTroubleshooting
-            ? DashboardGuideAction.openAdvanced
-            : DashboardGuideAction.openProfiles,
-        actionSafety: actionSafety,
-        secondaryLabel: 'Open Profiles',
-        secondaryAction: DashboardGuideAction.openProfiles,
-        operatorTitle: 'Recommended right now',
-        operatorBody:
-            'Let the current connection attempt settle first. If the runtime keeps looking suspicious, open Troubleshooting before retrying again.',
-      );
-    }
+    final body = status.phase == ClientConnectionPhase.error
+        ? ladderDecision.detail
+        : (operatorAdvice.message ?? ladderDecision.detail);
+
+    final title = status.phase == ClientConnectionPhase.connected
+        ? (operatorAdvice.headline ?? 'Connection state needs revalidation')
+        : status.phase == ClientConnectionPhase.disconnecting
+            ? (operatorAdvice.headline ?? lifecycle.headline)
+            : status.phase == ClientConnectionPhase.connecting
+                ? lifecycle.headline
+                : status.phase == ClientConnectionPhase.error
+                    ? lifecycle.headline
+                    : (readiness?.headline ?? lifecycle.headline);
+
+    final secondaryAction = _secondaryActionFor(
+      status: status,
+      actionMatrix: actionMatrix,
+      ladderDecision: ladderDecision,
+    );
 
     return DashboardGuidePolicy(
-      title: 'You are ready for a quick test',
-      body:
-          'Use one clear Connect action here, or open Profiles if you want to review the selected profile first.',
-      primaryLabel: posture.qualifyAction('Connect now'),
-      primaryAction: DashboardGuideAction.connectNow,
+      title: title,
+      body: body,
+      primaryLabel: ladderDecision.primaryLabel,
+      primaryAction: guideAction,
       actionSafety: actionSafety,
-      secondaryLabel: 'Open Profiles',
-      secondaryAction: DashboardGuideAction.openProfiles,
+      secondaryLabel: secondaryAction?.$1,
+      secondaryAction: secondaryAction?.$2,
+      operatorTitle: _operatorTitleFor(
+        status: status,
+        actionMatrix: actionMatrix,
+        operatorAdvice: operatorAdvice,
+      ),
+      operatorBody: _operatorBodyFor(
+        status: status,
+        actionMatrix: actionMatrix,
+      ),
     );
   }
 
-  static DashboardGuideAction _guideActionFor(ReadinessAction action) {
-    return switch (action) {
-      ReadinessAction.openProfiles => DashboardGuideAction.openProfiles,
-      ReadinessAction.openTroubleshooting => DashboardGuideAction.openAdvanced,
-      ReadinessAction.openSettings => DashboardGuideAction.openSettings,
+  static RecoveryRecentActionContext _recentActionFor(
+    ClientConnectionStatus status,
+  ) {
+    return switch (status.phase) {
+      ClientConnectionPhase.connecting =>
+        RecoveryRecentActionContext.connectAttempted,
+      ClientConnectionPhase.disconnecting =>
+        RecoveryRecentActionContext.disconnectRequested,
+      ClientConnectionPhase.error => RecoveryRecentActionContext.retryRequested,
+      ClientConnectionPhase.connected ||
+      ClientConnectionPhase.disconnected =>
+        RecoveryRecentActionContext.none,
     };
+  }
+
+  static DashboardGuideAction _mapLadderAction(RecoveryLadderAction action) {
+    return switch (action) {
+      RecoveryLadderAction.openProfiles => DashboardGuideAction.openProfiles,
+      RecoveryLadderAction.openTroubleshooting =>
+        DashboardGuideAction.openAdvanced,
+      RecoveryLadderAction.openSettings => DashboardGuideAction.openSettings,
+      RecoveryLadderAction.retryConnect => DashboardGuideAction.retryNow,
+      RecoveryLadderAction.exportSupportBundle =>
+        DashboardGuideAction.openAdvanced,
+      RecoveryLadderAction.none => DashboardGuideAction.openProfiles,
+    };
+  }
+
+  static (String, DashboardGuideAction)? _secondaryActionFor({
+    required ClientConnectionStatus status,
+    required RuntimeActionMatrix actionMatrix,
+    required RecoveryLadderDecision ladderDecision,
+  }) {
+    if (status.phase == ClientConnectionPhase.connected &&
+        actionMatrix.secondaryStateChangeContract !=
+            RuntimeSecondaryStateChangeContract.withholdFallback) {
+      return ('Disconnect now', DashboardGuideAction.disconnectNow);
+    }
+
+    if (ladderDecision.secondaryAction != null) {
+      return (
+        ladderDecision.secondaryLabel ?? 'Open Profiles',
+        _mapLadderAction(ladderDecision.secondaryAction!),
+      );
+    }
+
+    if (status.phase == ClientConnectionPhase.disconnected ||
+        status.phase == ClientConnectionPhase.connecting ||
+        status.phase == ClientConnectionPhase.disconnecting) {
+      return ('Open Profiles', DashboardGuideAction.openProfiles);
+    }
+
+    return null;
+  }
+
+  static String? _operatorTitleFor({
+    required ClientConnectionStatus status,
+    required RuntimeActionMatrix actionMatrix,
+    required RuntimeOperatorAdvice operatorAdvice,
+  }) {
+    if (status.phase == ClientConnectionPhase.error &&
+        actionMatrix.preferredEvidenceAction ==
+            RuntimePreferredEvidenceAction.generateSupportPreview) {
+      return 'Recommended right now: capture a support snapshot first';
+    }
+
+    if (status.phase == ClientConnectionPhase.disconnecting &&
+        actionMatrix.evidenceCaptureContract ==
+            RuntimeEvidenceCaptureContract.preferBeforeMutation) {
+      return 'Recommended right now: capture a support snapshot first';
+    }
+
+    if (status.phase == ClientConnectionPhase.connected &&
+        operatorAdvice.actionableSessionTruth) {
+      return 'Recommended right now';
+    }
+
+    if (status.phase == ClientConnectionPhase.connecting) {
+      return 'Recommended right now';
+    }
+
+    return null;
+  }
+
+  static String? _operatorBodyFor({
+    required ClientConnectionStatus status,
+    required RuntimeActionMatrix actionMatrix,
+  }) {
+    if (status.phase == ClientConnectionPhase.error &&
+        actionMatrix.preferredEvidenceAction ==
+            RuntimePreferredEvidenceAction.generateSupportPreview) {
+      return 'Open Troubleshooting and preserve the current runtime evidence before retrying. A fast retry now may erase the signal that explains this failure.';
+    }
+
+    if (status.phase == ClientConnectionPhase.disconnecting &&
+        actionMatrix.nextStepContract ==
+            RuntimeNextStepContract.captureSupportEvidence) {
+      return 'Open Troubleshooting and capture the current support evidence before you retry or assume shutdown has finished. This keeps the stop-pending state visible while it is still fresh.';
+    }
+
+    if (status.phase == ClientConnectionPhase.connected &&
+        actionMatrix.nextStepContract ==
+            RuntimeNextStepContract.openTroubleshooting) {
+      return 'Open Troubleshooting first, confirm whether the session is still trustworthy, and only then decide whether to disconnect or reconnect.';
+    }
+
+    if (status.phase == ClientConnectionPhase.connecting) {
+      return 'Let the current connection attempt settle first. If the runtime keeps looking suspicious, open Troubleshooting before retrying again.';
+    }
+
+    return null;
   }
 }
