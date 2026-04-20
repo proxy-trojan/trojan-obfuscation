@@ -526,8 +526,13 @@ void main() {
     expect(find.textContaining('Recommended next step: Open Troubleshooting'),
         findsOneWidget);
 
-    await tester
-        .tap(find.widgetWithText(OutlinedButton, 'Open Troubleshooting'));
+    final troubleshootingButtons = find.widgetWithText(
+      OutlinedButton,
+      'Open Troubleshooting',
+    );
+    expect(troubleshootingButtons, findsAtLeastNWidgets(1));
+
+    await tester.tap(troubleshootingButtons.first);
     await tester.pump();
 
     expect(openedAdvanced, isTrue);
