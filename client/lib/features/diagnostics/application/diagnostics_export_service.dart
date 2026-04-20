@@ -7,6 +7,7 @@ import '../../controller/application/client_controller_api.dart';
 import '../../controller/domain/controller_command_result.dart';
 import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_posture.dart';
+import '../../diagnostics/domain/export_summary_snapshot.dart';
 import '../../diagnostics/domain/routing_evidence_record.dart';
 import '../../diagnostics/domain/routing_recovery_record.dart';
 import '../../packaging/application/packaging_store.dart';
@@ -100,20 +101,14 @@ class DiagnosticsExportService {
     final storageStatus = secureStorage.status;
     final appUnhandledError = appRuntimeErrors.lastUnhandledError;
 
+    final exportSummary = ExportSummarySnapshot.fromContext(
+      runtimePosture: runtimePosture,
+      runtimeSession: runtimeSession,
+      storageStatus: storageStatus,
+    );
+
     final payload = <String, Object?>{
-      'exportSummary': {
-        'runtimePostureLabel': runtimePosture.postureLabel,
-        'evidenceGrade': runtimePosture.evidenceGradeLabel,
-        'runtimeTruth': runtimeSession.truth.label,
-        'recoveryHint': runtimeSession.recoveryGuidance,
-        'usageHint': runtimePosture.isRuntimeTrue
-            ? 'Use as runtime-true evidence when posture remains evidence-grade.'
-            : 'Treat as support context rather than proof of runtime-true execution.',
-        'secretStorageSummary': storageStatus.userFacingSummary,
-        'secretStorageMode': storageStatus.storageModeLabel,
-        'secretStoragePersistent': storageStatus.isPersistent,
-        'secretStorageSecure': storageStatus.isSecure,
-      },
+      'exportSummary': exportSummary.toJson(),
       'bundleKind': bundleKind,
       'generatedAt': DateTime.now().toIso8601String(),
       'profileCount': profileStore.profiles.length,

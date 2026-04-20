@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../domain/export_summary_snapshot.dart';
 import '../../controller/domain/runtime_posture.dart';
 
 class ExportSummarySheet extends StatelessWidget {
@@ -30,6 +31,17 @@ class ExportSummarySheet extends StatelessWidget {
           : 'Use this export for support triage only.',
       secretStorageSummary: secretStorageSummary,
       secretStorageMode: secretStorageMode,
+    );
+  }
+
+  factory ExportSummarySheet.fromSnapshot(ExportSummarySnapshot snapshot) {
+    return ExportSummarySheet(
+      runtimePostureLabel: snapshot.runtimePostureLabel,
+      recoveryHint: snapshot.recoveryHint,
+      evidenceGradeLabel: snapshot.evidenceGrade,
+      exportUsageHint: snapshot.usageHint,
+      secretStorageSummary: snapshot.secretStorageSummary,
+      secretStorageMode: snapshot.secretStorageMode,
     );
   }
 
