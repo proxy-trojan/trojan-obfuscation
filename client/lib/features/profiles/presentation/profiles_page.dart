@@ -455,20 +455,11 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                                 connectionPolicy.primaryAction ==
                                     ProfileConnectionPrimaryAction.disconnect;
                             if (!isDisconnectAction) {
-                              final readinessReport = await services.readiness
-                                  .buildReport(profileOverride: selected);
-                              if (!mounted) return;
-                              _readinessController
-                                  .replaceLatestReport(readinessReport);
-                              if (readinessReport.overallLevel ==
-                                  ReadinessLevel.blocked) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Connect blocked: ${readinessReport.summary}',
-                                    ),
-                                  ),
-                                );
+                              final allowed =
+                                  await _runConnectReadinessPreflight(
+                                messenger: messenger,
+                              );
+                              if (!mounted || !allowed) {
                                 return;
                               }
                             }
@@ -612,18 +603,10 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                   return;
                 }
 
-                final readinessReport =
-                    await services.readiness.buildReport(profileOverride: selected);
-                if (!mounted) return;
-                _readinessController.replaceLatestReport(readinessReport);
-                if (readinessReport.overallLevel == ReadinessLevel.blocked) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Connect blocked: ${readinessReport.summary}',
-                      ),
-                    ),
-                  );
+                final allowed = await _runConnectReadinessPreflight(
+                  messenger: messenger,
+                );
+                if (!mounted || !allowed) {
                   return;
                 }
 
@@ -726,6 +709,35 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
         ),
       ),
     );
+  }
+
+  String _buildConnectBlockedCopy(ReadinessReport report) {
+    final nextActionLabel = report.recommendation?.label.trim();
+    if (nextActionLabel == null || nextActionLabel.isEmpty) {
+      return 'Connect blocked: ${report.summary}';
+    }
+    return 'Connect blocked: ${report.summary} Next action: $nextActionLabel';
+  }
+
+  Future<bool> _runConnectReadinessPreflight({
+    required ScaffoldMessengerState messenger,
+  }) async {
+    final readinessReport = await services.readiness.buildReport(
+      profileOverride: selected,
+    );
+    if (!mounted) return false;
+    _readinessController.replaceLatestReport(readinessReport);
+
+    if (readinessReport.overallLevel != ReadinessLevel.blocked) {
+      return true;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(_buildConnectBlockedCopy(readinessReport)),
+      ),
+    );
+    return false;
   }
 
   Future<void> _edit(BuildContext context) async {

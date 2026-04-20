@@ -104,7 +104,7 @@ void main() {
       onOpenAdvancedAvailable: false,
     );
 
-    expect(policy.buttonLabel, 'Connect Blocked');
+    expect(policy.buttonLabel, 'Connect Test Blocked');
     expect(policy.buttonEnabled, isFalse);
     expect(policy.statusHint, contains('Readiness blocked'));
   });

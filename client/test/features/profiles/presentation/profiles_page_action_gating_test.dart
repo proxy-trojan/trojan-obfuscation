@@ -71,6 +71,14 @@ class _UnavailableRuntimeController extends FakeClientController {
   }
 }
 
+class _SlowHealthController extends FakeClientController {
+  @override
+  Future<ControllerRuntimeHealth> checkHealth() async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    return super.checkHealth();
+  }
+}
+
 class _StaleConnectedController extends FakeClientController {
   ClientConnectionStatus statusOverride = ClientConnectionStatus(
     phase: ClientConnectionPhase.connected,
@@ -353,7 +361,7 @@ void main() {
     );
 
     final blockedButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Connect Blocked'),
+      find.widgetWithText(FilledButton, 'Connect Test Blocked'),
     );
     expect(blockedButton.onPressed, isNull);
 
@@ -361,6 +369,83 @@ void main() {
         services.controller.status.phase, ClientConnectionPhase.disconnected);
     expect(find.textContaining('Recommended next step: Open Profiles'),
         findsOneWidget);
+  });
+
+  testWidgets(
+      'primary connect preflight shows blocked reason + next action copy',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(controllerOverride: _SlowHealthController());
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Connect Test (stub path)'));
+    await tester.pump(const Duration(milliseconds: 360));
+
+    expect(
+      find.textContaining(
+        'Connect blocked: Check server host / server port / local SOCKS port before connecting.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Next action: Open Profiles'), findsOneWidget);
+    expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
+  });
+
+  testWidgets(
+      'quick connect preflight shows blocked reason + next action copy',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(controllerOverride: _SlowHealthController());
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Quick Connect'));
+    await tester.pump(const Duration(milliseconds: 360));
+
+    expect(
+      find.textContaining(
+        'Connect blocked: Check server host / server port / local SOCKS port before connecting.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Next action: Open Profiles'), findsOneWidget);
+    expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
   });
 
   testWidgets(
@@ -403,7 +488,7 @@ void main() {
 
     expect(find.text('Readiness: Ready with warnings'), findsOneWidget);
     expect(
-      find.widgetWithText(FilledButton, 'Connect (stub path)'),
+      find.widgetWithText(FilledButton, 'Connect Test (stub path)'),
       findsOneWidget,
     );
   });
@@ -514,7 +599,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Connect (stub path)'));
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Connect Test (stub path)'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pumpAndSettle();
