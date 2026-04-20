@@ -4,6 +4,8 @@ import 'dart:io';
 
 import '../../../platform/services/client_filesystem_layout.dart';
 import '../../../platform/services/local_state_store.dart';
+import '../../analytics/application/ux_metric_event_mapper.dart';
+import '../../analytics/domain/ux_metric_models.dart';
 import '../../profiles/application/profile_secrets_service.dart';
 import '../../profiles/domain/client_profile.dart';
 import '../../routing/application/routing_profile_codec.dart';
@@ -92,6 +94,8 @@ class AdapterBackedClientController extends ClientControllerApi {
   LastRuntimeFailureSummary? _lastRuntimeFailure;
   List<RoutingProbeEvidenceRecord> _latestRoutingProbeEvidence =
       const <RoutingProbeEvidenceRecord>[];
+  final UxMetricEventMapper _uxMetricEventMapper = UxMetricEventMapper();
+  final List<UxEvent> _latestUxEvents = <UxEvent>[];
   final List<ClientControllerEvent> _events = <ClientControllerEvent>[
     ClientControllerEvent(
       id: 'boot',
@@ -127,6 +131,10 @@ class AdapterBackedClientController extends ClientControllerApi {
       List<RoutingProbeEvidenceRecord>.unmodifiable(
         _latestRoutingProbeEvidence,
       );
+
+  @override
+  List<UxEvent> get latestUxEvents =>
+      List<UxEvent>.unmodifiable(_latestUxEvents);
 
   Future<void> restorePersistedState() async {
     final store = _localStateStore;
@@ -1109,8 +1117,43 @@ class AdapterBackedClientController extends ClientControllerApi {
     return 'Recovered from an interrupted runtime session for $profileId. The app restored a safe state and you can retry from Profiles.';
   }
 
+  void _recordUxEvents(List<UxEvent> events) {
+    if (events.isEmpty) {
+      return;
+    }
+    _latestUxEvents.addAll(events);
+    const maxUxEvents = 48;
+    if (_latestUxEvents.length > maxUxEvents) {
+      _latestUxEvents.removeRange(0, _latestUxEvents.length - maxUxEvents);
+    }
+  }
+
+  void _captureUxEventsFromStatus() {
+    final activeProfileId = _status.activeProfileId;
+    if (activeProfileId == null || activeProfileId.trim().isEmpty) {
+      return;
+    }
+
+    final runtimePosture = _latestRoutingProbeEvidence.isNotEmpty
+        ? _latestRoutingProbeEvidence.first.runtimePosture.name
+        : (_status.phase == ClientConnectionPhase.connected
+            ? 'runtimeTrue'
+            : 'fallbackStub');
+
+    final events = _uxMetricEventMapper.fromConnectionSnapshot(
+      userId: activeProfileId,
+      sessionId: activeProfileId,
+      phase: _status.phase.name,
+      runtimePosture: runtimePosture,
+      failureFamily: _status.failureFamilyHint,
+      at: _status.updatedAt,
+    );
+    _recordUxEvents(events);
+  }
+
   void _notifyIfActive() {
     if (_disposed) return;
+    _captureUxEventsFromStatus();
     notifyListeners();
   }
 
