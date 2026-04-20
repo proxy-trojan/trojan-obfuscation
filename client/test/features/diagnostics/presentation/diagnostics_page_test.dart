@@ -163,7 +163,7 @@ void main() {
     expect(find.text('Runtime truth & recovery'), findsOneWidget);
     expect(find.text('Current runtime truth: Live'), findsOneWidget);
     expect(find.text('Needs attention: No'), findsOneWidget);
-    expect(find.textContaining('runtime-true evidence'), findsOneWidget);
+    expect(find.textContaining('runtime-true evidence'), findsWidgets);
 
     await tester
         .tap(find.widgetWithText(FilledButton, 'Generate support preview'));
@@ -206,7 +206,9 @@ void main() {
     expect(find.text('Runtime truth & recovery'), findsOneWidget);
     expect(find.text('Current runtime truth: Residual snapshot'), findsOneWidget);
     expect(find.text('Needs attention: Yes'), findsOneWidget);
-    expect(find.textContaining('support context rather than proof'), findsOneWidget);
+    expect(find.textContaining('support context rather than proof'), findsWidgets);
+    expect(find.textContaining('Secret storage: Session-only storage'), findsOneWidget);
+    expect(find.textContaining('Storage mode: Session-only'), findsOneWidget);
     expect(
       find.widgetWithText(OutlinedButton, 'Export runtime-proof artifact'),
       findsNothing,

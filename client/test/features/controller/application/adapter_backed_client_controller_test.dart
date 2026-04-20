@@ -489,8 +489,9 @@ void main() {
         endpointHint: 'local-controller://test',
         enableVerboseTelemetry: true,
       ),
-      commandAccepted: true,
-      commandSummary: 'Launch requested.',
+      commandAccepted: false,
+      commandSummary: 'Launch request rejected by adapter.',
+      commandError: 'launch denied',
       commandDetails: const <String, Object?>{},
       initialSession: _session(isRunning: false),
     );
@@ -507,7 +508,23 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await controller.connect(_demoProfile());
+    final firstAttempt = await controller.connect(_demoProfile());
+    expect(firstAttempt.accepted, isFalse);
+    expect(controller.status.phase, ClientConnectionPhase.error);
+    expect(controller.status.failureFamilyHint, 'launch');
+    expect(controller.status.errorCode, 'launch denied');
+
+    adapter
+      ..commandAccepted = true
+      ..commandSummary = 'Launch requested.'
+      ..commandError = null;
+
+    final retryAttempt = await controller.connect(_demoProfile());
+    expect(retryAttempt.accepted, isTrue);
+    expect(controller.status.phase, ClientConnectionPhase.connecting);
+    expect(controller.status.failureFamilyHint, isNull);
+    expect(controller.status.errorCode, isNull);
+
     adapter.setSession(_session(isRunning: true, pid: 4321));
 
     await _waitFor(
@@ -562,6 +579,51 @@ void main() {
       controller.latestRoutingProbeEvidence.first.isRuntimeTrueDataplane,
       isTrue,
     );
+  });
+
+  test('disconnect clears stale failure fields after failed attempt', () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: false,
+      commandSummary: 'Launch request rejected by adapter.',
+      commandError: 'launch denied',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(
+      profileId: 'profile-demo',
+      password: 'secret',
+    );
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final failedResult = await controller.connect(_demoProfile());
+    expect(failedResult.accepted, isFalse);
+    expect(controller.status.phase, ClientConnectionPhase.error);
+    expect(controller.status.errorCode, isNotNull);
+    expect(controller.status.failureFamilyHint, isNotNull);
+
+    adapter
+      ..commandAccepted = true
+      ..commandSummary = 'Disconnect requested.'
+      ..commandError = null;
+
+    final disconnectResult = await controller.disconnect();
+    expect(disconnectResult.accepted, isTrue);
+
+    expect(controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(controller.status.errorCode, isNull);
+    expect(controller.status.failureFamilyHint, isNull);
   });
 
   test('disconnect keeps disconnected state despite stale runtime poll updates',

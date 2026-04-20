@@ -5,14 +5,19 @@ class FirstConnectGuidanceCard extends StatelessWidget {
     super.key,
     required this.blockingReason,
     required this.nextAction,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String? blockingReason;
   final String nextAction;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    final hasBlocker = blockingReason != null && blockingReason!.trim().isNotEmpty;
+    final hasBlocker =
+        blockingReason != null && blockingReason!.trim().isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -39,6 +44,13 @@ class FirstConnectGuidanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text('Next step: $nextAction'),
+          if (actionLabel != null && onAction != null) ...<Widget>[
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: onAction,
+              child: Text(actionLabel!),
+            ),
+          ],
         ],
       ),
     );

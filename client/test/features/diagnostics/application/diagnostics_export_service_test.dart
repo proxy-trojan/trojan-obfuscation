@@ -169,6 +169,10 @@ void main() {
     expect(exportSummary['runtimePostureLabel'], runtimePosture['label']);
     expect(exportSummary['runtimeTruth'], runtimeSession['truth']);
     expect(exportSummary['recoveryHint'], isNotEmpty);
+    expect(exportSummary['secretStorageSummary'], 'Session-only storage');
+    expect(exportSummary['secretStorageMode'], 'Session-only');
+    expect(exportSummary['secretStoragePersistent'], isFalse);
+    expect(exportSummary['secretStorageSecure'], isFalse);
 
     final profilesExport = payload['profilesExport'] as Map<String, dynamic>;
     expect(profilesExport['kind'], 'trojan-pro-client-profile-bundle');

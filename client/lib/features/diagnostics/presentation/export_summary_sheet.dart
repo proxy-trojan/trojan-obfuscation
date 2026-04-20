@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../domain/export_summary_snapshot.dart';
 import '../../controller/domain/runtime_posture.dart';
 
 class ExportSummarySheet extends StatelessWidget {
@@ -10,11 +11,15 @@ class ExportSummarySheet extends StatelessWidget {
     this.evidenceGradeLabel,
     this.evidenceNote,
     this.exportUsageHint,
+    this.secretStorageSummary,
+    this.secretStorageMode,
   });
 
   factory ExportSummarySheet.fromRuntimePosture({
     required RuntimePosture posture,
     required String recoveryHint,
+    String? secretStorageSummary,
+    String? secretStorageMode,
   }) {
     return ExportSummarySheet(
       runtimePostureLabel: posture.postureLabel,
@@ -24,6 +29,19 @@ class ExportSummarySheet extends StatelessWidget {
       exportUsageHint: posture.isRuntimeTrue
           ? 'Use this export for operator handoff and evidence packaging.'
           : 'Use this export for support triage only.',
+      secretStorageSummary: secretStorageSummary,
+      secretStorageMode: secretStorageMode,
+    );
+  }
+
+  factory ExportSummarySheet.fromSnapshot(ExportSummarySnapshot snapshot) {
+    return ExportSummarySheet(
+      runtimePostureLabel: snapshot.runtimePostureLabel,
+      recoveryHint: snapshot.recoveryHint,
+      evidenceGradeLabel: snapshot.evidenceGrade,
+      exportUsageHint: snapshot.usageHint,
+      secretStorageSummary: snapshot.secretStorageSummary,
+      secretStorageMode: snapshot.secretStorageMode,
     );
   }
 
@@ -32,6 +50,8 @@ class ExportSummarySheet extends StatelessWidget {
   final String? evidenceGradeLabel;
   final String? evidenceNote;
   final String? exportUsageHint;
+  final String? secretStorageSummary;
+  final String? secretStorageMode;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +91,17 @@ class ExportSummarySheet extends StatelessWidget {
               exportUsageHint!,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+          ],
+          if ((secretStorageSummary ?? '').isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              'Secret storage: $secretStorageSummary',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if ((secretStorageMode ?? '').isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text('Storage mode: $secretStorageMode'),
+            ],
           ],
         ],
       ),

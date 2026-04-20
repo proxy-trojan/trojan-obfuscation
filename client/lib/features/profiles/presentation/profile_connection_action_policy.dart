@@ -94,7 +94,7 @@ class ProfileConnectionActionPolicy {
       return ProfileConnectionActionPolicy(
         canToggleConnection: false,
         buttonEnabled: false,
-        buttonLabel: 'Connect Blocked',
+        buttonLabel: 'Connect Test Blocked',
         statusHint: 'Readiness blocked: ${readinessReport.summary}',
         primaryAction: ProfileConnectionPrimaryAction.none,
         actionableSessionTruth: actionableSessionTruth,
@@ -170,7 +170,7 @@ class ProfileConnectionActionPolicy {
     return ProfileConnectionActionPolicy(
       canToggleConnection: true,
       buttonEnabled: true,
-      buttonLabel: runtimePosture.qualifyAction('Connect'),
+      buttonLabel: runtimePosture.qualifyAction('Connect Test'),
       statusHint: status.message,
       primaryAction: ProfileConnectionPrimaryAction.connect,
       actionableSessionTruth: actionableSessionTruth,

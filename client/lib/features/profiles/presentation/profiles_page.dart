@@ -8,11 +8,14 @@ import '../../controller/domain/client_connection_status.dart';
 import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_action_feedback.dart';
 import '../../controller/domain/runtime_posture.dart';
+import '../../controller/domain/failure_family.dart';
+import 'next_action_policy.dart';
 import 'profile_connection_action_policy.dart';
 import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../domain/client_profile.dart';
+import 'connect_timeline_card.dart';
 import 'first_connect_guidance_card.dart';
 import 'high_frequency_actions_strip.dart';
 import 'import_export_dialog.dart';
@@ -345,8 +348,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     );
   }
 
-  void _runRecommendation(BuildContext context, ReadinessRecommendation rec) {
-    switch (rec.action) {
+  void _runReadinessAction(BuildContext context, ReadinessAction action) {
+    switch (action) {
       case ReadinessAction.openProfiles:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -357,7 +360,7 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
         return;
       case ReadinessAction.openTroubleshooting:
         if (widget.onOpenAdvanced != null) {
-          widget.onOpenAdvanced!.call(rec.action);
+          widget.onOpenAdvanced!.call(action);
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
@@ -385,6 +388,24 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   Widget build(BuildContext context) {
     final posture = _runtimePosture;
     final connectionPolicy = _connectionPolicy;
+
+    final failureFamily = parseFailureFamily(status.failureFamilyHint) ==
+            FailureFamily.unknown
+        ? classifyFailureFamily(
+            errorCode: status.errorCode,
+            summary: status.message,
+            detail: status.message,
+            phase: status.phase.name,
+          )
+        : parseFailureFamily(status.failureFamilyHint);
+
+    final nextActionDecision = ProfileNextActionPolicy.resolve(
+      status: status,
+      readinessReport: _readinessController.latestReport,
+      failureFamily: failureFamily,
+      troubleshootingAvailable: widget.onOpenAdvanced != null,
+      settingsAvailable: widget.onOpenSettings != null,
+    );
 
     return SectionCard(
       title: selected.name,
@@ -455,20 +476,11 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                                 connectionPolicy.primaryAction ==
                                     ProfileConnectionPrimaryAction.disconnect;
                             if (!isDisconnectAction) {
-                              final readinessReport = await services.readiness
-                                  .buildReport(profileOverride: selected);
-                              if (!mounted) return;
-                              _readinessController
-                                  .replaceLatestReport(readinessReport);
-                              if (readinessReport.overallLevel ==
-                                  ReadinessLevel.blocked) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Connect blocked: ${readinessReport.summary}',
-                                    ),
-                                  ),
-                                );
+                              final allowed =
+                                  await _runConnectReadinessPreflight(
+                                messenger: messenger,
+                              );
+                              if (!mounted || !allowed) {
                                 return;
                               }
                             }
@@ -560,14 +572,15 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                       (check) => check != null,
                       orElse: () => null,
                     );
-                final nextAction = report?.recommendation?.detail ??
-                    (blockingCheck?.detail ??
-                        (blockingCheck?.summary ??
-                            'Try connect now and check diagnostics if needed.'));
-
                 return FirstConnectGuidanceCard(
                   blockingReason: blockingCheck?.summary,
-                  nextAction: nextAction,
+                  nextAction: nextActionDecision.detail,
+                  actionLabel: nextActionDecision.isActionable
+                      ? nextActionDecision.label
+                      : null,
+                  onAction: nextActionDecision.isActionable
+                      ? () => _runNextActionDecision(context, nextActionDecision)
+                      : null,
                 );
               },
             ),
@@ -582,14 +595,20 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                   report: report,
                   showCachedRefreshHint: report?.isCachedSnapshot == true &&
                       snapshot.connectionState != ConnectionState.done,
-                  onRecommendation: report?.recommendation == null
-                      ? null
-                      : () => _runRecommendation(
-                            context,
-                            report!.recommendation!,
-                          ),
+                  onRecommendation: nextActionDecision.isActionable
+                      ? () => _runNextActionDecision(context, nextActionDecision)
+                      : null,
+                  recommendationLabel:
+                      nextActionDecision.isActionable ? nextActionDecision.label : null,
                 );
               },
+            ),
+            const SizedBox(height: 12),
+            ConnectTimelineCard(
+              status: status,
+              runtimeSession: _runtimeSession,
+              failureFamily: failureFamily,
+              nextAction: nextActionDecision,
             ),
             const SizedBox(height: 12),
             HighFrequencyActionsStrip(
@@ -612,18 +631,10 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                   return;
                 }
 
-                final readinessReport =
-                    await services.readiness.buildReport(profileOverride: selected);
-                if (!mounted) return;
-                _readinessController.replaceLatestReport(readinessReport);
-                if (readinessReport.overallLevel == ReadinessLevel.blocked) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Connect blocked: ${readinessReport.summary}',
-                      ),
-                    ),
-                  );
+                final allowed = await _runConnectReadinessPreflight(
+                  messenger: messenger,
+                );
+                if (!mounted || !allowed) {
                   return;
                 }
 
@@ -726,6 +737,81 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
         ),
       ),
     );
+  }
+
+  void _runNextActionDecision(
+    BuildContext context,
+    ProfileNextActionDecision decision,
+  ) {
+    switch (decision.type) {
+      case ProfileNextActionType.openProfiles:
+        _runReadinessAction(context, ReadinessAction.openProfiles);
+        return;
+      case ProfileNextActionType.openTroubleshooting:
+        _runReadinessAction(context, ReadinessAction.openTroubleshooting);
+        return;
+      case ProfileNextActionType.openSettings:
+        _runReadinessAction(context, ReadinessAction.openSettings);
+        return;
+      case ProfileNextActionType.retryConnect:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Retry Connect Test from the primary action after reviewing current evidence.',
+            ),
+          ),
+        );
+        return;
+      case ProfileNextActionType.exportSupportBundle:
+        if (widget.onOpenAdvanced != null) {
+          widget.onOpenAdvanced!.call(ReadinessAction.openTroubleshooting);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Open Troubleshooting to export support evidence.'),
+            ),
+          );
+        }
+        return;
+      case ProfileNextActionType.none:
+        return;
+    }
+  }
+
+  String _buildConnectBlockedCopy(ReadinessReport report) {
+    final nextActionDecision = ProfileNextActionPolicy.resolve(
+      status: status,
+      readinessReport: report,
+      failureFamily: FailureFamily.unknown,
+      troubleshootingAvailable: widget.onOpenAdvanced != null,
+      settingsAvailable: widget.onOpenSettings != null,
+    );
+    final nextActionLabel = nextActionDecision.label.trim();
+    if (nextActionLabel.isEmpty || !nextActionDecision.isActionable) {
+      return 'Connect blocked: ${report.summary}';
+    }
+    return 'Connect blocked: ${report.summary} Next action: $nextActionLabel';
+  }
+
+  Future<bool> _runConnectReadinessPreflight({
+    required ScaffoldMessengerState messenger,
+  }) async {
+    final readinessReport = await services.readiness.buildReport(
+      profileOverride: selected,
+    );
+    if (!mounted) return false;
+    _readinessController.replaceLatestReport(readinessReport);
+
+    if (readinessReport.overallLevel != ReadinessLevel.blocked) {
+      return true;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(_buildConnectBlockedCopy(readinessReport)),
+      ),
+    );
+    return false;
   }
 
   Future<void> _edit(BuildContext context) async {
@@ -1027,11 +1113,13 @@ class _ProfileReadinessNotice extends StatelessWidget {
   const _ProfileReadinessNotice({
     required this.report,
     this.showCachedRefreshHint = false,
+    this.recommendationLabel,
     this.onRecommendation,
   });
 
   final ReadinessReport? report;
   final bool showCachedRefreshHint;
+  final String? recommendationLabel;
   final VoidCallback? onRecommendation;
 
   Color _tone(ReadinessLevel level) {
@@ -1058,6 +1146,8 @@ class _ProfileReadinessNotice extends StatelessWidget {
 
     final tone = _tone(report!.overallLevel);
     final recommendation = report!.recommendation;
+    final effectiveRecommendationLabel =
+        recommendationLabel ?? recommendation?.label;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1089,18 +1179,22 @@ class _ProfileReadinessNotice extends StatelessWidget {
               'Showing a cached snapshot while the live readiness refresh runs.',
             ),
           ],
-          if (recommendation != null) ...<Widget>[
+          if (effectiveRecommendationLabel != null) ...<Widget>[
             const SizedBox(height: 8),
             Text(
-              'Recommended next step: ${recommendation.label}',
+              'Recommended next step: $effectiveRecommendationLabel',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: onRecommendation,
-              icon: Icon(_recommendationIcon(recommendation.action)),
-              label: Text(recommendation.label),
-            ),
+            if (onRecommendation != null) ...<Widget>[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: onRecommendation,
+                icon: Icon(_recommendationIcon(
+                  recommendation?.action ?? ReadinessAction.openProfiles,
+                )),
+                label: Text(effectiveRecommendationLabel),
+              ),
+            ],
           ],
         ],
       ),

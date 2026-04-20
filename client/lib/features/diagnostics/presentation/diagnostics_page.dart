@@ -6,6 +6,7 @@ import '../../controller/domain/controller_runtime_session.dart';
 import '../../controller/domain/runtime_operator_advice.dart';
 import '../../controller/domain/runtime_posture.dart';
 import '../application/support_issue_descriptor.dart';
+import '../domain/export_summary_snapshot.dart';
 import '../../profiles/presentation/import_export_dialog.dart';
 import 'diagnostics_support_policy.dart';
 import 'export_summary_sheet.dart';
@@ -49,6 +50,12 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       operatorAdvice: operatorAdvice,
       exportedRuntimeSession: _lastExportRuntimeSession,
       exportedBundleKindLabel: _lastExportKindLabel,
+    );
+
+    final exportSummary = ExportSummarySnapshot.fromContext(
+      runtimePosture: runtimePosture,
+      runtimeSession: runtimeSession,
+      storageStatus: widget.services.profileSecrets.storageStatus,
     );
 
     return SingleChildScrollView(
@@ -101,10 +108,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               runtimePosture: runtimePosture,
             ),
             const SizedBox(height: 12),
-            ExportSummarySheet.fromRuntimePosture(
-              posture: runtimePosture,
-              recoveryHint: supportPolicy.currentTruthMessage,
-            ),
+            ExportSummarySheet.fromSnapshot(exportSummary),
             const SizedBox(height: 16),
             _RuntimeTruthSupportCard(
               runtimeSession: runtimeSession,
