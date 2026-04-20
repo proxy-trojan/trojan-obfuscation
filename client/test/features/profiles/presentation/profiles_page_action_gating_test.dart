@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
 import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_runtime_config.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_session.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
@@ -99,6 +101,35 @@ class _StaleConnectedController extends FakeClientController {
 
   @override
   ControllerRuntimeSession get session => sessionOverride;
+}
+
+class _RuntimeTrueConnectController extends FakeClientController {
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'real-runtime-boundary',
+        endpointHint: 'local-controller://runtime-true-test',
+        enableVerboseTelemetry: true,
+      );
+
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'real-shell-controller',
+        backendVersion: 'test-runtime-true',
+        capabilities: const <String>[
+          'connect',
+          'disconnect',
+          'healthCheck',
+        ],
+        lastUpdatedAt: DateTime.now(),
+      );
+
+  @override
+  ControllerRuntimeSession get session => ControllerRuntimeSession(
+        isRunning: true,
+        updatedAt: DateTime.now(),
+        phase: ControllerRuntimePhase.sessionReady,
+        expectedLocalSocksPort: 10808,
+      );
 }
 
 class _SafeModeController extends FakeClientController {
@@ -614,6 +645,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Shell validation is ready'), findsOneWidget);
+    expect(find.textContaining('runtime-true path'), findsNothing);
+  });
+
+  testWidgets('connect feedback confirms runtime-true success posture',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(
+      controllerOverride: _RuntimeTrueConnectController(),
+    );
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Connect Test'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('runtime-true path'), findsOneWidget);
+    expect(find.textContaining('Shell validation is ready'), findsNothing);
   });
 
   testWidgets('profiles page surfaces safe mode and quarantine banner',

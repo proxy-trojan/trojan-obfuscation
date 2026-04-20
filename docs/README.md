@@ -59,3 +59,4 @@ This directory only keeps the current, useful project documentation.
 
 - `runbooks/local-dev.md` — local development notes
 - `runbooks/abuse-control.md` — abuse-control operational notes
+- `runbooks/first-connect-a1.md` — Iter-1 first-connect path runbook (install → readiness → runtime-true connect → export)
