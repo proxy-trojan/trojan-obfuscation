@@ -60,8 +60,76 @@ FailureFamily classifyFailureFamily({
     return needles.any(combined.contains);
   }
 
-  if (code == 'MISSING_TROJAN_PASSWORD' ||
-      containsAny(<String>['missing_trojan_password', 'no trojan password'])) {
+  FailureFamily? fromErrorCode(String value) {
+    if (value.isEmpty) return null;
+
+    if (value == 'MISSING_TROJAN_PASSWORD' ||
+        value == 'MISSING_CONNECT_INPUTS' ||
+        value.contains('PASSWORD')) {
+      return FailureFamily.userInput;
+    }
+
+    if (value == 'UNSUPPORTED' ||
+        value.contains('UNAVAILABLE') ||
+        value.contains('ENV') ||
+        value.contains('BINARY') ||
+        value.contains('PATH')) {
+      return FailureFamily.environment;
+    }
+
+    if (value.contains('CONFIG')) {
+      return FailureFamily.config;
+    }
+
+    if (value.contains('EXPORT') ||
+        value.contains('PERMISSION') ||
+        value.contains('FILESYSTEM')) {
+      return FailureFamily.exportOs;
+    }
+
+    if (value.startsWith('RUNTIME_') ||
+        value.contains('SESSION') ||
+        value.contains('CONNECT') ||
+        value.contains('ROUTING')) {
+      return FailureFamily.connect;
+    }
+
+    if (value.contains('PROCESS') ||
+        value.contains('LAUNCH') ||
+        value.contains('KILL') ||
+        value.contains('OPERATION_IN_PROGRESS') ||
+        value.contains('NO_RUNNING_PROCESS')) {
+      return FailureFamily.launch;
+    }
+
+    return null;
+  }
+
+  final byCode = fromErrorCode(code);
+  if (byCode != null) {
+    return byCode;
+  }
+
+  if (normalizedPhase == 'user_input' || normalizedPhase == 'input') {
+    return FailureFamily.userInput;
+  }
+  if (normalizedPhase == 'config' || normalizedPhase == 'configuration') {
+    return FailureFamily.config;
+  }
+  if (normalizedPhase == 'environment') {
+    return FailureFamily.environment;
+  }
+  if (normalizedPhase == 'export' || normalizedPhase == 'export_os') {
+    return FailureFamily.exportOs;
+  }
+  if (normalizedPhase == 'runtime' || normalizedPhase == 'connect') {
+    return FailureFamily.connect;
+  }
+  if (normalizedPhase == 'launch') {
+    return FailureFamily.launch;
+  }
+
+  if (containsAny(<String>['missing_trojan_password', 'no trojan password'])) {
     return FailureFamily.userInput;
   }
 
@@ -74,13 +142,12 @@ FailureFamily classifyFailureFamily({
     return FailureFamily.exportOs;
   }
 
-  if (code == 'UNSUPPORTED' ||
-      containsAny(<String>[
-        'unsupported',
-        'does not expose runtime diagnostics',
-        'does not expose export preparation',
-        'cannot provide that runtime evidence',
-      ])) {
+  if (containsAny(<String>[
+    'unsupported',
+    'does not expose runtime diagnostics',
+    'does not expose export preparation',
+    'cannot provide that runtime evidence',
+  ])) {
     return FailureFamily.environment;
   }
 
@@ -94,10 +161,6 @@ FailureFamily classifyFailureFamily({
     return FailureFamily.config;
   }
 
-  if (normalizedPhase == 'runtime') {
-    return FailureFamily.connect;
-  }
-
   if (containsAny(<String>[
     'runtime session exited with code',
     'runtime session stopped with error',
@@ -105,10 +168,6 @@ FailureFamily classifyFailureFamily({
     'connect path failed after launch',
   ])) {
     return FailureFamily.connect;
-  }
-
-  if (normalizedPhase == 'launch') {
-    return FailureFamily.launch;
   }
 
   if (containsAny(<String>[
