@@ -1136,9 +1136,7 @@ class AdapterBackedClientController extends ClientControllerApi {
 
     final runtimePosture = _latestRoutingProbeEvidence.isNotEmpty
         ? _latestRoutingProbeEvidence.first.runtimePosture.name
-        : (_status.phase == ClientConnectionPhase.connected
-            ? 'runtimeTrue'
-            : 'fallbackStub');
+        : _runtimePostureForMissingProbeEvidence();
 
     final events = _uxMetricEventMapper.fromConnectionSnapshot(
       userId: activeProfileId,
@@ -1149,6 +1147,18 @@ class AdapterBackedClientController extends ClientControllerApi {
       at: _status.updatedAt,
     );
     _recordUxEvents(events);
+  }
+
+  String _runtimePostureForMissingProbeEvidence() {
+    final mode = runtimeConfig.mode;
+
+    if (mode.startsWith('stubbed-local-boundary')) {
+      return 'fallbackStub';
+    }
+
+    // Without dataplane probe evidence we must never upcast a connected status
+    // into runtime-true success metrics.
+    return 'unknown';
   }
 
   void _notifyIfActive() {

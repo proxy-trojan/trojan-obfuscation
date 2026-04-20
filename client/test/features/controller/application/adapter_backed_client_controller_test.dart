@@ -951,4 +951,58 @@ void main() {
       isTrue,
     );
   });
+
+  test('does not emit runtime-true success event when connected without probe evidence',
+      () async {
+    final adapter = _ControllableShellControllerAdapter(
+      runtimeConfig: const ControllerRuntimeConfig(
+        mode: 'external-runtime-boundary',
+        endpointHint: 'local-controller://test',
+        enableVerboseTelemetry: true,
+      ),
+      commandAccepted: true,
+      commandSummary: 'Launch requested.',
+      commandDetails: const <String, Object?>{},
+      initialSession: _session(isRunning: false),
+    );
+
+    final secrets = ProfileSecretsService(secureStorage: MemorySecureStorage());
+    await secrets.saveTrojanPassword(profileId: 'profile-demo', password: 'secret');
+
+    final controller = AdapterBackedClientController(
+      adapter: adapter,
+      profileSecrets: secrets,
+      routingProbeRunner: const RoutingProbeRunner(
+        adapters: <RoutingProbeAdapter>[],
+      ),
+      sessionPollInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    final connectResult = await controller.connect(_demoProfile());
+
+    expect(connectResult.accepted, isTrue);
+
+    adapter.setSession(_session(isRunning: true, pid: 7788));
+    await _waitFor(
+      () => controller.status.phase == ClientConnectionPhase.connected,
+      description: 'connected state reached without probe evidence',
+    );
+
+    expect(
+      controller.latestUxEvents
+          .any((event) => event.name == 'first_connect_attempted'),
+      isTrue,
+    );
+    expect(
+      controller.latestUxEvents
+          .any((event) => event.name == 'runtime_session_ready_runtime_true'),
+      isFalse,
+    );
+
+    expect(
+      controller.latestUxEvents.any((event) => event.name == 'recovery_suggested'),
+      isFalse,
+    );
+  });
 }

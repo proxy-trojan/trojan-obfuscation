@@ -6,6 +6,37 @@ import 'package:trojan_pro_client/features/controller/domain/runtime_action_feed
 import 'package:trojan_pro_client/features/controller/domain/runtime_posture.dart';
 
 void main() {
+  test('connect feedback confirms runtime-true success only on session-ready runtime evidence', () {
+    final feedback = buildRuntimeActionFeedback(
+      action: RuntimeActionKind.connect,
+      result: ControllerCommandResult(
+        commandId: 'connect-runtime-true-1',
+        accepted: true,
+        completedAt: DateTime.now(),
+        summary: 'Runtime connect completed.',
+      ),
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.connected,
+        message: 'Runtime session is ready.',
+        updatedAt: DateTime.now(),
+        activeProfileId: 'sample-hk-1',
+      ),
+      session: ControllerRuntimeSession(
+        isRunning: true,
+        updatedAt: DateTime.now(),
+        phase: ControllerRuntimePhase.sessionReady,
+        expectedLocalSocksPort: 10808,
+      ),
+      posture: describeRuntimePosture(
+        runtimeMode: 'real-runtime-boundary',
+        backendKind: 'real-shell-controller',
+      ),
+    );
+
+    expect(feedback, contains('runtime-true path'));
+    expect(feedback, isNot(contains('Shell validation is ready')));
+  });
+
   test('connect feedback mentions shell validation on stub posture', () {
     final feedback = buildRuntimeActionFeedback(
       action: RuntimeActionKind.connect,
