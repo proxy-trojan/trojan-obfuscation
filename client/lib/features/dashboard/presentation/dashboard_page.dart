@@ -531,7 +531,8 @@ class _NextStepGuide extends StatelessWidget {
             ],
           ),
         ),
-        if (model.operatorTitle != null && model.operatorBody != null) ...<Widget>[
+        if (model.operatorTitle != null &&
+            model.operatorBody != null) ...<Widget>[
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
@@ -663,6 +664,7 @@ class _NextStepGuide extends StatelessWidget {
       runtimeSession: runtimeSession,
       operatorAdvice: operatorAdvice,
       readiness: readiness,
+      settingsAvailable: onOpenSettings != null,
     );
 
     return _GuideModel(
@@ -1067,7 +1069,8 @@ class _RuntimeSessionSummary extends StatelessWidget {
               children: <Widget>[
                 KeyValuePair(
                     label: 'Running', value: session.isRunning ? 'Yes' : 'No'),
-                KeyValuePair(label: 'Runtime Truth', value: session.truth.label),
+                KeyValuePair(
+                    label: 'Runtime Truth', value: session.truth.label),
                 KeyValuePair(label: 'Snapshot Age', value: session.ageLabel),
                 KeyValuePair(label: 'Runtime Phase', value: session.phase.name),
                 KeyValuePair(
