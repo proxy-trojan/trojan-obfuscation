@@ -343,6 +343,185 @@ void main() {
     expect(guide.body, profileDecision.detail);
   });
 
+  test('error launch keeps same retry action as profile next action', () {
+    final profile = _profile();
+    final status = _status(
+      phase: ClientConnectionPhase.error,
+      message: 'Runtime launch failed before session ready.',
+      activeProfileId: profile.id,
+      errorCode: 'RUNTIME_LAUNCH_FAILED',
+      failureFamilyHint: 'launch',
+    );
+    final session = _session(
+      isRunning: false,
+      phase: ControllerRuntimePhase.failed,
+      lastExitCode: 65,
+    );
+    final posture = _posture();
+
+    final guide = _resolveGuide(
+      status: status,
+      selectedProfile: profile,
+      activeProfile: profile,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+    );
+
+    final profileDecision = _resolveProfileDecision(
+      status: status,
+      readiness: null,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: true,
+    );
+
+    expect(_mapGuidePrimaryAction(guide.primaryAction), profileDecision.type);
+    expect(guide.primaryLabel, profileDecision.label);
+    expect(guide.body, profileDecision.detail);
+  });
+
+  test('error user_input keeps same password action as profile next action',
+      () {
+    final profile = _profile(hasStoredPassword: false);
+    final status = _status(
+      phase: ClientConnectionPhase.error,
+      message: 'Trojan password missing.',
+      activeProfileId: profile.id,
+      errorCode: 'MISSING_TROJAN_PASSWORD',
+      failureFamilyHint: 'user_input',
+    );
+    final session = _session();
+    final posture = _posture();
+
+    final guide = _resolveGuide(
+      status: status,
+      selectedProfile: profile,
+      activeProfile: profile,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+    );
+
+    final profileDecision = _resolveProfileDecision(
+      status: status,
+      readiness: null,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: true,
+    );
+
+    expect(_mapGuidePrimaryAction(guide.primaryAction), profileDecision.type);
+    expect(guide.primaryLabel, profileDecision.label);
+    expect(guide.body, profileDecision.detail);
+  });
+
+  test('error environment keeps same settings primary as profile next action',
+      () {
+    final profile = _profile();
+    final status = _status(
+      phase: ClientConnectionPhase.error,
+      message: 'Runtime environment check failed.',
+      activeProfileId: profile.id,
+      errorCode: 'RUNTIME_BINARY_MISSING',
+      failureFamilyHint: 'environment',
+    );
+    final session = _session();
+    final posture = _posture();
+
+    final guide = _resolveGuide(
+      status: status,
+      selectedProfile: profile,
+      activeProfile: profile,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: true,
+    );
+
+    final profileDecision = _resolveProfileDecision(
+      status: status,
+      readiness: null,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: true,
+    );
+
+    expect(_mapGuidePrimaryAction(guide.primaryAction), profileDecision.type);
+    expect(guide.primaryLabel, profileDecision.label);
+    expect(guide.body, profileDecision.detail);
+  });
+
+  test(
+      'error environment without settings uses profile fallback when session needs no evidence revalidation',
+      () {
+    final profile = _profile();
+    final status = _status(
+      phase: ClientConnectionPhase.error,
+      message: 'Runtime environment check failed.',
+      activeProfileId: profile.id,
+      errorCode: 'RUNTIME_BINARY_MISSING',
+      failureFamilyHint: 'environment',
+    );
+    final session = _session();
+    final posture = _posture();
+
+    final guide = _resolveGuide(
+      status: status,
+      selectedProfile: profile,
+      activeProfile: profile,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: false,
+    );
+
+    expect(_mapGuidePrimaryAction(guide.primaryAction),
+        ProfileNextActionType.openProfiles);
+    expect(guide.primaryLabel, 'Open Profiles');
+  });
+
+  test(
+      'error export_os keeps label/detail parity while dashboard routes to advanced',
+      () {
+    final profile = _profile();
+    final status = _status(
+      phase: ClientConnectionPhase.error,
+      message: 'Diagnostics export failed: permission denied.',
+      activeProfileId: profile.id,
+      errorCode: 'DIAGNOSTICS_EXPORT_FAILED',
+      failureFamilyHint: 'export_os',
+    );
+    final session = _session();
+    final posture = _posture();
+
+    final guide = _resolveGuide(
+      status: status,
+      selectedProfile: profile,
+      activeProfile: profile,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: true,
+    );
+
+    final profileDecision = _resolveProfileDecision(
+      status: status,
+      readiness: null,
+      posture: posture,
+      session: session,
+      troubleshootingAvailable: true,
+      settingsAvailable: true,
+    );
+
+    expect(guide.primaryAction, DashboardGuideAction.openAdvanced);
+    expect(guide.primaryLabel, profileDecision.label);
+    expect(guide.body, profileDecision.detail);
+  });
+
   test(
       'error unknown without troubleshooting keeps same fallback action as profile',
       () {

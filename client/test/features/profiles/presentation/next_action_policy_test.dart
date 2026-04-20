@@ -89,6 +89,130 @@ void main() {
 
       expect(decision.type, ProfileNextActionType.exportSupportBundle);
       expect(decision.label, 'Export Support Bundle');
+      expect(decision.detail, contains('permissions'));
+    });
+
+    test('maps launch failure family to retry action', () {
+      final decision = ProfileNextActionPolicy.resolve(
+        status: ClientConnectionStatus(
+          phase: ClientConnectionPhase.error,
+          message: 'Runtime launch failed before session ready.',
+          updatedAt: DateTime.parse('2026-04-20T01:00:00.000Z'),
+          errorCode: 'RUNTIME_LAUNCH_FAILED',
+          failureFamilyHint: 'launch',
+        ),
+        readinessReport: null,
+        failureFamily: FailureFamily.launch,
+        troubleshootingAvailable: true,
+        settingsAvailable: true,
+      );
+
+      expect(decision.type, ProfileNextActionType.retryConnect);
+      expect(decision.label, 'Retry Connect Test');
+    });
+
+    test('maps config failure family to open profiles action', () {
+      final decision = ProfileNextActionPolicy.resolve(
+        status: ClientConnectionStatus(
+          phase: ClientConnectionPhase.error,
+          message: 'Invalid profile field: server port out of range.',
+          updatedAt: DateTime.parse('2026-04-20T01:00:00.000Z'),
+          errorCode: 'CONFIG_INVALID',
+          failureFamilyHint: 'config',
+        ),
+        readinessReport: null,
+        failureFamily: FailureFamily.config,
+        troubleshootingAvailable: true,
+        settingsAvailable: true,
+      );
+
+      expect(decision.type, ProfileNextActionType.openProfiles);
+      expect(decision.label, 'Open Profiles');
+      expect(decision.detail, contains('config'));
+    });
+
+    test('maps environment failure family to settings as primary', () {
+      final decision = ProfileNextActionPolicy.resolve(
+        status: ClientConnectionStatus(
+          phase: ClientConnectionPhase.error,
+          message: 'Runtime environment check failed.',
+          updatedAt: DateTime.parse('2026-04-20T01:00:00.000Z'),
+          errorCode: 'RUNTIME_BINARY_MISSING',
+          failureFamilyHint: 'environment',
+        ),
+        readinessReport: null,
+        failureFamily: FailureFamily.environment,
+        troubleshootingAvailable: true,
+        settingsAvailable: true,
+      );
+
+      expect(decision.type, ProfileNextActionType.openSettings);
+      expect(decision.label, 'Open Settings');
+      expect(decision.detail, contains('environment'));
+    });
+
+    test(
+        'maps environment failure family to troubleshooting fallback when settings unavailable',
+        () {
+      final decision = ProfileNextActionPolicy.resolve(
+        status: ClientConnectionStatus(
+          phase: ClientConnectionPhase.error,
+          message: 'Runtime environment check failed.',
+          updatedAt: DateTime.parse('2026-04-20T01:00:00.000Z'),
+          errorCode: 'RUNTIME_BINARY_MISSING',
+          failureFamilyHint: 'environment',
+        ),
+        readinessReport: null,
+        failureFamily: FailureFamily.environment,
+        troubleshootingAvailable: true,
+        settingsAvailable: false,
+      );
+
+      expect(decision.type, ProfileNextActionType.openTroubleshooting);
+      expect(decision.label, 'Open Troubleshooting');
+    });
+
+    test('unknown failure defaults to evidence-preserving troubleshooting path',
+        () {
+      final decision = ProfileNextActionPolicy.resolve(
+        status: ClientConnectionStatus(
+          phase: ClientConnectionPhase.error,
+          message: 'Unexpected runtime handshake mismatch.',
+          updatedAt: DateTime.parse('2026-04-20T01:00:00.000Z'),
+          errorCode: 'UNCLASSIFIED_RUNTIME_FAILURE',
+          failureFamilyHint: 'unknown',
+        ),
+        readinessReport: null,
+        failureFamily: FailureFamily.unknown,
+        troubleshootingAvailable: true,
+        settingsAvailable: true,
+      );
+
+      expect(decision.type, ProfileNextActionType.openTroubleshooting);
+      expect(decision.label, 'Open Troubleshooting');
+      expect(decision.detail, contains('capture runtime evidence'));
+    });
+
+    test(
+        'unknown failure falls back to profiles when troubleshooting unavailable',
+        () {
+      final decision = ProfileNextActionPolicy.resolve(
+        status: ClientConnectionStatus(
+          phase: ClientConnectionPhase.error,
+          message: 'Unexpected runtime handshake mismatch.',
+          updatedAt: DateTime.parse('2026-04-20T01:00:00.000Z'),
+          errorCode: 'UNCLASSIFIED_RUNTIME_FAILURE',
+          failureFamilyHint: 'unknown',
+        ),
+        readinessReport: null,
+        failureFamily: FailureFamily.unknown,
+        troubleshootingAvailable: false,
+        settingsAvailable: true,
+      );
+
+      expect(decision.type, ProfileNextActionType.openProfiles);
+      expect(decision.label, 'Open Profiles');
+      expect(decision.detail, contains('capture runtime evidence'));
     });
 
     test('maps user_input failure family to set password action', () {
