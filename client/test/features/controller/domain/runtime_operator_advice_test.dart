@@ -30,7 +30,9 @@ void main() {
     expect(advice.primaryEnabled, isTrue);
   });
 
-  test('disconnecting stop-pending runtime recommends waiting for exit confirmation', () {
+  test(
+      'disconnecting stop-pending runtime recommends waiting for exit confirmation',
+      () {
     final advice = RuntimeOperatorAdvice.resolve(
       status: ClientConnectionStatus(
         phase: ClientConnectionPhase.disconnecting,
@@ -55,6 +57,61 @@ void main() {
     expect(advice.kind, RuntimeOperatorAdviceKind.waitForExitConfirmation);
     expect(advice.headline, 'Exit confirmation pending');
     expect(advice.message, contains('fully closed yet'));
+  });
+
+  test(
+      'error residual session recommends troubleshooting evidence-first guidance',
+      () {
+    final advice = RuntimeOperatorAdvice.resolve(
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Runtime process exited unexpectedly.',
+        updatedAt: DateTime.now(),
+        activeProfileId: 'sample-hk-1',
+      ),
+      session: ControllerRuntimeSession(
+        isRunning: false,
+        updatedAt: DateTime.now().subtract(const Duration(seconds: 40)),
+        phase: ControllerRuntimePhase.failed,
+        lastExitCode: 7,
+      ),
+      posture: describeRuntimePosture(
+        runtimeMode: 'real-runtime-boundary',
+        backendKind: 'real-shell-controller',
+      ),
+      troubleshootingAvailable: true,
+    );
+
+    expect(advice.kind, RuntimeOperatorAdviceKind.revalidateInTroubleshooting);
+    expect(advice.primaryEnabled, isTrue);
+    expect(advice.primaryLabel, 'Open Troubleshooting');
+    expect(advice.message, contains('leftover session state'));
+  });
+
+  test('error stale running session still advises troubleshooting before retry',
+      () {
+    final advice = RuntimeOperatorAdvice.resolve(
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Handshake timed out.',
+        updatedAt: DateTime.now(),
+        activeProfileId: 'sample-hk-1',
+      ),
+      session: ControllerRuntimeSession(
+        isRunning: true,
+        updatedAt: DateTime.now().subtract(const Duration(minutes: 5)),
+        phase: ControllerRuntimePhase.alive,
+      ),
+      posture: describeRuntimePosture(
+        runtimeMode: 'real-runtime-boundary',
+        backendKind: 'real-shell-controller',
+      ),
+      troubleshootingAvailable: true,
+    );
+
+    expect(advice.kind, RuntimeOperatorAdviceKind.revalidateInTroubleshooting);
+    expect(advice.primaryEnabled, isTrue);
+    expect(advice.message, contains('Open Troubleshooting'));
   });
 
   test('stub residual state does not create actionable advice by itself', () {

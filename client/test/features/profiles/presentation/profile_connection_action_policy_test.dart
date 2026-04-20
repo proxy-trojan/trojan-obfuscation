@@ -37,7 +37,8 @@ void main() {
         ProfileConnectionPrimaryAction.openTroubleshooting);
   });
 
-  test('disconnecting session surfaces recovery guidance instead of idle hint', () {
+  test('disconnecting session surfaces recovery guidance instead of idle hint',
+      () {
     final policy = ProfileConnectionActionPolicy.resolve(
       hasStoredPassword: true,
       active: true,
@@ -71,6 +72,41 @@ void main() {
     expect(policy.actionSafety.state,
         RuntimeActionSafetyState.waitForExitConfirmation);
     expect(policy.actionSafety.recommendsSnapshotFirst, isTrue);
+  });
+
+  test('error residual session keeps troubleshooting evidence-first CTA', () {
+    final policy = ProfileConnectionActionPolicy.resolve(
+      hasStoredPassword: true,
+      active: true,
+      status: ClientConnectionStatus(
+        phase: ClientConnectionPhase.error,
+        message: 'Runtime exited unexpectedly after connect failure.',
+        updatedAt: DateTime.now(),
+        activeProfileId: 'sample-hk-1',
+      ),
+      runtimePosture: describeRuntimePosture(
+        runtimeMode: 'real-runtime-boundary',
+        backendKind: 'real-shell-controller',
+      ),
+      runtimeSession: ControllerRuntimeSession(
+        isRunning: false,
+        updatedAt: DateTime.now().subtract(const Duration(seconds: 50)),
+        phase: ControllerRuntimePhase.failed,
+        lastExitCode: 13,
+      ),
+      readinessReport: null,
+      hasConnectedElsewhere: false,
+      onOpenAdvancedAvailable: true,
+    );
+
+    expect(policy.buttonEnabled, isTrue);
+    expect(policy.buttonLabel, 'Open Troubleshooting');
+    expect(policy.primaryAction,
+        ProfileConnectionPrimaryAction.openTroubleshooting);
+    expect(policy.statusHint, contains('leftover session state'));
+    expect(policy.actionSafety.state,
+        RuntimeActionSafetyState.captureSnapshotFirst);
+    expect(policy.actionSafety.blocksRetry, isTrue);
   });
 
   test('readiness blocked connect returns blocked policy', () {

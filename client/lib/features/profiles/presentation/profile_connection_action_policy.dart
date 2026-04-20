@@ -108,10 +108,10 @@ class ProfileConnectionActionPolicy {
           canToggleConnection: false,
           buttonEnabled: actionMatrix.primaryActionContract ==
               RuntimePrimaryActionContract.preferTroubleshooting,
-          buttonLabel:
-              operatorAdvice.kind == RuntimeOperatorAdviceKind.revalidateInTroubleshooting
-                  ? 'Revalidate in Troubleshooting'
-                  : (operatorAdvice.primaryLabel ?? 'Open Troubleshooting'),
+          buttonLabel: operatorAdvice.kind ==
+                  RuntimeOperatorAdviceKind.revalidateInTroubleshooting
+              ? 'Revalidate in Troubleshooting'
+              : (operatorAdvice.primaryLabel ?? 'Open Troubleshooting'),
           statusHint: operatorAdvice.message ??
               '${runtimeSession.truthNote} ${runtimeSession.recoveryGuidance}',
           primaryAction: actionMatrix.preferredOperatorAction ==
@@ -162,6 +162,42 @@ class ProfileConnectionActionPolicy {
                 RuntimePreferredOperatorAction.openTroubleshooting
             ? ProfileConnectionPrimaryAction.openTroubleshooting
             : ProfileConnectionPrimaryAction.none,
+        actionableSessionTruth: actionableSessionTruth,
+        actionSafety: actionSafety,
+      );
+    }
+
+    if (active && status.phase == ClientConnectionPhase.error) {
+      final shouldBlockRetryShortcut =
+          actionMatrix.retryContract == RuntimeRetryContract.blockShortcut;
+      if (shouldBlockRetryShortcut) {
+        final canOpenTroubleshooting = actionMatrix.primaryActionContract ==
+                RuntimePrimaryActionContract.preferTroubleshooting &&
+            actionMatrix.preferredOperatorAction ==
+                RuntimePreferredOperatorAction.openTroubleshooting;
+
+        return ProfileConnectionActionPolicy(
+          canToggleConnection: false,
+          buttonEnabled: canOpenTroubleshooting,
+          buttonLabel: canOpenTroubleshooting
+              ? (operatorAdvice.primaryLabel ?? 'Open Troubleshooting')
+              : 'Retry blocked: capture evidence',
+          statusHint: operatorAdvice.message ??
+              'Capture runtime evidence before retrying. Immediate retry is blocked for the current session truth.',
+          primaryAction: canOpenTroubleshooting
+              ? ProfileConnectionPrimaryAction.openTroubleshooting
+              : ProfileConnectionPrimaryAction.none,
+          actionableSessionTruth: actionableSessionTruth,
+          actionSafety: actionSafety,
+        );
+      }
+
+      return ProfileConnectionActionPolicy(
+        canToggleConnection: true,
+        buttonEnabled: true,
+        buttonLabel: runtimePosture.qualifyAction('Retry Connect Test'),
+        statusHint: status.message,
+        primaryAction: ProfileConnectionPrimaryAction.connect,
         actionableSessionTruth: actionableSessionTruth,
         actionSafety: actionSafety,
       );
