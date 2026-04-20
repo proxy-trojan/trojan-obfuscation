@@ -15,6 +15,7 @@ import '../../readiness/domain/readiness_refresh_fingerprint.dart';
 import '../../readiness/domain/readiness_report.dart';
 import '../../readiness/presentation/readiness_surface_controller.dart';
 import '../domain/client_profile.dart';
+import 'connect_timeline_card.dart';
 import 'first_connect_guidance_card.dart';
 import 'high_frequency_actions_strip.dart';
 import 'import_export_dialog.dart';
@@ -601,6 +602,13 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                       nextActionDecision.isActionable ? nextActionDecision.label : null,
                 );
               },
+            ),
+            const SizedBox(height: 12),
+            ConnectTimelineCard(
+              status: status,
+              runtimeSession: _runtimeSession,
+              failureFamily: failureFamily,
+              nextAction: nextActionDecision,
             ),
             const SizedBox(height: 12),
             HighFrequencyActionsStrip(

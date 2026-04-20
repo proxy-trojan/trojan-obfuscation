@@ -435,7 +435,10 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Quick Connect'));
+    final quickConnectButton =
+        find.widgetWithText(FilledButton, 'Quick Connect');
+    await tester.ensureVisible(quickConnectButton);
+    await tester.tap(quickConnectButton);
     await tester.pump(const Duration(milliseconds: 360));
 
     expect(
@@ -693,6 +696,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Action safety'), findsOneWidget);
+    expect(find.text('Connect timeline'), findsOneWidget);
+    expect(find.textContaining('Current stage: alive'), findsOneWidget);
     expect(find.text('Wait for exit confirmation'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Open Troubleshooting'),
         findsOneWidget);
