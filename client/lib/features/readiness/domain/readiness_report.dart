@@ -29,6 +29,17 @@ enum ReadinessAction {
   openSettings,
 }
 
+enum ReadinessRecommendationSource {
+  report,
+  fallback,
+}
+
+enum ReadinessRecommendationActionId {
+  openProfiles,
+  openTroubleshooting,
+  openSettings,
+}
+
 enum ReadinessFreshness {
   fresh,
   aging,
@@ -97,17 +108,44 @@ class ReadinessRecommendation {
     required this.action,
     required this.label,
     required this.detail,
+    required this.source,
+    required this.domain,
+    required this.destination,
+    required this.destinationAvailable,
+    this.fallbackReason,
   });
 
   final ReadinessAction action;
   final String label;
   final String detail;
+  final ReadinessRecommendationSource source;
+  final ReadinessDomain domain;
+  final String destination;
+  final bool destinationAvailable;
+  final String? fallbackReason;
+
+  ReadinessRecommendationActionId get actionId {
+    return switch (action) {
+      ReadinessAction.openProfiles =>
+        ReadinessRecommendationActionId.openProfiles,
+      ReadinessAction.openTroubleshooting =>
+        ReadinessRecommendationActionId.openTroubleshooting,
+      ReadinessAction.openSettings =>
+        ReadinessRecommendationActionId.openSettings,
+    };
+  }
 
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'action': action.name,
+      'actionId': actionId.name,
       'label': label,
       'detail': detail,
+      'source': source.name,
+      'domain': domain.name,
+      'destination': destination,
+      'destinationAvailable': destinationAvailable,
+      'fallbackReason': fallbackReason,
     };
   }
 }
@@ -185,10 +223,20 @@ class ReadinessReport {
     }
 
     final candidate = candidates.first;
+    final action = candidate.action!;
+    final destination = switch (action) {
+      ReadinessAction.openProfiles => 'profiles',
+      ReadinessAction.openTroubleshooting => 'advanced.troubleshooting',
+      ReadinessAction.openSettings => 'settings',
+    };
     return ReadinessRecommendation(
-      action: candidate.action!,
+      action: action,
       label: candidate.actionLabel!,
       detail: candidate.detail ?? candidate.summary,
+      source: ReadinessRecommendationSource.report,
+      domain: candidate.domain,
+      destination: destination,
+      destinationAvailable: true,
     );
   }
 

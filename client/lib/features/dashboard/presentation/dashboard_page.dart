@@ -25,12 +25,14 @@ class DashboardPage extends StatefulWidget {
     this.onOpenProfiles,
     this.onOpenAdvanced,
     this.onOpenSettings,
+    this.onReadinessRecommendationTelemetry,
   });
 
   final ClientServiceRegistry services;
   final VoidCallback? onOpenProfiles;
   final VoidCallback? onOpenAdvanced;
   final VoidCallback? onOpenSettings;
+  final ValueChanged<Map<String, Object?>>? onReadinessRecommendationTelemetry;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -91,11 +93,66 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  VoidCallback? _actionHandlerFor(ReadinessAction action) {
-    return switch (action) {
+  ReadinessRecommendation _resolveRecommendation(
+    ReadinessRecommendation recommendation,
+  ) {
+    switch (recommendation.action) {
+      case ReadinessAction.openProfiles:
+        return recommendation;
+      case ReadinessAction.openTroubleshooting:
+        if (widget.onOpenAdvanced != null) {
+          return recommendation;
+        }
+        return ReadinessRecommendation(
+          action: ReadinessAction.openProfiles,
+          label: 'Open Profiles',
+          detail: recommendation.detail,
+          source: ReadinessRecommendationSource.fallback,
+          domain: recommendation.domain,
+          destination: 'profiles',
+          destinationAvailable: true,
+          fallbackReason: 'Troubleshooting page is unavailable in this surface.',
+        );
+      case ReadinessAction.openSettings:
+        if (widget.onOpenSettings != null) {
+          return recommendation;
+        }
+        return ReadinessRecommendation(
+          action: ReadinessAction.openProfiles,
+          label: 'Open Profiles',
+          detail: recommendation.detail,
+          source: ReadinessRecommendationSource.fallback,
+          domain: recommendation.domain,
+          destination: 'profiles',
+          destinationAvailable: true,
+          fallbackReason: 'Settings page is unavailable in this surface.',
+        );
+    }
+  }
+
+  VoidCallback? _actionHandlerFor(ReadinessRecommendation recommendation) {
+    final telemetry = widget.onReadinessRecommendationTelemetry;
+    final resolved = _resolveRecommendation(recommendation);
+    final actionHandler = switch (resolved.action) {
       ReadinessAction.openProfiles => widget.onOpenProfiles,
       ReadinessAction.openTroubleshooting => widget.onOpenAdvanced,
       ReadinessAction.openSettings => widget.onOpenSettings,
+    };
+    if (actionHandler == null) return null;
+
+    return () {
+      telemetry?.call(<String, Object?>{
+        'eventName': 'recovery_action_executed',
+        'action': resolved.actionId.name,
+        'source': resolved.source.name,
+        'domain': resolved.domain.name,
+        'destination': resolved.destination,
+        'destinationAvailable': resolved.destinationAvailable,
+        'outcome': 'acted',
+        if (resolved.fallbackReason != null)
+          'fallbackReason': resolved.fallbackReason,
+      });
+      actionHandler();
     };
   }
 
@@ -247,6 +304,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     return const Text('Checking readiness…');
                   }
 
+                  final recommendation = report.recommendation == null
+                      ? null
+                      : _resolveRecommendation(report.recommendation!);
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -288,19 +349,34 @@ class _DashboardPageState extends State<DashboardPage> {
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
-                      if (report.recommendation != null) ...<Widget>[
+                      if (recommendation != null) ...<Widget>[
                         const SizedBox(height: 12),
                         Text(
-                          report.recommendation!.detail,
+                          recommendation.detail,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
                         FilledButton.icon(
                           onPressed:
-                              _actionHandlerFor(report.recommendation!.action),
+                              _actionHandlerFor(recommendation),
                           icon: const Icon(Icons.play_arrow),
-                          label: Text(report.recommendation!.label),
+                          label: Text(recommendation.label),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Destination: ${recommendation.destination}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          'Destination availability: ${recommendation.destinationAvailable ? 'reachable' : 'unavailable'}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        if (recommendation.source ==
+                            ReadinessRecommendationSource.fallback)
+                          Text(
+                            'Fallback reason: ${recommendation.fallbackReason ?? 'Route unavailable in this surface.'}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                       ],
                       const SizedBox(height: 12),
                       Wrap(
@@ -562,7 +638,7 @@ class _NextStepGuide extends StatelessWidget {
           children: <Widget>[
             FilledButton(
               onPressed: () => _runAction(context, model.primaryAction),
-              child: Text(model.primaryLabel),
+              child: Text(_displayLabelFor(model.primaryAction, model.primaryLabel)),
             ),
             if (model.secondaryLabel != null)
               OutlinedButton(
@@ -573,6 +649,21 @@ class _NextStepGuide extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _displayLabelFor(_GuideAction action, String fallbackLabel) {
+    final posture = describeRuntimePosture(
+      runtimeMode: services.controller.runtimeConfig.mode,
+      backendKind: services.controller.telemetry.backendKind,
+    );
+    return switch (action) {
+      _GuideAction.connectNow => posture.qualifyAction('Connect now'),
+      _GuideAction.retryNow => posture.qualifyAction('Retry now'),
+      _GuideAction.disconnectNow => 'Disconnect now',
+      _GuideAction.openProfiles => 'Open Profiles',
+      _GuideAction.openAdvanced => 'Open Troubleshooting',
+      _GuideAction.openSettings => 'Open Settings',
+    };
   }
 
   Future<void> _runAction(BuildContext context, _GuideAction? action) async {
@@ -598,9 +689,15 @@ class _NextStepGuide extends StatelessWidget {
             .buildReport(profileOverride: currentProfile);
         if (!context.mounted) return;
         if (readinessReport.overallLevel == ReadinessLevel.blocked) {
+          final recommendation = readinessReport.recommendation;
+          final nextStep = recommendation == null
+              ? null
+              : '${recommendation.label} (${recommendation.destination})';
+          final message = nextStep == null
+              ? 'Connect blocked: ${readinessReport.summary}'
+              : 'Connect blocked: ${readinessReport.summary} Next action: $nextStep';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Connect blocked: ${readinessReport.summary}')),
+            SnackBar(content: Text(message)),
           );
           return;
         }

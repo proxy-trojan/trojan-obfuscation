@@ -348,40 +348,93 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     );
   }
 
-  void _runReadinessAction(BuildContext context, ReadinessAction action) {
-    switch (action) {
+  ReadinessRecommendation _resolveRecommendation(
+    ReadinessRecommendation recommendation,
+  ) {
+    switch (recommendation.action) {
+      case ReadinessAction.openProfiles:
+        return recommendation;
+      case ReadinessAction.openTroubleshooting:
+        if (widget.onOpenAdvanced != null) {
+          return recommendation;
+        }
+        return ReadinessRecommendation(
+          action: ReadinessAction.openProfiles,
+          label: 'Open Profiles',
+          detail: recommendation.detail,
+          source: ReadinessRecommendationSource.fallback,
+          domain: recommendation.domain,
+          destination: 'profiles',
+          destinationAvailable: true,
+          fallbackReason: 'Troubleshooting page is unavailable in this surface.',
+        );
+      case ReadinessAction.openSettings:
+        if (widget.onOpenSettings != null) {
+          return recommendation;
+        }
+        return ReadinessRecommendation(
+          action: ReadinessAction.openProfiles,
+          label: 'Open Profiles',
+          detail: recommendation.detail,
+          source: ReadinessRecommendationSource.fallback,
+          domain: recommendation.domain,
+          destination: 'profiles',
+          destinationAvailable: true,
+          fallbackReason: 'Settings page is unavailable in this surface.',
+        );
+    }
+  }
+
+  void _runReadinessAction(
+    BuildContext context,
+    ReadinessRecommendation recommendation,
+  ) {
+    final resolved = _resolveRecommendation(recommendation);
+    _recordReadinessRecommendationTelemetry(
+      source: recommendation.source,
+      recommendation: resolved,
+      outcome: 'acted',
+    );
+
+    switch (resolved.action) {
       case ReadinessAction.openProfiles:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-                'You are already in Profiles. Update this profile directly.'),
+              resolved.fallbackReason ??
+                  'You are already in Profiles. Update this profile directly.',
+            ),
           ),
         );
         return;
       case ReadinessAction.openTroubleshooting:
-        if (widget.onOpenAdvanced != null) {
-          widget.onOpenAdvanced!.call(action);
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Troubleshooting page is unavailable in this surface.'),
-          ),
-        );
+        widget.onOpenAdvanced!.call(resolved.action);
         return;
       case ReadinessAction.openSettings:
-        if (widget.onOpenSettings != null) {
-          widget.onOpenSettings!.call();
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Settings page is unavailable in this surface.'),
-          ),
-        );
+        widget.onOpenSettings!.call();
         return;
     }
+  }
+
+  void _recordReadinessRecommendationTelemetry({
+    required ReadinessRecommendationSource source,
+    required ReadinessRecommendation recommendation,
+    required String outcome,
+  }) {
+    final fields = <String, Object?>{
+      'action': recommendation.actionId.name,
+      'source': source.name,
+      'domain': recommendation.domain.name,
+      'destination': recommendation.destination,
+      'destinationAvailable': recommendation.destinationAvailable,
+      'outcome': outcome,
+      if (recommendation.fallbackReason != null)
+        'fallbackReason': recommendation.fallbackReason,
+    };
+    debugPrint(
+      '[telemetry] readiness_recommendation '
+      '${fields.entries.map((entry) => '${entry.key}=${entry.value}').join(' ')}',
+    );
   }
 
   @override
@@ -591,15 +644,18 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                   AsyncSnapshot<ReadinessReport> snapshot) {
                 final report =
                     snapshot.data ?? _readinessController.latestReport;
+                final recommendation = report?.recommendation;
+                final resolvedRecommendation = recommendation == null
+                    ? null
+                    : _resolveRecommendation(recommendation);
                 return _ProfileReadinessNotice(
                   report: report,
+                  recommendation: resolvedRecommendation,
                   showCachedRefreshHint: report?.isCachedSnapshot == true &&
                       snapshot.connectionState != ConnectionState.done,
-                  onRecommendation: nextActionDecision.isActionable
-                      ? () => _runNextActionDecision(context, nextActionDecision)
-                      : null,
-                  recommendationLabel:
-                      nextActionDecision.isActionable ? nextActionDecision.label : null,
+                  onRecommendation: resolvedRecommendation == null
+                      ? null
+                      : () => _runReadinessAction(context, resolvedRecommendation),
                 );
               },
             ),
@@ -745,13 +801,46 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
   ) {
     switch (decision.type) {
       case ProfileNextActionType.openProfiles:
-        _runReadinessAction(context, ReadinessAction.openProfiles);
+        _runReadinessAction(
+          context,
+          const ReadinessRecommendation(
+            action: ReadinessAction.openProfiles,
+            label: 'Open Profiles',
+            detail: 'Review and update profile details directly.',
+            source: ReadinessRecommendationSource.fallback,
+            domain: ReadinessDomain.profile,
+            destination: 'profiles',
+            destinationAvailable: true,
+          ),
+        );
         return;
       case ProfileNextActionType.openTroubleshooting:
-        _runReadinessAction(context, ReadinessAction.openTroubleshooting);
+        _runReadinessAction(
+          context,
+          const ReadinessRecommendation(
+            action: ReadinessAction.openTroubleshooting,
+            label: 'Open Troubleshooting',
+            detail: 'Open Troubleshooting to capture runtime evidence.',
+            source: ReadinessRecommendationSource.fallback,
+            domain: ReadinessDomain.runtimeBinary,
+            destination: 'advanced.troubleshooting',
+            destinationAvailable: true,
+          ),
+        );
         return;
       case ProfileNextActionType.openSettings:
-        _runReadinessAction(context, ReadinessAction.openSettings);
+        _runReadinessAction(
+          context,
+          const ReadinessRecommendation(
+            action: ReadinessAction.openSettings,
+            label: 'Open Settings',
+            detail: 'Open Settings to fix environment-level blockers.',
+            source: ReadinessRecommendationSource.fallback,
+            domain: ReadinessDomain.environment,
+            destination: 'settings',
+            destinationAvailable: true,
+          ),
+        );
         return;
       case ProfileNextActionType.retryConnect:
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1112,14 +1201,14 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
 class _ProfileReadinessNotice extends StatelessWidget {
   const _ProfileReadinessNotice({
     required this.report,
+    this.recommendation,
     this.showCachedRefreshHint = false,
-    this.recommendationLabel,
     this.onRecommendation,
   });
 
   final ReadinessReport? report;
+  final ReadinessRecommendation? recommendation;
   final bool showCachedRefreshHint;
-  final String? recommendationLabel;
   final VoidCallback? onRecommendation;
 
   Color _tone(ReadinessLevel level) {
@@ -1145,9 +1234,8 @@ class _ProfileReadinessNotice extends StatelessWidget {
     }
 
     final tone = _tone(report!.overallLevel);
-    final recommendation = report!.recommendation;
-    final effectiveRecommendationLabel =
-        recommendationLabel ?? recommendation?.label;
+    final effectiveRecommendation = recommendation ?? report!.recommendation;
+    final effectiveRecommendationLabel = effectiveRecommendation?.label;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1185,12 +1273,29 @@ class _ProfileReadinessNotice extends StatelessWidget {
               'Recommended next step: $effectiveRecommendationLabel',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+            if (effectiveRecommendation != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                'Destination: ${effectiveRecommendation.destination}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              Text(
+                'Destination availability: ${effectiveRecommendation.destinationAvailable ? 'reachable' : 'unavailable'}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              if (effectiveRecommendation.source ==
+                  ReadinessRecommendationSource.fallback)
+                Text(
+                  'Fallback reason: ${effectiveRecommendation.fallbackReason ?? 'Route unavailable in this surface.'}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+            ],
             if (onRecommendation != null) ...<Widget>[
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: onRecommendation,
                 icon: Icon(_recommendationIcon(
-                  recommendation?.action ?? ReadinessAction.openProfiles,
+                  effectiveRecommendation?.action ?? ReadinessAction.openProfiles,
                 )),
                 label: Text(effectiveRecommendationLabel),
               ),

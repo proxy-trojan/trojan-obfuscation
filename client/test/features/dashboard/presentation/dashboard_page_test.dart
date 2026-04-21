@@ -142,6 +142,32 @@ class _TestLifecycleController extends ClientControllerApi {
   }
 }
 
+class _UnavailableRuntimeLifecycleController extends _TestLifecycleController {
+  @override
+  Future<ControllerRuntimeHealth> checkHealth() async {
+    return ControllerRuntimeHealth(
+      level: ControllerRuntimeHealthLevel.unavailable,
+      summary: 'runtime binary missing for this test',
+      updatedAt: DateTime.parse('2026-03-13T00:00:00.000Z'),
+    );
+  }
+
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'real-runtime-boundary',
+        endpointHint: 'local-controller://unavailable-runtime-test',
+        enableVerboseTelemetry: true,
+      );
+
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'real-shell-controller',
+        backendVersion: 'test-unavailable-runtime',
+        capabilities: const <String>['connect', 'disconnect', 'healthCheck'],
+        lastUpdatedAt: DateTime.parse('2026-03-13T00:00:00.000Z'),
+      );
+}
+
 class _RuntimeTrueLifecycleController extends _TestLifecycleController {
   @override
   ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
@@ -347,7 +373,10 @@ void main() {
     final services = _buildServices();
 
     await _showDashboard(tester, services: services);
-    await tester.tap(find.text('Advanced runtime session'));
+    final advancedTile = find.text('Advanced runtime session');
+    await tester.ensureVisible(advancedTile);
+    await tester.pump();
+    await tester.tap(advancedTile);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Session Truth:'), findsOneWidget);
@@ -412,6 +441,36 @@ void main() {
       findsNothing,
     );
     expect(find.widgetWithText(FilledButton, 'Open Profiles'), findsWidgets);
+    expect(find.text('Destination: profiles'), findsWidgets);
+    expect(find.text('Destination availability: reachable'), findsWidgets);
+  });
+
+  testWidgets('dashboard shows fallback recommendation metadata when destination is unavailable',
+      (WidgetTester tester) async {
+    final services = _buildServices(
+      controller: _UnavailableRuntimeLifecycleController(),
+    );
+    final profile = services.profileStore.selectedProfile!;
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: profile.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      profile.copyWith(hasStoredPassword: true),
+    );
+
+    await _showDashboard(tester, services: services);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect blocked'), findsWidgets);
+    expect(find.widgetWithText(FilledButton, 'Open Profiles'), findsWidgets);
+    expect(find.text('Destination: profiles'), findsWidgets);
+    expect(find.text('Destination availability: reachable'), findsWidgets);
+    expect(
+      find.text(
+          'Fallback reason: Troubleshooting page is unavailable in this surface.'),
+      findsWidgets,
+    );
   });
 
   testWidgets(
