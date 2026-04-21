@@ -22,9 +22,35 @@ env:
 
 jobs:
   # ============================================
+  # Release policy guard
+  # ============================================
+  release-policy-guard:
+    name: Release policy guard (block prerelease tags)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Enforce no prerelease tags (alpha/beta/rc)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG_NAME="${GITHUB_REF_NAME}"
+          echo "release policy: validating tag '${TAG_NAME}'"
+
+          # Policy: we are fully stopping prerelease cuts.
+          # Block alpha/beta/rc tags explicitly.
+          if echo "${TAG_NAME}" | grep -Eiq '(alpha|beta|rc)'; then
+            echo "ERROR: prerelease tags are blocked by policy (found alpha/beta/rc in '${TAG_NAME}')."
+            echo "If you intended a stable release, use a stable tag like: v1.5.0"
+            exit 1
+          fi
+
+          echo "OK: stable tag detected."
+
+  # ============================================
   # Linux Builds (x86_64 and aarch64)
   # ============================================
   build-linux:
+    needs: [release-policy-guard]
     strategy:
       fail-fast: false
       matrix:
@@ -121,6 +147,7 @@ jobs:
   # macOS Builds (x86_64 and arm64)
   # ============================================
   build-macos:
+    needs: [release-policy-guard]
     strategy:
       fail-fast: false
       matrix:
@@ -231,6 +258,7 @@ jobs:
   # Windows Build (x86_64 via MSYS2/MinGW)
   # ============================================
   build-windows:
+    needs: [release-policy-guard]
     runs-on: windows-latest
     name: Windows x86_64
 
