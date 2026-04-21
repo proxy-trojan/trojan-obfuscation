@@ -535,6 +535,42 @@ void main() {
     expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
   });
 
+  testWidgets('quick connect stays disabled while already connected',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices();
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.runAsync(() => services.controller.connect(selected));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+
+    final quickConnectButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Quick Connect'),
+    );
+    final quickDisconnectButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Quick Disconnect'),
+    );
+
+    expect(services.controller.status.phase, ClientConnectionPhase.connected);
+    expect(quickConnectButton.onPressed, isNull,
+        reason: 'Quick Connect must not behave like a toggle when connected.');
+    expect(quickDisconnectButton.onPressed, isNotNull);
+  });
+
   testWidgets(
       'readiness notice refreshes when selected profile changes in place',
       (WidgetTester tester) async {

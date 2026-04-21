@@ -10,9 +10,9 @@ class HighFrequencyActionsStrip extends StatelessWidget {
   });
 
   final bool enabled;
-  final VoidCallback onQuickConnect;
-  final VoidCallback onQuickDisconnect;
-  final VoidCallback onSwitchProfile;
+  final VoidCallback? onQuickConnect;
+  final VoidCallback? onQuickDisconnect;
+  final VoidCallback? onSwitchProfile;
 
   @override
   Widget build(BuildContext context) {
