@@ -35,3 +35,46 @@ def test_snapshot_fcsr_counts_runtime_true_only():
     assert result["fcsr"]["numerator"] == 1
     assert result["fcsr"]["denominator"] == 2
     assert result["fcsr"]["value"] == 0.5
+
+
+def test_snapshot_recovery_outcome_and_acted_closure():
+    events = [
+        {
+            "userId": "u1",
+            "sessionId": "s1",
+            "name": "recovery_suggested",
+            "at": "2026-04-21T00:00:00Z",
+        },
+        {
+            "userId": "u1",
+            "sessionId": "s1",
+            "name": "recovery_action_executed",
+            "at": "2026-04-21T00:00:05Z",
+            "fields": {
+                "action": "open_profiles",
+                "source": "readiness_recommendation",
+                "failureFamily": "connect",
+                "runtimePosture": "runtime_true",
+            },
+        },
+        {
+            "userId": "u1",
+            "sessionId": "s1",
+            "name": "recovery_outcome",
+            "at": "2026-04-21T00:01:00Z",
+            "fields": {
+                "action": "open_profiles",
+                "source": "readiness_recommendation",
+                "failureFamily": "connect",
+                "runtimePosture": "runtime_true",
+                "outcome": "success",
+            },
+        },
+    ]
+
+    result = compute_snapshot(events=events)
+    assert result["guardrails"]["ssr"] == 1.0
+    assert result["guardrails"]["recovery_acted_rate"] == 1.0
+    assert result["guardrails"]["recovery_outcome"]["success"] == 1
+    assert result["guardrails"]["recovery_outcome"]["fail"] == 0
+    assert result["guardrails"]["recovery_outcome"]["abandon"] == 0

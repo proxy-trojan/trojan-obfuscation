@@ -20,7 +20,7 @@ class UxMetricEventMapper {
           name: 'first_connect_attempted',
           at: now,
           fields: <String, Object?>{
-            'runtimePosture': runtimePosture,
+            'runtimePosture': _normalizeRuntimePosture(runtimePosture),
           },
         ),
       );
@@ -48,7 +48,7 @@ class UxMetricEventMapper {
           name: 'connect_failed_$failureFamily',
           at: now,
           fields: <String, Object?>{
-            'runtimePosture': runtimePosture,
+            'runtimePosture': _normalizeRuntimePosture(runtimePosture),
             'failureFamily': failureFamily,
           },
         ),
@@ -67,5 +67,62 @@ class UxMetricEventMapper {
     }
 
     return output;
+  }
+
+  UxEvent recoveryActionExecuted({
+    required String userId,
+    required String sessionId,
+    required String action,
+    required String source,
+    required String failureFamily,
+    required String runtimePosture,
+    DateTime? at,
+  }) {
+    return UxEvent(
+      userId: userId,
+      sessionId: sessionId,
+      name: 'recovery_action_executed',
+      at: at ?? DateTime.now(),
+      fields: <String, Object?>{
+        'action': action,
+        'source': source,
+        'failureFamily': failureFamily,
+        'runtimePosture': _normalizeRuntimePosture(runtimePosture),
+      },
+    );
+  }
+
+  UxEvent recoveryOutcome({
+    required String userId,
+    required String sessionId,
+    required String action,
+    required String source,
+    required String failureFamily,
+    required String runtimePosture,
+    required String outcome,
+    DateTime? at,
+  }) {
+    return UxEvent(
+      userId: userId,
+      sessionId: sessionId,
+      name: 'recovery_outcome',
+      at: at ?? DateTime.now(),
+      fields: <String, Object?>{
+        'action': action,
+        'source': source,
+        'failureFamily': failureFamily,
+        'runtimePosture': _normalizeRuntimePosture(runtimePosture),
+        'outcome': outcome,
+      },
+    );
+  }
+
+  String _normalizeRuntimePosture(String runtimePosture) {
+    return switch (runtimePosture) {
+      'runtimeTrue' || 'runtime_true' => 'runtime_true',
+      'fallbackStub' || 'fallback_stub' => 'fallback',
+      'explicitStub' || 'nonDesktopStub' || 'stub' => 'stub',
+      _ => runtimePosture,
+    };
   }
 }

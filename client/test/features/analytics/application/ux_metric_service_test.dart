@@ -86,7 +86,7 @@ void main() {
     expect(result.index, closeTo(0.575, 1e-9));
   });
 
-  test('SSR counts recovery succeeded over suggested sessions', () {
+  test('SSR counts recovery outcome success over suggested sessions', () {
     final service = UxMetricService();
     final events = <UxEvent>[
       UxEvent(
@@ -98,14 +98,26 @@ void main() {
       UxEvent(
         userId: 'u1',
         sessionId: 's1',
-        name: 'recovery_succeeded',
+        name: 'recovery_outcome',
         at: DateTime.parse('2026-04-17T10:01:00Z'),
+        fields: const <String, Object?>{
+          'outcome': 'success',
+        },
       ),
       UxEvent(
         userId: 'u2',
         sessionId: 's2',
         name: 'recovery_suggested',
         at: DateTime.parse('2026-04-17T10:05:00Z'),
+      ),
+      UxEvent(
+        userId: 'u2',
+        sessionId: 's2',
+        name: 'recovery_outcome',
+        at: DateTime.parse('2026-04-17T10:06:00Z'),
+        fields: const <String, Object?>{
+          'outcome': 'fail',
+        },
       ),
     ];
 
@@ -114,6 +126,27 @@ void main() {
     expect(result.numerator, 1);
     expect(result.denominator, 2);
     expect(result.value, 0.5);
+  });
+
+  test('SSR ignores recovery outcome success without suggested session', () {
+    final service = UxMetricService();
+    final events = <UxEvent>[
+      UxEvent(
+        userId: 'u1',
+        sessionId: 's1',
+        name: 'recovery_outcome',
+        at: DateTime.parse('2026-04-17T10:01:00Z'),
+        fields: const <String, Object?>{
+          'outcome': 'success',
+        },
+      ),
+    ];
+
+    final result = service.computeSsr(events);
+
+    expect(result.numerator, 0);
+    expect(result.denominator, 0);
+    expect(result.value, 0.0);
   });
 
   test('STE requires posture + recovery evidence fields in export completion', () {
