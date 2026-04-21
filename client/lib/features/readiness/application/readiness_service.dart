@@ -141,8 +141,8 @@ class ReadinessService {
         summary: status.userFacingSummary,
         detail:
             'Storage is session-only. Restarting the app may require re-entering passwords.',
-        action: ReadinessAction.openTroubleshooting,
-        actionLabel: 'Open Troubleshooting',
+        action: ReadinessAction.openSettings,
+        actionLabel: 'Open Settings',
       );
     }
 
@@ -152,8 +152,8 @@ class ReadinessService {
         level: ReadinessLevel.degraded,
         summary: status.userFacingSummary,
         detail: status.lastPrimaryError,
-        action: ReadinessAction.openTroubleshooting,
-        actionLabel: 'Open Troubleshooting',
+        action: ReadinessAction.openSettings,
+        actionLabel: 'Open Settings',
       );
     }
 

@@ -64,6 +64,32 @@ void main() {
     );
   });
 
+  test('readiness recommendation metadata includes source/domain/destination',
+      () {
+    final report = ReadinessReport.fromChecks(
+      const <ReadinessCheck>[
+        ReadinessCheck(
+          domain: ReadinessDomain.runtimeBinary,
+          level: ReadinessLevel.blocked,
+          summary: 'runtime binary missing',
+          detail: 'Install runtime binary before connecting.',
+          action: ReadinessAction.openTroubleshooting,
+          actionLabel: 'Open Troubleshooting',
+        ),
+      ],
+    );
+
+    final recommendation = report.recommendation;
+    expect(recommendation, isNotNull);
+    expect(recommendation!.source, ReadinessRecommendationSource.report);
+    expect(recommendation.domain, ReadinessDomain.runtimeBinary);
+    expect(recommendation.destination, 'advanced.troubleshooting');
+    expect(recommendation.destinationAvailable, isTrue);
+    expect(recommendation.fallbackReason, isNull);
+    expect(recommendation.actionId,
+        ReadinessRecommendationActionId.openTroubleshooting);
+  });
+
   test('readiness is degraded when secure storage is session-only', () async {
     final localState = MemoryLocalStateStore();
     final profileStore = ProfileStore.withSampleProfiles(
@@ -95,7 +121,8 @@ void main() {
       isTrue,
     );
     expect(report.recommendation, isNotNull);
-    expect(report.recommendation!.action, ReadinessAction.openTroubleshooting);
+    expect(report.recommendation!.action, ReadinessAction.openSettings);
+    expect(report.recommendation!.destination, 'settings');
   });
 
   test('recommendation prefers blocked fixes over degraded warnings', () {
@@ -105,8 +132,8 @@ void main() {
           domain: ReadinessDomain.secureStorage,
           level: ReadinessLevel.degraded,
           summary: 'secure storage fallback',
-          action: ReadinessAction.openTroubleshooting,
-          actionLabel: 'Open Troubleshooting',
+          action: ReadinessAction.openSettings,
+          actionLabel: 'Open Settings',
         ),
         ReadinessCheck(
           domain: ReadinessDomain.password,
@@ -120,6 +147,11 @@ void main() {
 
     expect(report.recommendation, isNotNull);
     expect(report.recommendation!.action, ReadinessAction.openProfiles);
+    expect(report.recommendation!.domain, ReadinessDomain.password);
+    expect(report.recommendation!.destination, 'profiles');
+    expect(report.recommendation!.destinationAvailable, isTrue);
+    expect(report.recommendation!.source, ReadinessRecommendationSource.report);
+    expect(report.recommendation!.fallbackReason, isNull);
   });
 
   test('recommendation ordering stays stable across degraded domains', () {
@@ -136,14 +168,15 @@ void main() {
           domain: ReadinessDomain.secureStorage,
           level: ReadinessLevel.degraded,
           summary: 'secure storage fallback',
-          action: ReadinessAction.openTroubleshooting,
-          actionLabel: 'Open Troubleshooting',
+          action: ReadinessAction.openSettings,
+          actionLabel: 'Open Settings',
         ),
       ],
     );
 
     expect(report.recommendation, isNotNull);
     expect(report.recommendation!.detail, 'secure storage fallback');
+    expect(report.recommendation!.action, ReadinessAction.openSettings);
   });
 
   test('readiness persists and restores last-known snapshot', () async {

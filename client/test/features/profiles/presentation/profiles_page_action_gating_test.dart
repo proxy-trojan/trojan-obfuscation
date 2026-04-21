@@ -26,6 +26,7 @@ import 'package:trojan_pro_client/platform/services/memory_diagnostics_file_expo
 import 'package:trojan_pro_client/platform/services/memory_local_state_store.dart';
 import 'package:trojan_pro_client/platform/services/service_registry.dart';
 import 'package:trojan_pro_client/platform/secure_storage/memory_secure_storage.dart';
+import 'package:trojan_pro_client/platform/secure_storage/secure_storage.dart';
 
 Future<void> _setDesktopSurface(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(1800, 1600));
@@ -70,6 +71,57 @@ class _UnavailableRuntimeController extends FakeClientController {
       summary: 'runtime binary missing for this test',
       updatedAt: DateTime.parse('2026-03-20T00:00:00.000Z'),
     );
+  }
+
+  @override
+  ControllerRuntimeConfig get runtimeConfig => const ControllerRuntimeConfig(
+        mode: 'real-runtime-boundary',
+        endpointHint: 'local-controller://unavailable-runtime-test',
+        enableVerboseTelemetry: true,
+      );
+
+  @override
+  ControllerTelemetrySnapshot get telemetry => ControllerTelemetrySnapshot(
+        backendKind: 'real-shell-controller',
+        backendVersion: 'test-unavailable-runtime',
+        capabilities: const <String>[
+          'connect',
+          'disconnect',
+          'healthCheck',
+        ],
+        lastUpdatedAt: DateTime.now(),
+      );
+}
+
+class _PersistentSecureStorage extends MemorySecureStorage {
+  final Map<String, String> _backingStore = <String, String>{};
+
+  @override
+  SecureStorageStatus get status => const SecureStorageStatus(
+        backendName: 'keychain',
+        activeBackendName: 'keychain',
+        isSecure: true,
+        isPersistent: true,
+      );
+
+  @override
+  Future<void> writeSecret(String key, String value) async {
+    _backingStore[key] = value;
+  }
+
+  @override
+  Future<String?> readSecret(String key) async {
+    return _backingStore[key];
+  }
+
+  @override
+  Future<void> deleteSecret(String key) async {
+    _backingStore.remove(key);
+  }
+
+  @override
+  Future<List<String>> listKeys() async {
+    return _backingStore.keys.toList()..sort();
   }
 }
 
@@ -149,9 +201,10 @@ class _SafeModeController extends FakeClientController {
 ClientServiceRegistry _buildServices({
   ClientControllerApi? controllerOverride,
   LocalStateStore? localStateOverride,
+  MemorySecureStorage? secureStorageOverride,
 }) {
   final localState = localStateOverride ?? MemoryLocalStateStore();
-  final secureStorage = MemorySecureStorage();
+  final secureStorage = secureStorageOverride ?? MemorySecureStorage();
   final diagnosticsExporter = MemoryDiagnosticsFileExporter();
   final profileStore = ProfileStore.withSampleProfiles(
     localStateStore: localState,
@@ -559,6 +612,8 @@ void main() {
 
     expect(find.textContaining('Recommended next step: Open Troubleshooting'),
         findsOneWidget);
+    expect(find.text('Destination: advanced.troubleshooting'), findsOneWidget);
+    expect(find.text('Destination availability: reachable'), findsOneWidget);
 
     final troubleshootingButtons = find.widgetWithText(
       OutlinedButton,
@@ -570,6 +625,67 @@ void main() {
     await tester.pump();
 
     expect(openedAdvanced, isTrue);
+  });
+
+  testWidgets('readiness recommendation falls back to profiles when settings route is unavailable',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+    final services = _buildServices(
+      controllerOverride: _UnavailableRuntimeController(),
+      secureStorageOverride: _PersistentSecureStorage(),
+    );
+    final selected = services.profileStore.selectedProfile!;
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: selected.id,
+      password: 'secret',
+    );
+    services.profileStore.upsertProfile(
+      selected.copyWith(hasStoredPassword: true),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfilesPage(
+            services: services,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final nextStepText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .where((value) => value.contains('Recommended next step:'))
+        .toList();
+    expect(
+      nextStepText,
+      contains('Recommended next step: Open Profiles'),
+      reason:
+          'Settings route is unavailable in this surface, so recommendation must fall back to profiles.',
+    );
+    expect(find.text('Destination: profiles'), findsOneWidget);
+    expect(find.text('Destination availability: reachable'), findsOneWidget);
+    expect(
+      find.textContaining(
+          'Fallback reason: Troubleshooting page is unavailable in this surface.'),
+      findsOneWidget,
+      reason:
+          'Environment recommendation falls back from troubleshooting when advanced route is unavailable.',
+    );
+
+    await tester.ensureVisible(find.text('Open Profiles').last);
+    await tester.tap(find.text('Open Profiles').last);
+    await tester.pump();
+
+    expect(
+      find.text('Troubleshooting page is unavailable in this surface.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('stale connected profile steers primary CTA to troubleshooting',
