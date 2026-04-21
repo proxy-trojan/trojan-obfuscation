@@ -15,6 +15,13 @@ def _safe_div(numerator: int, denominator: int) -> float:
     return numerator / denominator
 
 
+def _event_fields(event: dict[str, Any]) -> dict[str, Any]:
+    fields = event.get("fields")
+    if isinstance(fields, dict):
+        return fields
+    return event
+
+
 def compute_snapshot(events: list[dict[str, Any]]) -> dict[str, Any]:
     started_users = {
         str(event.get("userId"))
@@ -38,8 +45,27 @@ def compute_snapshot(events: list[dict[str, Any]]) -> dict[str, Any]:
     recovery_suggested = [
         event for event in events if event.get("name") == "recovery_suggested"
     ]
-    recovery_succeeded = [
-        event for event in events if event.get("name") == "recovery_succeeded"
+    recovery_action_executed = [
+        event for event in events if event.get("name") == "recovery_action_executed"
+    ]
+    recovery_outcome = [
+        event for event in events if event.get("name") == "recovery_outcome"
+    ]
+
+    recovery_success = [
+        event
+        for event in recovery_outcome
+        if str(_event_fields(event).get("outcome", "")).lower() == "success"
+    ]
+    recovery_fail = [
+        event
+        for event in recovery_outcome
+        if str(_event_fields(event).get("outcome", "")).lower() == "fail"
+    ]
+    recovery_abandon = [
+        event
+        for event in recovery_outcome
+        if str(_event_fields(event).get("outcome", "")).lower() == "abandon"
     ]
 
     diagnostics_started = [
@@ -71,8 +97,17 @@ def compute_snapshot(events: list[dict[str, Any]]) -> dict[str, Any]:
             "index": hfe_index,
         },
         "guardrails": {
-            "ssr": _safe_div(len(recovery_succeeded), len(recovery_suggested)),
+            "ssr": _safe_div(len(recovery_success), len(recovery_suggested)),
             "ste": _safe_div(len(diagnostics_completed), len(diagnostics_started)),
+            "recovery_acted_rate": _safe_div(
+                len(recovery_action_executed),
+                len(recovery_suggested),
+            ),
+            "recovery_outcome": {
+                "success": len(recovery_success),
+                "fail": len(recovery_fail),
+                "abandon": len(recovery_abandon),
+            },
         },
     }
 

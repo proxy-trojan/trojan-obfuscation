@@ -83,7 +83,8 @@ class UxMetricService {
         .toSet();
 
     final successSessions = events
-        .where((event) => event.name == 'recovery_succeeded')
+        .where((event) => event.name == 'recovery_outcome')
+        .where((event) => event.fields['outcome'] == 'success')
         .map((event) => event.sessionId)
         .whereType<String>()
         .where(suggestedSessions.contains)
