@@ -669,44 +669,31 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
             const SizedBox(height: 12),
             HighFrequencyActionsStrip(
               enabled: connectionPolicy.canToggleConnection,
-              onQuickConnect: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                if (status.phase == ClientConnectionPhase.connected) {
-                  final result = await services.controller.disconnect();
-                  if (!mounted) return;
-                  final feedback = buildRuntimeActionFeedback(
-                    action: RuntimeActionKind.disconnect,
-                    result: result,
-                    status: services.controller.status,
-                    session: services.controller.session,
-                    posture: _runtimePosture,
-                  );
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(feedback)),
-                  );
-                  return;
-                }
+              onQuickConnect:
+                  status.phase == ClientConnectionPhase.connected
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final allowed = await _runConnectReadinessPreflight(
+                            messenger: messenger,
+                          );
+                          if (!mounted || !allowed) {
+                            return;
+                          }
 
-                final allowed = await _runConnectReadinessPreflight(
-                  messenger: messenger,
-                );
-                if (!mounted || !allowed) {
-                  return;
-                }
-
-                final result = await services.controller.connect(selected);
-                if (!mounted) return;
-                final feedback = buildRuntimeActionFeedback(
-                  action: RuntimeActionKind.connect,
-                  result: result,
-                  status: services.controller.status,
-                  session: services.controller.session,
-                  posture: _runtimePosture,
-                );
-                messenger.showSnackBar(
-                  SnackBar(content: Text(feedback)),
-                );
-              },
+                          final result = await services.controller.connect(selected);
+                          if (!mounted) return;
+                          final feedback = buildRuntimeActionFeedback(
+                            action: RuntimeActionKind.connect,
+                            result: result,
+                            status: services.controller.status,
+                            session: services.controller.session,
+                            posture: _runtimePosture,
+                          );
+                          messenger.showSnackBar(
+                            SnackBar(content: Text(feedback)),
+                          );
+                        },
               onQuickDisconnect: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 final result = await services.controller.disconnect();
