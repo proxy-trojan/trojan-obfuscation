@@ -4,11 +4,11 @@ import 'package:trojan_pro_client/features/packaging/domain/desktop_package_stat
 import 'package:trojan_pro_client/features/settings/domain/app_settings.dart';
 
 void main() {
-  test('initial packaging workflow reflects beta release truth defaults', () {
+  test('initial packaging workflow reflects stable release truth defaults', () {
     final store = PackagingStore();
 
-    expect(store.state.selectedChannel, UpdateChannel.beta);
-    expect(store.state.currentVersionLabel, '1.5.0-beta.2');
+    expect(store.state.selectedChannel, UpdateChannel.stable);
+    expect(store.state.currentVersionLabel, '1.5.0');
   });
 
   test('stub update check records status and timestamp', () {

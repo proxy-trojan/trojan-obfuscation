@@ -9,7 +9,7 @@ import '../domain/update_workflow_state.dart';
 import 'packaging_dry_run_service.dart';
 
 class PackagingStore extends ChangeNotifier {
-  PackagingStore({UpdateChannel initialChannel = UpdateChannel.beta})
+  PackagingStore({UpdateChannel initialChannel = UpdateChannel.stable})
       : _state = UpdateWorkflowState.initial.copyWith(
           selectedChannel: initialChannel,
           rolloutPolicySummary: _rolloutPolicySummaryFor(initialChannel),
@@ -185,6 +185,6 @@ class PackagingStore extends ChangeNotifier {
   }
 
   static String _stubUpdateSummaryFor(UpdateChannel channel) {
-    return 'Update check stub executed for ${channel.name}. No remote release feed is wired in v1.5.0-beta.2 yet; use exported release metadata + packaging docs instead.';
+    return 'Update check stub executed for ${channel.name}. No remote release feed is wired in v1.5.0 yet; use exported release metadata + packaging docs instead.';
   }
 }
