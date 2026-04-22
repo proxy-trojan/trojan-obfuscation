@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "max_ready_ms_regression_ratio": 1.3,
+  "max_cpu_time_regression_ratio": 1.5,
+  "max_rss_regression_ratio": 1.5
+}

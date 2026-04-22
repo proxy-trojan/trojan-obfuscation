@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "profile": "candidate",
+  "samples": [
+    {
+      "action": "connect_preflight",
+      "connect_ready_ms": 900,
+      "cpu_time_ms": 90,
+      "rss_kb": 40000,
+      "captured_at_utc": "2026-04-23T00:10:00Z"
+    },
+    {
+      "action": "connect_preflight",
+      "connect_ready_ms": 950,
+      "cpu_time_ms": 92,
+      "rss_kb": 41000,
+      "captured_at_utc": "2026-04-23T00:10:10Z"
+    },
+    {
+      "action": "connect_preflight",
+      "connect_ready_ms": 920,
+      "cpu_time_ms": 91,
+      "rss_kb": 40500,
+      "captured_at_utc": "2026-04-23T00:10:20Z"
+    }
+  ]
+}
