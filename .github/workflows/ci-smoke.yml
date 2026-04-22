@@ -43,6 +43,11 @@ jobs:
         run: |
           ctest --test-dir build/ci --output-on-failure -j"$(nproc)"
 
+      - name: Python perf baseline gate (synthetic fixtures)
+        run: |
+          python3 -m pip install --user pytest
+          python3 -m pytest scripts/tests/test_compute_daily_action_perf_baseline.py -q
+
   flutter-client-gate:
     runs-on: ubuntu-22.04
     name: Flutter client gate (domain/application)
