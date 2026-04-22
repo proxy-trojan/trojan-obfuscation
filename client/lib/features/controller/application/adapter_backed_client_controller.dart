@@ -127,6 +127,9 @@ class AdapterBackedClientController extends ClientControllerApi {
   LastRuntimeFailureSummary? get lastRuntimeFailure => _lastRuntimeFailure;
 
   @override
+  String? get lastKnownGoodProfileId => _lastKnownGoodProfileId;
+
+  @override
   List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
       List<RoutingProbeEvidenceRecord>.unmodifiable(
         _latestRoutingProbeEvidence,

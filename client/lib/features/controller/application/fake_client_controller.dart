@@ -51,6 +51,9 @@ class FakeClientController extends ClientControllerApi {
   LastRuntimeFailureSummary? get lastRuntimeFailure => null;
 
   @override
+  String? get lastKnownGoodProfileId => null;
+
+  @override
   List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
       const <RoutingProbeEvidenceRecord>[];
 
