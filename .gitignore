@@ -70,3 +70,6 @@ packaging/linux/staging/
 # Python cache
 scripts/__pycache__/
 *.pyc
+
+# Git worktrees
+.worktrees/
