@@ -35,6 +35,9 @@ trojan
 # Config files
 *.json
 
+# Keep test fixtures (scripts/tests/fixtures/*.json) versioned for CI evidence.
+!scripts/tests/fixtures/*.json
+
 # Key and certificate files
 *.pem
 
@@ -70,3 +73,6 @@ packaging/linux/staging/
 # Python cache
 scripts/__pycache__/
 *.pyc
+
+# Git worktrees
+.worktrees/

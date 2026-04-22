@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "profile": "baseline",
+  "samples": [
+    {
+      "action": "connect_preflight",
+      "connect_ready_ms": 420,
+      "cpu_time_ms": 40,
+      "rss_kb": 18000,
+      "captured_at_utc": "2026-04-23T00:00:00Z"
+    },
+    {
+      "action": "connect_preflight",
+      "connect_ready_ms": 460,
+      "cpu_time_ms": 42,
+      "rss_kb": 18200,
+      "captured_at_utc": "2026-04-23T00:00:10Z"
+    },
+    {
+      "action": "connect_preflight",
+      "connect_ready_ms": 440,
+      "cpu_time_ms": 39,
+      "rss_kb": 18100,
+      "captured_at_utc": "2026-04-23T00:00:20Z"
+    }
+  ]
+}
