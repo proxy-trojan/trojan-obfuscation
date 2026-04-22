@@ -24,6 +24,8 @@ abstract class ClientControllerApi extends ChangeNotifier {
   ControllerRuntimeSession get session;
   LastRuntimeFailureSummary? get lastRuntimeFailure;
 
+  String? get lastKnownGoodProfileId => null;
+
   List<RoutingProbeEvidenceRecord> get latestRoutingProbeEvidence =>
       const <RoutingProbeEvidenceRecord>[];
 

@@ -51,4 +51,44 @@ void main() {
     expect(disconnect.onPressed, isNull);
     expect(switchProfile.onPressed, isNull);
   });
+
+  testWidgets('renders quick retry (last good) when handler is provided',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HighFrequencyActionsStrip(
+            onQuickConnect: () {},
+            onQuickDisconnect: () {},
+            onSwitchProfile: () {},
+            onQuickRetryLastGood: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Quick Retry (Last Good)'), findsOneWidget);
+  });
+
+  testWidgets('disables quick retry (last good) when disabled flag is true',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HighFrequencyActionsStrip(
+            enabled: false,
+            onQuickConnect: () {},
+            onQuickDisconnect: () {},
+            onSwitchProfile: () {},
+            onQuickRetryLastGood: () {},
+          ),
+        ),
+      ),
+    );
+
+    final retry = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Quick Retry (Last Good)'),
+    );
+    expect(retry.onPressed, isNull);
+  });
 }

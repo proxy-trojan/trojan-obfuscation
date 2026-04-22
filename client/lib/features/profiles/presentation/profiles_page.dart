@@ -366,7 +366,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
           domain: recommendation.domain,
           destination: 'profiles',
           destinationAvailable: true,
-          fallbackReason: 'Troubleshooting page is unavailable in this surface.',
+          fallbackReason:
+              'Troubleshooting page is unavailable in this surface.',
         );
       case ReadinessAction.openSettings:
         if (widget.onOpenSettings != null) {
@@ -442,15 +443,15 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
     final posture = _runtimePosture;
     final connectionPolicy = _connectionPolicy;
 
-    final failureFamily = parseFailureFamily(status.failureFamilyHint) ==
-            FailureFamily.unknown
-        ? classifyFailureFamily(
-            errorCode: status.errorCode,
-            summary: status.message,
-            detail: status.message,
-            phase: status.phase.name,
-          )
-        : parseFailureFamily(status.failureFamilyHint);
+    final failureFamily =
+        parseFailureFamily(status.failureFamilyHint) == FailureFamily.unknown
+            ? classifyFailureFamily(
+                errorCode: status.errorCode,
+                summary: status.message,
+                detail: status.message,
+                phase: status.phase.name,
+              )
+            : parseFailureFamily(status.failureFamilyHint);
 
     final nextActionDecision = ProfileNextActionPolicy.resolve(
       status: status,
@@ -632,7 +633,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                       ? nextActionDecision.label
                       : null,
                   onAction: nextActionDecision.isActionable
-                      ? () => _runNextActionDecision(context, nextActionDecision)
+                      ? () =>
+                          _runNextActionDecision(context, nextActionDecision)
                       : null,
                 );
               },
@@ -655,7 +657,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                       snapshot.connectionState != ConnectionState.done,
                   onRecommendation: resolvedRecommendation == null
                       ? null
-                      : () => _runReadinessAction(context, resolvedRecommendation),
+                      : () =>
+                          _runReadinessAction(context, resolvedRecommendation),
                 );
               },
             ),
@@ -667,10 +670,20 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
               nextAction: nextActionDecision,
             ),
             const SizedBox(height: 12),
-            HighFrequencyActionsStrip(
-              enabled: connectionPolicy.canToggleConnection,
-              onQuickConnect:
-                  status.phase == ClientConnectionPhase.connected
+            Builder(
+              builder: (BuildContext context) {
+                final lastGoodId = services.controller.lastKnownGoodProfileId;
+                final lastGoodProfile = lastGoodId == null
+                    ? null
+                    : services.profileStore.profileById(lastGoodId);
+                final canQuickRetryLastGood = lastGoodProfile != null &&
+                    lastGoodProfile.id != selected.id &&
+                    status.phase != ClientConnectionPhase.connected;
+
+                return HighFrequencyActionsStrip(
+                  enabled: connectionPolicy.canToggleConnection,
+                  onQuickConnect: status.phase ==
+                          ClientConnectionPhase.connected
                       ? null
                       : () async {
                           final messenger = ScaffoldMessenger.of(context);
@@ -681,7 +694,8 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                             return;
                           }
 
-                          final result = await services.controller.connect(selected);
+                          final result =
+                              await services.controller.connect(selected);
                           if (!mounted) return;
                           final feedback = buildRuntimeActionFeedback(
                             action: RuntimeActionKind.connect,
@@ -694,40 +708,77 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
                             SnackBar(content: Text(feedback)),
                           );
                         },
-              onQuickDisconnect: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                final result = await services.controller.disconnect();
-                if (!mounted) return;
-                final feedback = buildRuntimeActionFeedback(
-                  action: RuntimeActionKind.disconnect,
-                  result: result,
-                  status: services.controller.status,
-                  session: services.controller.session,
-                  posture: _runtimePosture,
-                );
-                messenger.showSnackBar(
-                  SnackBar(content: Text(feedback)),
-                );
-              },
-              onSwitchProfile: () {
-                final profiles = services.profileStore.profiles;
-                if (profiles.length < 2) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Need at least 2 profiles to switch quickly.'),
-                    ),
-                  );
-                  return;
-                }
-                final currentIndex = profiles.indexWhere((p) => p.id == selected.id);
-                final nextIndex = currentIndex < 0
-                    ? 0
-                    : (currentIndex + 1) % profiles.length;
-                services.profileStore.selectProfile(profiles[nextIndex].id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Switched to profile: ${profiles[nextIndex].name}'),
-                  ),
+                  onQuickDisconnect: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final result = await services.controller.disconnect();
+                    if (!mounted) return;
+                    final feedback = buildRuntimeActionFeedback(
+                      action: RuntimeActionKind.disconnect,
+                      result: result,
+                      status: services.controller.status,
+                      session: services.controller.session,
+                      posture: _runtimePosture,
+                    );
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(feedback)),
+                    );
+                  },
+                  onQuickRetryLastGood: !canQuickRetryLastGood
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+
+                          services.profileStore
+                              .selectProfile(lastGoodProfile.id);
+
+                          final allowed = await _runConnectReadinessPreflight(
+                            messenger: messenger,
+                            profileOverride: lastGoodProfile,
+                          );
+                          if (!mounted || !allowed) {
+                            return;
+                          }
+
+                          final result = await services.controller
+                              .connect(lastGoodProfile);
+                          if (!mounted) return;
+                          final feedback = buildRuntimeActionFeedback(
+                            action: RuntimeActionKind.retry,
+                            result: result,
+                            status: services.controller.status,
+                            session: services.controller.session,
+                            posture: _runtimePosture,
+                          );
+                          messenger.showSnackBar(
+                            SnackBar(content: Text(feedback)),
+                          );
+                        },
+                  onSwitchProfile: () {
+                    final profiles = services.profileStore.profiles;
+                    if (profiles.length < 2) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Need at least 2 profiles to switch quickly.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    final currentIndex =
+                        profiles.indexWhere((p) => p.id == selected.id);
+                    final nextIndex = currentIndex < 0
+                        ? 0
+                        : (currentIndex + 1) % profiles.length;
+                    services.profileStore.selectProfile(profiles[nextIndex].id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Switched to profile: ${profiles[nextIndex].name}',
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -871,9 +922,11 @@ class _SelectedProfileCardState extends State<_SelectedProfileCard> {
 
   Future<bool> _runConnectReadinessPreflight({
     required ScaffoldMessengerState messenger,
+    ClientProfile? profileOverride,
   }) async {
+    final targetProfile = profileOverride ?? selected;
     final readinessReport = await services.readiness.buildReport(
-      profileOverride: selected,
+      profileOverride: targetProfile,
     );
     if (!mounted) return false;
     _readinessController.replaceLatestReport(readinessReport);
@@ -1282,7 +1335,8 @@ class _ProfileReadinessNotice extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onRecommendation,
                 icon: Icon(_recommendationIcon(
-                  effectiveRecommendation?.action ?? ReadinessAction.openProfiles,
+                  effectiveRecommendation?.action ??
+                      ReadinessAction.openProfiles,
                 )),
                 label: Text(effectiveRecommendationLabel),
               ),

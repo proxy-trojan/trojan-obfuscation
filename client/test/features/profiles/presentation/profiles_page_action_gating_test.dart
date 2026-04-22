@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trojan_pro_client/features/controller/application/client_controller_api.dart';
 import 'package:trojan_pro_client/features/controller/application/fake_client_controller.dart';
 import 'package:trojan_pro_client/features/controller/domain/client_connection_status.dart';
+import 'package:trojan_pro_client/features/controller/domain/controller_command_result.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_config.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_health.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_runtime_session.dart';
 import 'package:trojan_pro_client/features/controller/domain/controller_telemetry_snapshot.dart';
+import 'package:trojan_pro_client/features/profiles/domain/client_profile.dart';
 import 'package:trojan_pro_client/features/diagnostics/application/diagnostics_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_export_service.dart';
 import 'package:trojan_pro_client/features/packaging/application/packaging_store.dart';
@@ -196,6 +198,24 @@ class _SafeModeController extends FakeClientController {
         quarantineKey: 'sample-hk-1',
         rollbackReason: 'mini smoke failed on routing rule smoke/direct',
       );
+}
+
+class _LastKnownGoodController extends FakeClientController {
+  _LastKnownGoodController({
+    required this.lastGoodProfileId,
+  });
+
+  final String lastGoodProfileId;
+  String? lastConnectProfileId;
+
+  @override
+  String? get lastKnownGoodProfileId => lastGoodProfileId;
+
+  @override
+  Future<ControllerCommandResult> connect(ClientProfile profile) async {
+    lastConnectProfileId = profile.id;
+    return super.connect(profile);
+  }
 }
 
 ClientServiceRegistry _buildServices({
@@ -459,7 +479,8 @@ void main() {
       'primary connect preflight shows blocked reason + next action copy',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
-    final services = _buildServices(controllerOverride: _SlowHealthController());
+    final services =
+        _buildServices(controllerOverride: _SlowHealthController());
     final selected = services.profileStore.selectedProfile!;
 
     await services.profileSecrets.saveTrojanPassword(
@@ -491,14 +512,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Next action: Open Profiles'), findsOneWidget);
-    expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(
+        services.controller.status.phase, ClientConnectionPhase.disconnected);
   });
 
-  testWidgets(
-      'quick connect preflight shows blocked reason + next action copy',
+  testWidgets('quick connect preflight shows blocked reason + next action copy',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
-    final services = _buildServices(controllerOverride: _SlowHealthController());
+    final services =
+        _buildServices(controllerOverride: _SlowHealthController());
     final selected = services.profileStore.selectedProfile!;
 
     await services.profileSecrets.saveTrojanPassword(
@@ -532,7 +554,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Next action: Open Profiles'), findsOneWidget);
-    expect(services.controller.status.phase, ClientConnectionPhase.disconnected);
+    expect(
+        services.controller.status.phase, ClientConnectionPhase.disconnected);
   });
 
   testWidgets('quick connect stays disabled while already connected',
@@ -569,6 +592,110 @@ void main() {
     expect(quickConnectButton.onPressed, isNull,
         reason: 'Quick Connect must not behave like a toggle when connected.');
     expect(quickDisconnectButton.onPressed, isNotNull);
+  });
+
+  testWidgets('quick retry (last good) switches selected profile then connects',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+
+    final controller =
+        _LastKnownGoodController(lastGoodProfileId: 'sample-us-1');
+    final services = _buildServices(controllerOverride: controller);
+
+    final first = services.profileStore.profiles.first;
+    final lastGood =
+        services.profileStore.profiles.firstWhere((p) => p.id == 'sample-us-1');
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: first.id,
+      password: 'secret-1',
+    );
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: lastGood.id,
+      password: 'secret-2',
+    );
+    services.profileStore
+        .upsertProfile(first.copyWith(hasStoredPassword: true));
+    services.profileStore
+        .upsertProfile(lastGood.copyWith(hasStoredPassword: true));
+
+    services.profileStore.selectProfile(first.id);
+    expect(services.profileStore.selectedProfileId, first.id);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+
+    final retryButton =
+        find.widgetWithText(OutlinedButton, 'Quick Retry (Last Good)');
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
+
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(services.profileStore.selectedProfileId, lastGood.id);
+    expect(controller.lastConnectProfileId, lastGood.id);
+
+    // Drain pending timers scheduled by FakeClientController.connect() so the
+    // test binding does not fail the invariant check.
+    await tester.pump(const Duration(milliseconds: 900));
+  });
+
+  testWidgets(
+      'quick retry (last good) enforces readiness preflight and blocks connect',
+      (WidgetTester tester) async {
+    await _setDesktopSurface(tester);
+
+    final controller =
+        _LastKnownGoodController(lastGoodProfileId: 'sample-us-1');
+    final services = _buildServices(controllerOverride: controller);
+
+    final first = services.profileStore.profiles.first;
+    final lastGood =
+        services.profileStore.profiles.firstWhere((p) => p.id == 'sample-us-1');
+
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: first.id,
+      password: 'secret-1',
+    );
+    await services.profileSecrets.saveTrojanPassword(
+      profileId: lastGood.id,
+      password: 'secret-2',
+    );
+
+    services.profileStore
+        .upsertProfile(first.copyWith(hasStoredPassword: true));
+    services.profileStore.upsertProfile(
+      lastGood.copyWith(
+        hasStoredPassword: true,
+        serverHost: '',
+      ),
+    );
+
+    services.profileStore.selectProfile(first.id);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfilesPage(services: services)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final retryButton =
+        find.widgetWithText(OutlinedButton, 'Quick Retry (Last Good)');
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
+    await tester.pump(const Duration(milliseconds: 360));
+
+    expect(find.textContaining('Connect blocked:'), findsOneWidget);
+    expect(find.textContaining('Next action:'), findsOneWidget);
+
+    // Should not have attempted connect.
+    expect(controller.lastConnectProfileId, isNull);
   });
 
   testWidgets(
@@ -663,7 +790,8 @@ void main() {
     expect(openedAdvanced, isTrue);
   });
 
-  testWidgets('readiness recommendation falls back to profiles when settings route is unavailable',
+  testWidgets(
+      'readiness recommendation falls back to profiles when settings route is unavailable',
       (WidgetTester tester) async {
     await _setDesktopSurface(tester);
     final services = _buildServices(
