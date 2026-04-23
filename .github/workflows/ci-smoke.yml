@@ -43,10 +43,6 @@ jobs:
         run: |
           ctest --test-dir build/ci --output-on-failure -j"$(nproc)"
 
-      - name: Python perf baseline gate (synthetic fixtures)
-        run: |
-          python3 -m pip install --user pytest
-          python3 -m pytest scripts/tests/test_compute_daily_action_perf_baseline.py -q
 
   flutter-client-gate:
     runs-on: ubuntu-22.04
@@ -61,6 +57,15 @@ jobs:
         with:
           channel: stable
           cache: false
+
+      - name: Install pytest (python)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pytest
+
+      - name: Iter-3 truthful daily-use validation bundle
+        run: |
+          ./scripts/validate_iter3_truthful_daily_use.sh
 
       - name: Flutter analyze + targeted tests
         working-directory: client

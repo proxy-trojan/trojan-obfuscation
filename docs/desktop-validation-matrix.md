@@ -12,6 +12,7 @@ Use this matrix to record durable, comparable results for **v1.6+ internal beta*
 - Build and Release (main): <https://github.com/proxy-trojan/trojan-obfuscation/actions/runs/24648027071>
 - Local command bundle (Iter-1): `./scripts/validate_iter1_first_connect.sh` (latest run: PASS)
 - Local command bundle (Iter-2): `./scripts/validate_iter2_recovery_ladder.sh` (latest run: PASS)
+- Local command bundle (Iter-3): `./scripts/validate_iter3_truthful_daily_use.sh` (latest run: PASS)
 
 ---
 
