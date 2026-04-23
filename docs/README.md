@@ -61,3 +61,4 @@ This directory only keeps the current, useful project documentation.
 - `runbooks/abuse-control.md` — abuse-control operational notes
 - `runbooks/first-connect-a1.md` — Iter-1 first-connect path runbook (install → readiness → runtime-true connect → export)
 - `runbooks/recovery-ladder-a1.md` — Iter-2 recovery ladder triage runbook (Top5 families + evidence-first order + escalation)
+- `runbooks/truthful-daily-use-i3.md` — Iter-3 daily-use triage runbook (HF actions + cross-surface truth + perf guardrails)
