@@ -43,10 +43,9 @@ jobs:
         run: |
           ctest --test-dir build/ci --output-on-failure -j"$(nproc)"
 
-      - name: Python perf baseline gate (synthetic fixtures)
+      - name: Iter-3 truthful daily-use validation bundle
         run: |
-          python3 -m pip install --user pytest
-          python3 -m pytest scripts/tests/test_compute_daily_action_perf_baseline.py -q
+          ./scripts/validate_iter3_truthful_daily_use.sh
 
   flutter-client-gate:
     runs-on: ubuntu-22.04
