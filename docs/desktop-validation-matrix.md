@@ -47,6 +47,17 @@ Use this matrix to record durable, comparable results for **v1.6+ internal beta*
 
 ---
 
+## Iter-3 Truthful Daily Use 1.0
+
+| Area (Iter-3 gate) | Linux | Windows | macOS | Notes |
+|------|-------|---------|-------|-------|
+| High-frequency actions stability (quick connect/disconnect/switch) | [ ] | [ ] | [ ] | `high_frequency_actions_strip_test.dart` + manual sanity per platform |
+| Cross-surface truth consistency (Profiles/Dashboard/Advanced) | [ ] | [ ] | [ ] | `controller_runtime_session_test.dart` + `dashboard_page_test.dart` + `advanced_page_test.dart` |
+| Performance baseline / regression guardrail | [ ] | [ ] | [ ] | `scripts/tests/test_compute_daily_action_perf_baseline.py` + CI Smoke gate |
+| Iter-3 command bundle reproducibility | [ ] | [ ] | [ ] | `./scripts/validate_iter3_truthful_daily_use.sh` PASS |
+
+---
+
 ## Suggested per-run note format
 
 For each platform update, append a short note entry:
