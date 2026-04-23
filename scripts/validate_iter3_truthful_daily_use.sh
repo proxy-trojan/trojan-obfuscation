@@ -17,7 +17,6 @@ echo "started_at_utc=$started_at_utc"
 echo
 
 echo "[1/4] python tests (daily action perf baseline regression gate)"
-python3 -m pip install --user pytest
 python3 -m pytest "$PROJECT_ROOT/scripts/tests/test_compute_daily_action_perf_baseline.py" -q
 echo "✅ [1/4] pass"
 echo
