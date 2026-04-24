@@ -72,7 +72,7 @@ def parse_rule_line(raw_line: str) -> ParsedRule | None:
 
     rule_type = parts[0].upper()
     if rule_type not in SUPPORTED_RULE_TYPES:
-        return None
+        raise ValueError(f"unsupported rule type: {rule_type}")
 
     raw_value = parts[1]
     if rule_type == "DOMAIN":
@@ -99,8 +99,6 @@ def load_rule_file(path: str | Path) -> list[ParsedRule]:
         if parsed is not None:
             rules.append(parsed)
 
-    if not rules:
-        raise ValueError(f"no supported rules found in {source_path}")
     return rules
 
 

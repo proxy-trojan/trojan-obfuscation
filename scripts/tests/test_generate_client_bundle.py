@@ -4,6 +4,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[1] / "config" / "generate-client-bundle.py"
 FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
 
@@ -93,3 +95,49 @@ def test_cli_writes_bundle_json_to_requested_output(tmp_path: pathlib.Path) -> N
     assert payload["kind"] == "trojan-pro-client-profile"
     assert payload["profile"]["routing"]["rules"]
     assert "wrote_bundle=" in proc.stdout
+
+
+def test_unsupported_rule_type_fails_with_source_and_line(tmp_path: pathlib.Path) -> None:
+    bad_rules = tmp_path / "bad-direct.txt"
+    bad_rules.write_text("payload:\n  - GEOIP,CN\n", encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        load_rule_file(bad_rules)
+
+    message = str(exc.value)
+    assert str(bad_rules) in message
+    assert ":2:" in message
+    assert "unsupported rule type: GEOIP" in message
+
+
+
+def test_empty_one_category_file_is_allowed_when_others_have_rules(tmp_path: pathlib.Path) -> None:
+    empty_direct = tmp_path / "empty-direct.txt"
+    empty_direct.write_text("# intentionally empty\n", encoding="utf-8")
+    output_path = tmp_path / "dist" / "client-import" / "trojan-pro-client-profile-sample.json"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--direct",
+            str(empty_direct),
+            "--proxy",
+            str(FIXTURES / "clash_rules_proxy.sample.txt"),
+            "--reject",
+            str(FIXTURES / "clash_rules_reject.sample.txt"),
+            "--output",
+            str(output_path),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    payload = json.loads(output_path.read_text())
+    rules = payload["profile"]["routing"]["rules"]
+    assert rules
+    assert all(rule["action"]["policyGroupId"] != "direct-group" for rule in rules)
+    assert any(rule["action"]["policyGroupId"] == "proxy-group" for rule in rules)
+    assert any(rule["action"]["policyGroupId"] == "reject-group" for rule in rules)
