@@ -1,6 +1,22 @@
 # Trojan Documentation
 
-This directory only keeps the current, useful project documentation.
+This directory keeps current, actionable project documentation.
+
+## Bilingual entrypoints
+
+- 中文快速开始：`zh-CN/quickstart.md`
+- English quickstart: `en/quickstart.md`
+- 中文安装骨架：`zh-CN/install-kernel.md`
+- English install kernel: `en/install-kernel.md`
+- 中文配置生成：`zh-CN/config-generation.md`
+- English config generation: `en/config-generation.md`
+- Ops runbook: `ops/branch-cleanup.md`
+
+## Script index
+
+- `scripts/install/install-kernel.sh` — generic Linux installer kernel skeleton (check-only first)
+- `scripts/config/generate-client-bundle.py` — clash-rules to client import bundle generator
+- `scripts/repo/cleanup-branches.sh` — branch cleanup dry-run/apply helper
 
 ## Core docs
 

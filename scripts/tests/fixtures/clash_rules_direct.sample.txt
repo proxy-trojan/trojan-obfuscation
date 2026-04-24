@@ -1,0 +1,5 @@
+# direct sample
+payload:
+  - DOMAIN,localhost
+  - DOMAIN-SUFFIX,cn
+  - IP-CIDR,10.0.0.0/8

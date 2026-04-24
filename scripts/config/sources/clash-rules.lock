@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "source": "clash-rules",
+  "updatedAt": null,
+  "sources": {
+    "direct": {"url": null, "revision": null},
+    "proxy": {"url": null, "revision": null},
+    "reject": {"url": null, "revision": null}
+  }
+}
