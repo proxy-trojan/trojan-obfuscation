@@ -1,0 +1,4 @@
+# reject sample
+payload:
+  - DOMAIN-KEYWORD,ads
+  - DOMAIN-SUFFIX,tracker.com
