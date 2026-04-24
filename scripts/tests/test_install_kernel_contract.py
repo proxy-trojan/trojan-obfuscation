@@ -58,3 +58,64 @@ def test_check_only_runs_phase_skeleton_without_system_changes() -> None:
     assert "[check-only] would install trojan core" in proc.stdout
     assert "[check-only] would render Caddy ACME config" in proc.stdout
     assert "[check-only] would write runtime config" in proc.stdout
+
+
+def test_missing_value_reports_specific_flag_error() -> None:
+    proc = _run(
+        [
+            "bash",
+            str(SCRIPT_PATH),
+            "--domain",
+            "--email",
+            "ops@example.com",
+            "--password",
+            "test-password",
+            "--check-only",
+        ],
+        cwd=SCRIPT_PATH.parent.parent,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert "missing value for --domain" in proc.stderr
+
+
+def test_missing_required_flags_reports_usage_error() -> None:
+    proc = _run(
+        [
+            "bash",
+            str(SCRIPT_PATH),
+            "--domain",
+            "example.com",
+            "--email",
+            "ops@example.com",
+            "--check-only",
+        ],
+        cwd=SCRIPT_PATH.parent.parent,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert "--domain, --email, and --password are required" in proc.stderr
+    assert "Usage:" in proc.stderr
+
+
+def test_apply_mode_fails_closed_until_implemented() -> None:
+    proc = _run(
+        [
+            "bash",
+            str(SCRIPT_PATH),
+            "--domain",
+            "example.com",
+            "--email",
+            "ops@example.com",
+            "--password",
+            "test-password",
+        ],
+        cwd=SCRIPT_PATH.parent.parent,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert "mode=apply" in proc.stdout
+    assert "apply mode is not implemented yet; use --check-only" in proc.stderr

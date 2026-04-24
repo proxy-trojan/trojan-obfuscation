@@ -46,7 +46,7 @@ log_kv() {
 require_value() {
   local flag="$1"
   local value="${2:-}"
-  if [[ -z "$value" ]]; then
+  if [[ -z "$value" || "$value" == --* ]]; then
     echo "error: missing value for $flag" >&2
     exit 1
   fi
@@ -100,7 +100,6 @@ INSTALL_DOMAIN="$domain"
 INSTALL_EMAIL="$email"
 INSTALL_PASSWORD="$password"
 INSTALL_CHECK_ONLY="$check_only"
-export INSTALL_DOMAIN INSTALL_EMAIL INSTALL_PASSWORD INSTALL_CHECK_ONLY
 
 if [[ "$check_only" -eq 1 ]]; then
   mode_label="check-only"
@@ -112,6 +111,11 @@ log_kv "installer" "install-kernel"
 log_kv "mode" "$mode_label"
 log_kv "domain" "$domain"
 log_kv "email" "$email"
+
+if [[ "$check_only" -ne 1 ]]; then
+  echo "error: apply mode is not implemented yet; use --check-only" >&2
+  exit 1
+fi
 
 phase_detect_os
 phase_install_deps
