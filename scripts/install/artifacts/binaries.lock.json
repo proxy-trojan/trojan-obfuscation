@@ -1,0 +1,16 @@
+{
+  "trojan": {
+    "linux-amd64": {
+      "url": "https://github.com/proxy-trojan/trojan-obfuscation/releases/download/vX.Y.Z/trojan-linux-amd64",
+      "sha256": "REPLACE_ME",
+      "version": "vX.Y.Z"
+    }
+  },
+  "caddy-custom": {
+    "linux-amd64": {
+      "url": "https://github.com/proxy-trojan/trojan-obfuscation/releases/download/vX.Y.Z/caddy-custom-linux-amd64",
+      "sha256": "REPLACE_ME",
+      "version": "vX.Y.Z"
+    }
+  }
+}

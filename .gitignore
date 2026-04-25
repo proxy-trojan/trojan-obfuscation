@@ -40,6 +40,7 @@ trojan
 
 # Keep installer registry manifests versioned.
 !scripts/install/providers/dns-providers.json
+!scripts/install/artifacts/binaries.lock.json
 
 # Key and certificate files
 *.pem
