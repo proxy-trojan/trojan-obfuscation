@@ -7,6 +7,8 @@ LIB_DIR="$SCRIPT_DIR/lib"
 # shellcheck source=/dev/null
 source "$LIB_DIR/detect-os.sh"
 # shellcheck source=/dev/null
+source "$LIB_DIR/preflight.sh"
+# shellcheck source=/dev/null
 source "$LIB_DIR/install-deps.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/install-core.sh"
@@ -17,19 +19,19 @@ source "$LIB_DIR/write-runtime-config.sh"
 
 print_usage() {
   cat <<'EOF'
-Usage: ./scripts/install/install-kernel.sh --domain <domain> --email <email> --password <password> [--check-only] [--help]
+Usage: ./scripts/install/install-kernel.sh --www-domain <domain> --edge-domain <domain> --dns-provider <provider> [--check-only] [--help]
 
 Generic Linux installer kernel skeleton for Trojan + Caddy ACME.
 
 Required options:
-  --domain <domain>      Public domain for Caddy ACME / server routing
-  --email <email>        Contact email for ACME registration
-  --password <password>  Trojan runtime password
+  --www-domain <domain>   Public web domain served by Caddy
+  --edge-domain <domain>  Trojan edge SNI / front-door domain
+  --dns-provider <name>   DNS provider id used for ACME DNS-01
 
 Modes:
-  --check-only           Detection / plan only; do not install, do not write config,
-                         do not start services
-  --help                 Show this help message
+  --check-only            Detection / plan only; do not install, do not write config,
+                          do not start services
+  --help                  Show this help message
 
 Notes:
   - This task only provides the layered installer skeleton.
@@ -52,26 +54,26 @@ require_value() {
   fi
 }
 
-domain=""
-email=""
-password=""
+www_domain=""
+edge_domain=""
+dns_provider=""
 check_only=0
 
 while (($# > 0)); do
   case "$1" in
-    --domain)
+    --www-domain)
       require_value "$1" "${2:-}"
-      domain="$2"
+      www_domain="$2"
       shift 2
       ;;
-    --email)
+    --edge-domain)
       require_value "$1" "${2:-}"
-      email="$2"
+      edge_domain="$2"
       shift 2
       ;;
-    --password)
+    --dns-provider)
       require_value "$1" "${2:-}"
-      password="$2"
+      dns_provider="$2"
       shift 2
       ;;
     --check-only)
@@ -90,16 +92,18 @@ while (($# > 0)); do
   esac
 done
 
-if [[ -z "$domain" || -z "$email" || -z "$password" ]]; then
-  echo "error: --domain, --email, and --password are required" >&2
+if [[ -z "$www_domain" || -z "$edge_domain" || -z "$dns_provider" ]]; then
+  echo "error: --www-domain, --edge-domain, and --dns-provider are required" >&2
   print_usage >&2
   exit 1
 fi
 
-INSTALL_DOMAIN="$domain"
-INSTALL_EMAIL="$email"
-INSTALL_PASSWORD="$password"
+INSTALL_WWW_DOMAIN="$www_domain"
+INSTALL_EDGE_DOMAIN="$edge_domain"
+INSTALL_DNS_PROVIDER="$dns_provider"
 INSTALL_CHECK_ONLY="$check_only"
+INSTALL_ROOT_PREFIX="${INSTALL_ROOT_PREFIX:-}"
+INSTALL_ENV_FILE="${INSTALL_ROOT_PREFIX}/etc/trojan-pro/env"
 
 if [[ "$check_only" -eq 1 ]]; then
   mode_label="check-only"
@@ -109,14 +113,16 @@ fi
 
 log_kv "installer" "install-kernel"
 log_kv "mode" "$mode_label"
-log_kv "domain" "$domain"
-log_kv "email" "$email"
+log_kv "www_domain" "$www_domain"
+log_kv "edge_domain" "$edge_domain"
+log_kv "dns_provider" "$dns_provider"
 
 if [[ "$check_only" -ne 1 ]]; then
   echo "error: apply mode is not implemented yet; use --check-only" >&2
   exit 1
 fi
 
+phase_preflight
 phase_detect_os
 phase_install_deps
 phase_install_core

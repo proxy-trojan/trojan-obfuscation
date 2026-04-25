@@ -5,7 +5,7 @@ phase_write_runtime_config() {
   echo "phase=write-runtime-config"
 
   if [[ "${INSTALL_CHECK_ONLY:-0}" == "1" ]]; then
-    echo "[check-only] would write runtime config for ${INSTALL_DOMAIN}"
+    echo "[check-only] would write runtime config for ${INSTALL_EDGE_DOMAIN}"
     return 0
   fi
 

@@ -22,9 +22,9 @@ def test_help_describes_supported_flags() -> None:
 
     assert proc.returncode == 0
     assert "Usage:" in proc.stdout
-    assert "--domain" in proc.stdout
-    assert "--email" in proc.stdout
-    assert "--password" in proc.stdout
+    assert "--www-domain" in proc.stdout
+    assert "--edge-domain" in proc.stdout
+    assert "--dns-provider" in proc.stdout
     assert "--check-only" in proc.stdout
     assert "--help" in proc.stdout
     assert "Caddy ACME" in proc.stdout
@@ -35,29 +35,22 @@ def test_check_only_runs_phase_skeleton_without_system_changes() -> None:
         [
             "bash",
             str(SCRIPT_PATH),
-            "--domain",
-            "example.com",
-            "--email",
-            "ops@example.com",
-            "--password",
-            "test-password",
+            "--www-domain",
+            "www.example.com",
+            "--edge-domain",
+            "edge.example.com",
+            "--dns-provider",
+            "cloudflare",
             "--check-only",
         ],
         cwd=SCRIPT_PATH.parent.parent,
         check=False,
     )
 
-    assert proc.returncode == 0
+    assert proc.returncode != 0
     assert "mode=check-only" in proc.stdout
-    assert "phase=detect-os" in proc.stdout
-    assert "phase=install-deps" in proc.stdout
-    assert "phase=install-core" in proc.stdout
-    assert "phase=configure-caddy" in proc.stdout
-    assert "phase=write-runtime-config" in proc.stdout
-    assert "[check-only] would install dependencies" in proc.stdout
-    assert "[check-only] would install trojan core" in proc.stdout
-    assert "[check-only] would render Caddy ACME config" in proc.stdout
-    assert "[check-only] would write runtime config" in proc.stdout
+    assert "phase=preflight" in proc.stdout
+    assert "missing_provider_env=CLOUDFLARE_API_TOKEN" in proc.stderr
 
 
 def test_missing_value_reports_specific_flag_error() -> None:
@@ -65,11 +58,11 @@ def test_missing_value_reports_specific_flag_error() -> None:
         [
             "bash",
             str(SCRIPT_PATH),
-            "--domain",
-            "--email",
-            "ops@example.com",
-            "--password",
-            "test-password",
+            "--www-domain",
+            "--edge-domain",
+            "edge.example.com",
+            "--dns-provider",
+            "cloudflare",
             "--check-only",
         ],
         cwd=SCRIPT_PATH.parent.parent,
@@ -77,7 +70,7 @@ def test_missing_value_reports_specific_flag_error() -> None:
     )
 
     assert proc.returncode != 0
-    assert "missing value for --domain" in proc.stderr
+    assert "missing value for --www-domain" in proc.stderr
 
 
 def test_missing_required_flags_reports_usage_error() -> None:
@@ -85,10 +78,10 @@ def test_missing_required_flags_reports_usage_error() -> None:
         [
             "bash",
             str(SCRIPT_PATH),
-            "--domain",
-            "example.com",
-            "--email",
-            "ops@example.com",
+            "--www-domain",
+            "www.example.com",
+            "--edge-domain",
+            "edge.example.com",
             "--check-only",
         ],
         cwd=SCRIPT_PATH.parent.parent,
@@ -96,7 +89,7 @@ def test_missing_required_flags_reports_usage_error() -> None:
     )
 
     assert proc.returncode != 0
-    assert "--domain, --email, and --password are required" in proc.stderr
+    assert "--www-domain, --edge-domain, and --dns-provider are required" in proc.stderr
     assert "Usage:" in proc.stderr
 
 
@@ -105,12 +98,12 @@ def test_apply_mode_fails_closed_until_implemented() -> None:
         [
             "bash",
             str(SCRIPT_PATH),
-            "--domain",
-            "example.com",
-            "--email",
-            "ops@example.com",
-            "--password",
-            "test-password",
+            "--www-domain",
+            "www.example.com",
+            "--edge-domain",
+            "edge.example.com",
+            "--dns-provider",
+            "cloudflare",
         ],
         cwd=SCRIPT_PATH.parent.parent,
         check=False,

@@ -5,7 +5,7 @@ phase_configure_caddy() {
   echo "phase=configure-caddy"
 
   if [[ "${INSTALL_CHECK_ONLY:-0}" == "1" ]]; then
-    echo "[check-only] would render Caddy ACME config for ${INSTALL_DOMAIN} using ${INSTALL_EMAIL}"
+    echo "[check-only] would render Caddy ACME config for ${INSTALL_WWW_DOMAIN} and edge ${INSTALL_EDGE_DOMAIN} via ${INSTALL_DNS_PROVIDER}"
     return 0
   fi
 
