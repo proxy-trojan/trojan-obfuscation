@@ -38,6 +38,9 @@ trojan
 # Keep test fixtures (scripts/tests/fixtures/*.json) versioned for CI evidence.
 !scripts/tests/fixtures/*.json
 
+# Keep installer registry manifests versioned.
+!scripts/install/providers/dns-providers.json
+
 # Key and certificate files
 *.pem
 
