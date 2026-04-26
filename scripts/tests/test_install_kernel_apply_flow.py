@@ -66,6 +66,8 @@ def test_apply_writes_manifest_configs_and_certs_under_root_prefix(tmp_path: Pat
     assert (root / "etc" / "trojan-pro" / "config.json").exists()
     assert (root / "etc" / "caddy" / "Caddyfile").exists()
     assert (root / "etc" / "trojan-pro" / "certs" / "current" / "edge.crt").exists()
+    assert (root / "usr" / "local" / "bin" / "tp").exists()
+    assert (root / "usr" / "local" / "bin" / "tpctl").is_symlink()
     assert "phase=validate" in proc.stdout
 
 

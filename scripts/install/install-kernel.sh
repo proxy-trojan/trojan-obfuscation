@@ -159,6 +159,8 @@ phase_install_core
 phase_write_runtime_config
 phase_configure_caddy
 if [[ "$apply_mode" -eq 1 ]]; then
+  install -m 0755 "$SCRIPT_DIR/runtime/cli.py" "${INSTALL_ROOT_PREFIX}/usr/local/bin/tp"
+  ln -sfn "${INSTALL_ROOT_PREFIX}/usr/local/bin/tp" "${INSTALL_ROOT_PREFIX}/usr/local/bin/tpctl"
   phase_cert_bootstrap
   phase_activate_services
   if ! phase_validate; then
