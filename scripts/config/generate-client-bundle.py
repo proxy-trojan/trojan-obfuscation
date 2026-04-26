@@ -147,6 +147,10 @@ def build_bundle(
     proxy_rules: Iterable[ParsedRule],
     reject_rules: Iterable[ParsedRule],
     source_meta: dict[str, object] | None = None,
+    server_host: str = "example.com",
+    server_port: int = 443,
+    sni: str = "example.com",
+    profile_name: str = "Generated Clash Rules Bundle",
 ) -> dict[str, object]:
     direct_rules = list(direct_rules)
     proxy_rules = list(proxy_rules)
@@ -188,10 +192,10 @@ def build_bundle(
         },
         "profile": {
             "id": "generated-clash-rules-profile",
-            "name": "Generated Clash Rules Bundle",
-            "serverHost": "example.com",
-            "serverPort": 443,
-            "sni": "example.com",
+            "name": profile_name,
+            "serverHost": server_host,
+            "serverPort": server_port,
+            "sni": sni,
             "localSocksPort": 1080,
             "verifyTls": True,
             "notes": "Generated from clash-rules snapshots; replace server fields before production use.",

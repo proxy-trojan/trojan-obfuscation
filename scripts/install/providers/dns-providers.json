@@ -1,0 +1,39 @@
+{
+  "providers": [
+    {
+      "id": "cloudflare",
+      "support_tier": "full",
+      "caddy_dns_module": "dns.providers.cloudflare",
+      "required_env_keys": ["CLOUDFLARE_API_TOKEN"],
+      "optional_env_keys": []
+    },
+    {
+      "id": "route53",
+      "support_tier": "full",
+      "caddy_dns_module": "dns.providers.route53",
+      "required_env_keys": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
+      "optional_env_keys": ["AWS_SESSION_TOKEN"]
+    },
+    {
+      "id": "alidns",
+      "support_tier": "full",
+      "caddy_dns_module": "dns.providers.alidns",
+      "required_env_keys": ["ALICLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_SECRET"],
+      "optional_env_keys": []
+    },
+    {
+      "id": "dnspod",
+      "support_tier": "full",
+      "caddy_dns_module": "dns.providers.dnspod",
+      "required_env_keys": ["DNSPOD_SECRET_ID", "DNSPOD_SECRET_KEY"],
+      "optional_env_keys": ["DNSPOD_TOKEN"]
+    },
+    {
+      "id": "gcloud",
+      "support_tier": "full",
+      "caddy_dns_module": "dns.providers.gcloud",
+      "required_env_keys": ["GCP_PROJECT", "GCP_SERVICE_ACCOUNT_JSON"],
+      "optional_env_keys": []
+    }
+  ]
+}

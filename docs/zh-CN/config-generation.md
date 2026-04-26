@@ -1,6 +1,6 @@
 # 配置生成 / Config generation
 
-本页说明如何把 clash-rules 快照转换为客户端可导入 bundle。
+本页说明如何把 clash-rules 快照转换为客户端可导入 bundle，以及 full installer 如何复用同一路径做 manifest-backed export。
 
 ## 配置生成命令 / config generation
 
@@ -28,6 +28,20 @@ python3 scripts/config/generate-client-bundle.py \
 - 选择生成的 JSON 文件
 - 校验 policy groups 与 rules 已出现
 - 根据生产环境补齐服务器地址、SNI、密码
+
+## Manifest-backed export
+
+当主机已经通过 full installer 安装完成后，可直接复用：
+
+```bash
+tp export-client-bundle \
+  --direct scripts/tests/fixtures/clash_rules_direct.sample.txt \
+  --proxy scripts/tests/fixtures/clash_rules_proxy.sample.txt \
+  --reject scripts/tests/fixtures/clash_rules_reject.sample.txt \
+  --output dist/client-import/managed-edge.json
+```
+
+这条路径会从 `install-manifest.json` 推导 `serverHost`、`serverPort`、`sni` 和 profile 名称。
 
 ## ACME / DNS / 80 / 443 关联提醒
 

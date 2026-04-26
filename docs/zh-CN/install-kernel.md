@@ -1,26 +1,42 @@
 # 安装骨架说明 / Install kernel
 
-`scripts/install/install-kernel.sh` 是通用 Linux 安装入口骨架，负责参数解析与 phase 编排。
+`scripts/install/install-kernel.sh` 现在是 manifest 驱动的 Linux 安装入口，负责参数解析、preflight、apply 编排、validate 以及 rollback seam。
 
 ## 支持的 install command
 
 ```bash
 bash scripts/install/install-kernel.sh \
-  --domain example.com \
-  --email ops@example.com \
-  --password 'change-this-password' \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
   --check-only
 ```
 
-当前 apply 模式为 fail-closed；在真实安装细节实现之前，请只使用 `--check-only`。
+```bash
+bash scripts/install/install-kernel.sh \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
+  --apply
+```
 
 ## Phase 结构
 
+- preflight
 - detect-os
 - install-deps
 - install-core
-- configure-caddy
 - write-runtime-config
+- configure-caddy
+- cert-bootstrap
+- activate-services
+- validate
+
+## 回滚 / fail-closed
+
+- apply 模式会为 manifest / Trojan config / Caddyfile 保留 last-known-good 备份
+- validate 失败时会恢复备份并以非 0 退出
+- provider env 缺失会在 host mutation 前停止
 
 ## ACME / DNS / 80 / 443
 

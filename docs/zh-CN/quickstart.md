@@ -11,17 +11,29 @@
 
 ## 2. 安装命令 / install command
 
-当前安装骨架支持检测与计划模式，推荐先执行 `--check-only`：
+建议先用 `--check-only` 做 preflight 验证：
 
 ```bash
+export CLOUDFLARE_API_TOKEN="..."
+
 bash scripts/install/install-kernel.sh \
-  --domain example.com \
-  --email ops@example.com \
-  --password 'change-this-password' \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
   --check-only
 ```
 
-如果后续任务补齐 apply 实现，再按 runbook 执行真实安装。
+确认无误后再执行 `--apply` 做真实安装：
+
+```bash
+bash scripts/install/install-kernel.sh \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
+  --apply
+```
+
+安装完成后可用 `tp` 做 day-2 检查与导出。
 
 ## 3. ACME 注意事项 / ACME notes
 

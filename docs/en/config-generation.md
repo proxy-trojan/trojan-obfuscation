@@ -1,6 +1,6 @@
 # Config generation
 
-This page explains how to convert clash-rules snapshots into an importable client bundle.
+This page explains how to convert clash-rules snapshots into an importable client bundle, and how the installer reuses the same path for manifest-backed export.
 
 ## Config generation command
 
@@ -28,6 +28,20 @@ The generated bundle includes:
 - Choose the generated JSON artifact
 - Verify policy groups and rules are present
 - Replace placeholder server values with production values
+
+## Manifest-backed export
+
+When a host is already installed through the full installer, reuse:
+
+```bash
+tp export-client-bundle \
+  --direct scripts/tests/fixtures/clash_rules_direct.sample.txt \
+  --proxy scripts/tests/fixtures/clash_rules_proxy.sample.txt \
+  --reject scripts/tests/fixtures/clash_rules_reject.sample.txt \
+  --output dist/client-import/managed-edge.json
+```
+
+This path derives `serverHost`, `serverPort`, `sni`, and profile naming from `install-manifest.json`.
 
 ## ACME / DNS / 80 / 443 reminder
 

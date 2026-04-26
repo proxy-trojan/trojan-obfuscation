@@ -5,35 +5,47 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 # shellcheck source=/dev/null
+source "$LIB_DIR/common.sh"
+# shellcheck source=/dev/null
 source "$LIB_DIR/detect-os.sh"
 # shellcheck source=/dev/null
+source "$LIB_DIR/preflight.sh"
+# shellcheck source=/dev/null
 source "$LIB_DIR/install-deps.sh"
+# shellcheck source=/dev/null
+source "$LIB_DIR/install-binaries.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/install-core.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/configure-caddy.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/write-runtime-config.sh"
+# shellcheck source=/dev/null
+source "$LIB_DIR/cert-bootstrap.sh"
+# shellcheck source=/dev/null
+source "$LIB_DIR/activate-services.sh"
 
 print_usage() {
   cat <<'EOF'
-Usage: ./scripts/install/install-kernel.sh --domain <domain> --email <email> --password <password> [--check-only] [--help]
+Usage: ./scripts/install/install-kernel.sh --www-domain <domain> --edge-domain <domain> --dns-provider <provider> [--check-only|--apply] [--help]
 
-Generic Linux installer kernel skeleton for Trojan + Caddy ACME.
+Manifest-backed Linux installer kernel for Trojan + Caddy ACME (DNS-01).
 
 Required options:
-  --domain <domain>      Public domain for Caddy ACME / server routing
-  --email <email>        Contact email for ACME registration
-  --password <password>  Trojan runtime password
+  --www-domain <domain>   Public web domain served by Caddy
+  --edge-domain <domain>  Trojan edge SNI / front-door domain
+  --dns-provider <name>   DNS provider id used for ACME DNS-01
 
 Modes:
-  --check-only           Detection / plan only; do not install, do not write config,
-                         do not start services
-  --help                 Show this help message
+  --check-only            Detection / plan only; do not install, do not write config,
+                          do not start services
+  --apply                 Execute the installer flow under the selected root prefix
+  --help                  Show this help message
 
 Notes:
-  - This task only provides the layered installer skeleton.
-  - Real installation details can be filled by later tasks.
+  - Provider credentials are read from `/etc/trojan-pro/env` and the current process env.
+  - `INSTALL_ROOT_PREFIX` can be set for staged runs (e.g. `/tmp/root`).
+  - Binary download/verify is controlled by `scripts/install/artifacts/binaries.lock.json`.
 EOF
 }
 
@@ -52,30 +64,35 @@ require_value() {
   fi
 }
 
-domain=""
-email=""
-password=""
+www_domain=""
+edge_domain=""
+dns_provider=""
 check_only=0
+apply_mode=0
 
 while (($# > 0)); do
   case "$1" in
-    --domain)
+    --www-domain)
       require_value "$1" "${2:-}"
-      domain="$2"
+      www_domain="$2"
       shift 2
       ;;
-    --email)
+    --edge-domain)
       require_value "$1" "${2:-}"
-      email="$2"
+      edge_domain="$2"
       shift 2
       ;;
-    --password)
+    --dns-provider)
       require_value "$1" "${2:-}"
-      password="$2"
+      dns_provider="$2"
       shift 2
       ;;
     --check-only)
       check_only=1
+      shift
+      ;;
+    --apply)
+      apply_mode=1
       shift
       ;;
     --help|-h)
@@ -90,35 +107,68 @@ while (($# > 0)); do
   esac
 done
 
-if [[ -z "$domain" || -z "$email" || -z "$password" ]]; then
-  echo "error: --domain, --email, and --password are required" >&2
+if [[ -z "$www_domain" || -z "$edge_domain" || -z "$dns_provider" ]]; then
+  echo "error: --www-domain, --edge-domain, and --dns-provider are required" >&2
   print_usage >&2
   exit 1
 fi
 
-INSTALL_DOMAIN="$domain"
-INSTALL_EMAIL="$email"
-INSTALL_PASSWORD="$password"
+INSTALL_WWW_DOMAIN="$www_domain"
+INSTALL_EDGE_DOMAIN="$edge_domain"
+INSTALL_DNS_PROVIDER="$dns_provider"
 INSTALL_CHECK_ONLY="$check_only"
+INSTALL_APPLY="$apply_mode"
+INSTALL_ROOT_PREFIX="${INSTALL_ROOT_PREFIX:-}"
+INSTALL_ENV_FILE="${INSTALL_ROOT_PREFIX}/etc/trojan-pro/env"
+INSTALL_BINARIES_LOCK="${INSTALL_BINARIES_LOCK:-$SCRIPT_DIR/artifacts/binaries.lock.json}"
+INSTALL_TARGET_KEY="${INSTALL_TARGET_KEY:-linux-amd64}"
+INSTALL_TROJAN_BIN="${INSTALL_ROOT_PREFIX}/usr/local/bin/trojan"
+INSTALL_CADDY_BIN="${INSTALL_ROOT_PREFIX}/usr/local/bin/caddy-custom"
+INSTALL_TROJAN_LOCAL_PORT="${INSTALL_TROJAN_LOCAL_PORT:-8443}"
 
 if [[ "$check_only" -eq 1 ]]; then
   mode_label="check-only"
-else
+elif [[ "$apply_mode" -eq 1 ]]; then
   mode_label="apply"
+else
+  mode_label="unset"
 fi
 
 log_kv "installer" "install-kernel"
 log_kv "mode" "$mode_label"
-log_kv "domain" "$domain"
-log_kv "email" "$email"
+log_kv "www_domain" "$www_domain"
+log_kv "edge_domain" "$edge_domain"
+log_kv "dns_provider" "$dns_provider"
 
-if [[ "$check_only" -ne 1 ]]; then
-  echo "error: apply mode is not implemented yet; use --check-only" >&2
+if [[ "$check_only" -eq 0 && "$apply_mode" -eq 0 ]]; then
+  echo "error: either --check-only or --apply is required" >&2
+  print_usage >&2
   exit 1
 fi
 
+phase_preflight
 phase_detect_os
 phase_install_deps
+
+if [[ "$apply_mode" -eq 1 ]]; then
+  backup_dir="${INSTALL_ROOT_PREFIX}/var/backups/trojan-pro/last-known-good"
+  backup_if_exists "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/install-manifest.json" "$backup_dir/install-manifest.json"
+  backup_if_exists "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/config.json" "$backup_dir/config.json"
+  backup_if_exists "${INSTALL_ROOT_PREFIX}/etc/caddy/Caddyfile" "$backup_dir/Caddyfile"
+fi
+
 phase_install_core
-phase_configure_caddy
 phase_write_runtime_config
+phase_configure_caddy
+if [[ "$apply_mode" -eq 1 ]]; then
+  install -m 0755 "$SCRIPT_DIR/runtime/cli.py" "${INSTALL_ROOT_PREFIX}/usr/local/bin/tp"
+  ln -sfn "${INSTALL_ROOT_PREFIX}/usr/local/bin/tp" "${INSTALL_ROOT_PREFIX}/usr/local/bin/tpctl"
+  phase_cert_bootstrap
+  phase_activate_services
+  if ! phase_validate; then
+    restore_backup "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/install-manifest.json" "$backup_dir/install-manifest.json"
+    restore_backup "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/config.json" "$backup_dir/config.json"
+    restore_backup "${INSTALL_ROOT_PREFIX}/etc/caddy/Caddyfile" "$backup_dir/Caddyfile"
+    exit 1
+  fi
+fi

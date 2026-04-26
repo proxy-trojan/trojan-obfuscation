@@ -97,6 +97,28 @@ def test_cli_writes_bundle_json_to_requested_output(tmp_path: pathlib.Path) -> N
     assert "wrote_bundle=" in proc.stdout
 
 
+def test_build_bundle_accepts_explicit_server_fields() -> None:
+    direct_rules = load_rule_file(FIXTURES / "clash_rules_direct.sample.txt")
+    proxy_rules = load_rule_file(FIXTURES / "clash_rules_proxy.sample.txt")
+    reject_rules = load_rule_file(FIXTURES / "clash_rules_reject.sample.txt")
+
+    bundle = build_bundle(
+        direct_rules=direct_rules,
+        proxy_rules=proxy_rules,
+        reject_rules=reject_rules,
+        source_meta={"schemaVersion": 1},
+        server_host="edge.example.com",
+        server_port=8443,
+        sni="edge.example.com",
+        profile_name="Managed Edge",
+    )
+
+    assert bundle["profile"]["serverHost"] == "edge.example.com"
+    assert bundle["profile"]["serverPort"] == 8443
+    assert bundle["profile"]["sni"] == "edge.example.com"
+    assert bundle["profile"]["name"] == "Managed Edge"
+
+
 def test_unsupported_rule_type_fails_with_source_and_line(tmp_path: pathlib.Path) -> None:
     bad_rules = tmp_path / "bad-direct.txt"
     bad_rules.write_text("payload:\n  - GEOIP,CN\n", encoding="utf-8")
