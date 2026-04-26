@@ -10,12 +10,19 @@ This directory keeps current, actionable project documentation.
 - English install kernel: `en/install-kernel.md`
 - 中文配置生成：`zh-CN/config-generation.md`
 - English config generation: `en/config-generation.md`
+- 中文 tp CLI：`zh-CN/tp-cli.md`
+- English tp CLI: `en/tp-cli.md`
+- 中文 DNS provider：`zh-CN/dns-providers.md`
+- English DNS providers: `en/dns-providers.md`
 - Ops runbook: `ops/branch-cleanup.md`
+- Ops live acceptance: `ops/full-installer-live-acceptance.md`
 
 ## Script index
 
-- `scripts/install/install-kernel.sh` — generic Linux installer kernel skeleton (check-only first)
+- `scripts/install/install-kernel.sh` — manifest-backed Linux full installer entrypoint
+- `scripts/install/runtime/cli.py` — `tp` / `tpctl` day-2 management CLI
 - `scripts/config/generate-client-bundle.py` — clash-rules to client import bundle generator
+- `scripts/validate_full_installer_v1.sh` — full installer v1 contract + integration validation bundle
 - `scripts/repo/cleanup-branches.sh` — branch cleanup dry-run/apply helper
 
 ## Core docs

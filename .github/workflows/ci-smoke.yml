@@ -63,6 +63,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-pytest
 
+      - name: Full installer v1 contract + integration gate
+        run: |
+          bash scripts/validate_full_installer_v1.sh
+
       - name: Iter-3 truthful daily-use validation bundle
         run: |
           ./scripts/validate_iter3_truthful_daily_use.sh

@@ -1,26 +1,42 @@
 # Install kernel
 
-`scripts/install/install-kernel.sh` is the generic Linux installer entry skeleton. It owns argument parsing and phase orchestration.
+`scripts/install/install-kernel.sh` is the manifest-backed Linux installer entrypoint. It owns argument parsing, preflight, apply orchestration, validation, and rollback seam setup.
 
-## Supported install command
+## Supported install commands
 
 ```bash
 bash scripts/install/install-kernel.sh \
-  --domain example.com \
-  --email ops@example.com \
-  --password 'change-this-password' \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
   --check-only
 ```
 
-Apply mode currently fails closed. Until real install logic lands, use `--check-only` only.
+```bash
+bash scripts/install/install-kernel.sh \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
+  --apply
+```
 
 ## Phase layout
 
+- preflight
 - detect-os
 - install-deps
 - install-core
-- configure-caddy
 - write-runtime-config
+- configure-caddy
+- cert-bootstrap
+- activate-services
+- validate
+
+## Rollback / fail-closed
+
+- apply mode keeps last-known-good backups for manifest / Trojan config / Caddyfile
+- validate failure restores backed-up files and exits non-zero
+- provider env failure stops before host mutation
 
 ## ACME / DNS / 80 / 443
 
