@@ -5,21 +5,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 # shellcheck source=/dev/null
+source "$LIB_DIR/common.sh"
+# shellcheck source=/dev/null
 source "$LIB_DIR/detect-os.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/preflight.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/install-deps.sh"
 # shellcheck source=/dev/null
+source "$LIB_DIR/install-binaries.sh"
+# shellcheck source=/dev/null
 source "$LIB_DIR/install-core.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/configure-caddy.sh"
 # shellcheck source=/dev/null
 source "$LIB_DIR/write-runtime-config.sh"
+# shellcheck source=/dev/null
+source "$LIB_DIR/cert-bootstrap.sh"
+# shellcheck source=/dev/null
+source "$LIB_DIR/activate-services.sh"
 
 print_usage() {
   cat <<'EOF'
-Usage: ./scripts/install/install-kernel.sh --www-domain <domain> --edge-domain <domain> --dns-provider <provider> [--check-only] [--help]
+Usage: ./scripts/install/install-kernel.sh --www-domain <domain> --edge-domain <domain> --dns-provider <provider> [--check-only|--apply] [--help]
 
 Generic Linux installer kernel skeleton for Trojan + Caddy ACME.
 
@@ -31,6 +39,7 @@ Required options:
 Modes:
   --check-only            Detection / plan only; do not install, do not write config,
                           do not start services
+  --apply                 Execute installer flow under the selected root prefix
   --help                  Show this help message
 
 Notes:
@@ -58,6 +67,7 @@ www_domain=""
 edge_domain=""
 dns_provider=""
 check_only=0
+apply_mode=0
 
 while (($# > 0)); do
   case "$1" in
@@ -78,6 +88,10 @@ while (($# > 0)); do
       ;;
     --check-only)
       check_only=1
+      shift
+      ;;
+    --apply)
+      apply_mode=1
       shift
       ;;
     --help|-h)
@@ -102,11 +116,19 @@ INSTALL_WWW_DOMAIN="$www_domain"
 INSTALL_EDGE_DOMAIN="$edge_domain"
 INSTALL_DNS_PROVIDER="$dns_provider"
 INSTALL_CHECK_ONLY="$check_only"
+INSTALL_APPLY="$apply_mode"
 INSTALL_ROOT_PREFIX="${INSTALL_ROOT_PREFIX:-}"
 INSTALL_ENV_FILE="${INSTALL_ROOT_PREFIX}/etc/trojan-pro/env"
+INSTALL_BINARIES_LOCK="${INSTALL_BINARIES_LOCK:-$SCRIPT_DIR/artifacts/binaries.lock.json}"
+INSTALL_TARGET_KEY="${INSTALL_TARGET_KEY:-linux-amd64}"
+INSTALL_TROJAN_BIN="${INSTALL_ROOT_PREFIX}/usr/local/bin/trojan"
+INSTALL_CADDY_BIN="${INSTALL_ROOT_PREFIX}/usr/local/bin/caddy-custom"
+INSTALL_TROJAN_LOCAL_PORT="${INSTALL_TROJAN_LOCAL_PORT:-8443}"
 
 if [[ "$check_only" -eq 1 ]]; then
   mode_label="check-only"
+elif [[ "$apply_mode" -eq 1 ]]; then
+  mode_label="apply"
 else
   mode_label="apply"
 fi
@@ -117,7 +139,7 @@ log_kv "www_domain" "$www_domain"
 log_kv "edge_domain" "$edge_domain"
 log_kv "dns_provider" "$dns_provider"
 
-if [[ "$check_only" -ne 1 ]]; then
+if [[ "$check_only" -eq 0 && "$apply_mode" -eq 0 ]]; then
   echo "error: apply mode is not implemented yet; use --check-only" >&2
   exit 1
 fi
@@ -125,6 +147,24 @@ fi
 phase_preflight
 phase_detect_os
 phase_install_deps
+
+if [[ "$apply_mode" -eq 1 ]]; then
+  backup_dir="${INSTALL_ROOT_PREFIX}/var/backups/trojan-pro/last-known-good"
+  backup_if_exists "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/install-manifest.json" "$backup_dir/install-manifest.json"
+  backup_if_exists "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/config.json" "$backup_dir/config.json"
+  backup_if_exists "${INSTALL_ROOT_PREFIX}/etc/caddy/Caddyfile" "$backup_dir/Caddyfile"
+fi
+
 phase_install_core
-phase_configure_caddy
 phase_write_runtime_config
+phase_configure_caddy
+if [[ "$apply_mode" -eq 1 ]]; then
+  phase_cert_bootstrap
+  phase_activate_services
+  if ! phase_validate; then
+    restore_backup "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/install-manifest.json" "$backup_dir/install-manifest.json"
+    restore_backup "${INSTALL_ROOT_PREFIX}/etc/trojan-pro/config.json" "$backup_dir/config.json"
+    restore_backup "${INSTALL_ROOT_PREFIX}/etc/caddy/Caddyfile" "$backup_dir/Caddyfile"
+    exit 1
+  fi
+fi

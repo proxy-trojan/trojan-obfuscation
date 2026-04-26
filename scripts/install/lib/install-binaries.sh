@@ -11,13 +11,22 @@ install_binary_from_lock() {
 
   mapfile -t meta < <(python3 - <<'PY' "$lock_path" "$asset_name" "$target_key"
 import json
+import os
 import sys
 
 with open(sys.argv[1], encoding='utf-8') as handle:
     payload = json.load(handle)
 entry = payload[sys.argv[2]][sys.argv[3]]
-print(entry['url'])
-print(entry['sha256'])
+overrides = {
+    ('trojan', 'url'): os.environ.get('TEST_TROJAN_BIN_URL'),
+    ('trojan', 'sha256'): os.environ.get('TEST_TROJAN_BIN_SHA256'),
+    ('caddy-custom', 'url'): os.environ.get('TEST_CADDY_BIN_URL'),
+    ('caddy-custom', 'sha256'): os.environ.get('TEST_CADDY_BIN_SHA256'),
+}
+url = overrides.get((sys.argv[2], 'url')) or entry['url']
+sha256 = overrides.get((sys.argv[2], 'sha256')) or entry['sha256']
+print(url)
+print(sha256)
 print(entry['version'])
 PY
 )
