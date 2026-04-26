@@ -29,7 +29,7 @@ print_usage() {
   cat <<'EOF'
 Usage: ./scripts/install/install-kernel.sh --www-domain <domain> --edge-domain <domain> --dns-provider <provider> [--check-only|--apply] [--help]
 
-Generic Linux installer kernel skeleton for Trojan + Caddy ACME.
+Manifest-backed Linux installer kernel for Trojan + Caddy ACME (DNS-01).
 
 Required options:
   --www-domain <domain>   Public web domain served by Caddy
@@ -39,12 +39,13 @@ Required options:
 Modes:
   --check-only            Detection / plan only; do not install, do not write config,
                           do not start services
-  --apply                 Execute installer flow under the selected root prefix
+  --apply                 Execute the installer flow under the selected root prefix
   --help                  Show this help message
 
 Notes:
-  - This task only provides the layered installer skeleton.
-  - Real installation details can be filled by later tasks.
+  - Provider credentials are read from `/etc/trojan-pro/env` and the current process env.
+  - `INSTALL_ROOT_PREFIX` can be set for staged runs (e.g. `/tmp/root`).
+  - Binary download/verify is controlled by `scripts/install/artifacts/binaries.lock.json`.
 EOF
 }
 
@@ -130,7 +131,7 @@ if [[ "$check_only" -eq 1 ]]; then
 elif [[ "$apply_mode" -eq 1 ]]; then
   mode_label="apply"
 else
-  mode_label="apply"
+  mode_label="unset"
 fi
 
 log_kv "installer" "install-kernel"
@@ -140,7 +141,8 @@ log_kv "edge_domain" "$edge_domain"
 log_kv "dns_provider" "$dns_provider"
 
 if [[ "$check_only" -eq 0 && "$apply_mode" -eq 0 ]]; then
-  echo "error: apply mode is not implemented yet; use --check-only" >&2
+  echo "error: either --check-only or --apply is required" >&2
+  print_usage >&2
   exit 1
 fi
 

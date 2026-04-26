@@ -1,28 +1,78 @@
 # Trojan-Pro
 
-Trojan-Pro is a high-performance C++ implementation of the Trojan protocol, with a multi-platform release pipeline for both the core binary and desktop/mobile client packages.
+Trojan-Pro is a high-performance C++ implementation of the Trojan protocol.
 
-## What it provides
+This repo also includes:
+- a **manifest-backed Linux installer kernel** (Full Installer v1)
+- a lightweight day-2 management CLI: `tp` / `tpctl`
+- a desktop-first client product line (under `client/`)
 
-- Trojan core server/client
-- Multi-platform release artifacts via GitHub Actions
-- Desktop-first client packaging (Linux / Windows / macOS)
-- Optional Android client APK lane
+---
 
-## Quick start
+## Quick install (Full Installer v1) — Linux
 
-### 1) Download a release
+### Prerequisites
 
-Get the latest release from:
+- Linux host (systemd assumed)
+- DNS records for:
+  - `www.example.com` (public web surface)
+  - `edge.example.com` (Trojan entrypoint SNI)
+- Ports **80** / **443** reachable
+- DNS provider credentials for **DNS-01**
 
-- <https://github.com/proxy-trojan/trojan-obfuscation/releases>
+### 1) Preflight (check-only)
 
-### 2) Build from source
+```bash
+export CLOUDFLARE_API_TOKEN="..."
+
+bash scripts/install/install-kernel.sh \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
+  --check-only
+```
+
+### 2) Apply
+
+```bash
+sudo bash scripts/install/install-kernel.sh \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
+  --apply
+```
+
+### 3) Validate / status
+
+```bash
+tp status --json
+tp validate
+```
+
+### 4) Export a manifest-backed client bundle
+
+```bash
+tp export-client-bundle \
+  --direct scripts/tests/fixtures/clash_rules_direct.sample.txt \
+  --proxy scripts/tests/fixtures/clash_rules_proxy.sample.txt \
+  --reject scripts/tests/fixtures/clash_rules_reject.sample.txt \
+  --output dist/client-import/managed-edge.json
+```
+
+See detailed docs:
+- `docs/en/full-installer-usage.md`
+- `docs/zh-CN/full-installer-usage.md`
+- `docs/en/day-2-operations.md`
+- `docs/zh-CN/day-2-operations.md`
+
+---
+
+## Build from source (core)
 
 ```bash
 mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+make -j"$(nproc)"
 ```
 
 Or use the helper script:
@@ -31,7 +81,9 @@ Or use the helper script:
 ./scripts/build-trojan-core.sh
 ```
 
-## Basic usage
+---
+
+## Basic usage (core binary)
 
 ### Run as server
 
@@ -63,42 +115,7 @@ Example config structure:
 }
 ```
 
-More details:
-- `docs/config.md`
-- `docs/usage.md`
-- `docs/build.md`
-
-## Release artifacts
-
-Current release flow produces:
-
-### Core
-- Linux x86_64
-- Linux aarch64
-- macOS x86_64
-- macOS arm64
-- Windows x86_64
-
-### Client
-- Linux `.deb`
-- Linux `.tar.gz`
-- Windows `.zip`
-- macOS `.app.zip`
-- Android `.apk` (release lane enabled in tagged releases)
-
-## Client workspace
-
-The desktop-first client lives in:
-
-```bash
-client/
-```
-
-Client docs:
-- `client/README.md`
-- `docs/client-product-architecture.md`
-- `docs/client-packaging-readiness.md`
-- `docs/client-cross-platform-packaging.md`
+---
 
 ## Documentation
 
@@ -106,6 +123,8 @@ Client docs:
 - `docs/branching-and-release-status.md`
 - `CHANGELOG.md`
 
+---
+
 ## License
 
-GPLv3.\n
+GPLv3.

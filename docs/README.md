@@ -14,6 +14,10 @@ This directory keeps current, actionable project documentation.
 - English tp CLI: `en/tp-cli.md`
 - 中文 DNS provider：`zh-CN/dns-providers.md`
 - English DNS providers: `en/dns-providers.md`
+- 中文 Full Installer 使用指南：`zh-CN/full-installer-usage.md`
+- English Full Installer usage: `en/full-installer-usage.md`
+- 中文 Day-2 运维：`zh-CN/day-2-operations.md`
+- English day-2 operations: `en/day-2-operations.md`
 - Ops runbook: `ops/branch-cleanup.md`
 - Ops live acceptance: `ops/full-installer-live-acceptance.md`
 

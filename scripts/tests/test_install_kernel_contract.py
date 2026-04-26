@@ -93,7 +93,7 @@ def test_missing_required_flags_reports_usage_error() -> None:
     assert "Usage:" in proc.stderr
 
 
-def test_apply_mode_fails_closed_until_implemented() -> None:
+def test_mode_required_reports_usage_error() -> None:
     proc = _run(
         [
             "bash",
@@ -110,5 +110,6 @@ def test_apply_mode_fails_closed_until_implemented() -> None:
     )
 
     assert proc.returncode != 0
-    assert "mode=apply" in proc.stdout
-    assert "apply mode is not implemented yet; use --check-only" in proc.stderr
+    assert "mode=unset" in proc.stdout
+    assert "either --check-only or --apply is required" in proc.stderr
+    assert "Usage:" in proc.stderr

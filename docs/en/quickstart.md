@@ -11,17 +11,29 @@ This page shows the shortest path: prepare a Linux host and domain, run the **in
 
 ## 2. Install command
 
-The current installer kernel is a safe skeleton. Start with `--check-only`:
+Start with `--check-only` to validate preflight and host prerequisites:
 
 ```bash
+export CLOUDFLARE_API_TOKEN="..."
+
 bash scripts/install/install-kernel.sh \
-  --domain example.com \
-  --email ops@example.com \
-  --password 'change-this-password' \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
   --check-only
 ```
 
-When apply mode is implemented in later work, follow the install runbook for real deployment.
+Then run `--apply` to perform the installation:
+
+```bash
+bash scripts/install/install-kernel.sh \
+  --www-domain www.example.com \
+  --edge-domain edge.example.com \
+  --dns-provider cloudflare \
+  --apply
+```
+
+After apply, use `tp` for day-2 checks.
 
 ## 3. ACME notes
 

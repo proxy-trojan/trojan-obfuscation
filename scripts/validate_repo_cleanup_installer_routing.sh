@@ -34,11 +34,12 @@ echo "✅ [1/4] pass"
 echo
 
 echo "[2/4] installer --check-only"
-bash scripts/install/install-kernel.sh \
-  --domain example.com \
-  --email ops@example.com \
-  --password change-this-password \
-  --check-only
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-token}" \
+  bash scripts/install/install-kernel.sh \
+    --www-domain www.example.com \
+    --edge-domain edge.example.com \
+    --dns-provider cloudflare \
+    --check-only
 echo "✅ [2/4] pass"
 echo
 
