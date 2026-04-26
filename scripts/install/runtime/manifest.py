@@ -39,3 +39,9 @@ def load_env_file(root_prefix: Path | str) -> dict[str, str]:
         key, value = line.split("=", 1)
         result[key] = value
     return result
+
+
+def write_env_file(root_prefix: Path | str, env: dict[str, str]) -> None:
+    path = install_paths(root_prefix)["env"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(f"{key}={value}\n" for key, value in sorted(env.items())), encoding="utf-8")
