@@ -96,6 +96,12 @@ def choose_lang(raw: str | None) -> str:
     return "en"
 
 
+def _prompt_line(prompt: str) -> str:
+    print(prompt, flush=True)
+    value = input("> ").strip()
+    return value
+
+
 def prompt_choose_lang() -> str:
     print("Select language / 选择语言:")
     print("1) 中文")
@@ -110,8 +116,7 @@ def prompt_choose_lang() -> str:
 
 
 def prompt_input(label: str) -> str:
-    value = input(f"{label}: ").strip()
-    return value
+    return _prompt_line(f"{label}:")
 
 
 def _print_plan(*, lang: str, root_prefix: Path, www_domain: str, edge_domain: str, dns_provider: str) -> None:
