@@ -602,11 +602,12 @@ jobs:
           cp scripts/release/tp-install.sh artifacts/tp-install.sh
           sha256sum artifacts/tp-install.sh > artifacts/tp-install.sh.sha256
 
-          # Copy tp artifacts into release asset names expected by tp-install.sh
-          cp artifacts/tp-linux-amd64 artifacts/tp-linux-amd64
-          cp artifacts/tp-linux-amd64.sha256 artifacts/tp-linux-amd64.sha256
-          cp artifacts/tp-linux-arm64 artifacts/tp-linux-arm64
-          cp artifacts/tp-linux-arm64.sha256 artifacts/tp-linux-arm64.sha256
+          # tp artifacts are already produced with the exact release asset names
+          # expected by tp-install.sh (tp-linux-amd64/arm64 + .sha256). Assert they exist.
+          test -f artifacts/tp-linux-amd64
+          test -f artifacts/tp-linux-amd64.sha256
+          test -f artifacts/tp-linux-arm64
+          test -f artifacts/tp-linux-arm64.sha256
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
