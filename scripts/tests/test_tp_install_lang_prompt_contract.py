@@ -43,5 +43,48 @@ def test_tp_install_uses_line_separated_followup_prompts(tmp_path: Path) -> None
     assert "Select language / 选择语言:" in combined
     assert "www 域名:\n> " in combined
     assert "edge 域名:\n> " in combined
-    assert "DNS provider:\n> " in combined
+    assert "DNS provider:" in combined
+    assert "1) cloudflare" in combined
+    assert "2) route53" in combined
     assert proc.returncode != 0
+
+
+def test_tp_install_shows_numbered_dns_provider_options_and_accepts_index(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [sys.executable, str(CLI_PATH), "--root-prefix", str(tmp_path), "install"],
+        input="1\nwww.example.com\nedge.example.com\n1\ny\n",
+        text=True,
+        capture_output=True,
+        cwd=REPO_ROOT,
+        check=False,
+        env={
+            **os.environ,
+            "CLOUDFLARE_API_TOKEN": "test-token",
+        },
+    )
+
+    combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    assert "DNS provider:" in combined
+    assert "1) cloudflare" in combined
+    assert "2) route53" in combined
+    assert proc.returncode != 0
+    assert "error: unknown dns provider: 1" not in combined
+
+
+def test_tp_install_accepts_short_yes_confirmation(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [sys.executable, str(CLI_PATH), "--root-prefix", str(tmp_path), "install"],
+        input="1\nwww.example.com\nedge.example.com\ncloudflare\ny\n",
+        text=True,
+        capture_output=True,
+        cwd=REPO_ROOT,
+        check=False,
+        env={
+            **os.environ,
+            "CLOUDFLARE_API_TOKEN": "test-token",
+        },
+    )
+
+    combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    assert "已中止" not in combined
+    assert proc.returncode != 2

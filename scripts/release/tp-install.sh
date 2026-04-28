@@ -26,12 +26,39 @@ print_err() {
   echo "$*" >&2
 }
 
+DNS_PROVIDER_OPTIONS=(cloudflare route53 alidns dnspod gcloud)
+
 prompt_tty_line() {
   local prompt="$1"
   local value=""
   printf '%s\n' "$prompt" >/dev/tty
   read -r -p "> " value </dev/tty
   printf '%s' "$value"
+}
+
+prompt_tty_dns_provider() {
+  local lang="$1"
+  local raw=""
+  local index=""
+  if [[ "$lang" == "zh-CN" ]]; then
+    printf 'DNS provider:\n' >/dev/tty
+  else
+    printf 'dns provider:\n' >/dev/tty
+  fi
+  local i=1
+  for provider in "${DNS_PROVIDER_OPTIONS[@]}"; do
+    printf '%s) %s\n' "$i" "$provider" >/dev/tty
+    i=$((i + 1))
+  done
+  read -r -p "> " raw </dev/tty
+  if [[ "$raw" =~ ^[0-9]+$ ]]; then
+    index=$((raw - 1))
+    if (( index >= 0 && index < ${#DNS_PROVIDER_OPTIONS[@]} )); then
+      printf '%s' "${DNS_PROVIDER_OPTIONS[$index]}"
+      return 0
+    fi
+  fi
+  printf '%s' "$raw"
 }
 
 collect_interactive_args_from_tty() {
@@ -50,23 +77,29 @@ collect_interactive_args_from_tty() {
   if [[ "$lang" == "zh-CN" ]]; then
     www_domain="$(prompt_tty_line 'www 域名:')"
     edge_domain="$(prompt_tty_line 'edge 域名:')"
-    dns_provider="$(prompt_tty_line 'DNS provider:')"
-    confirm="$(prompt_tty_line '输入 YES 继续，其他任意输入将中止：')"
+    dns_provider="$(prompt_tty_dns_provider "$lang")"
+    printf '1) y / Y / yes / YES\n' >/dev/tty
+    confirm="$(prompt_tty_line '输入 y/Y/yes/YES 继续，其他任意输入将中止：')"
   else
     www_domain="$(prompt_tty_line 'www domain:')"
     edge_domain="$(prompt_tty_line 'edge domain:')"
-    dns_provider="$(prompt_tty_line 'dns provider:')"
-    confirm="$(prompt_tty_line 'Type YES to continue, anything else to abort:')"
+    dns_provider="$(prompt_tty_dns_provider "$lang")"
+    printf '1) y / Y / yes / YES\n' >/dev/tty
+    confirm="$(prompt_tty_line 'Type y/Y/yes/YES to continue, anything else to abort:')"
   fi
 
-  if [[ "$confirm" != "YES" ]]; then
-    if [[ "$lang" == "zh-CN" ]]; then
-      print_err '已中止'
-    else
-      print_err 'aborted'
-    fi
-    exit 2
-  fi
+  case "${confirm,,}" in
+    y|yes)
+      ;;
+    *)
+      if [[ "$lang" == "zh-CN" ]]; then
+        print_err '已中止'
+      else
+        print_err 'aborted'
+      fi
+      exit 2
+      ;;
+  esac
 
   args_to_tp_install=(
     --non-interactive

@@ -42,6 +42,9 @@ from scripts.install.runtime.manifest import install_paths, read_manifest, write
 from scripts.install.runtime.provider_registry import load_provider_registry, validate_provider_env
 
 
+YES_VALUES = {"y", "yes"}
+
+
 @dataclass(frozen=True)
 class I18n:
     language_name: str
@@ -117,6 +120,20 @@ def prompt_choose_lang() -> str:
 
 def prompt_input(label: str) -> str:
     return _prompt_line(f"{label}:")
+
+
+def prompt_choose_dns_provider(lang: str, registry: dict[str, object]) -> str:
+    prompt = "DNS provider:" if lang == "zh-CN" else "dns provider:"
+    print(prompt, flush=True)
+    provider_ids = list(registry.keys())
+    for idx, provider_id in enumerate(provider_ids, start=1):
+        print(f"{idx}) {provider_id}", flush=True)
+    raw = input("> ").strip()
+    if raw.isdigit():
+        index = int(raw)
+        if 1 <= index <= len(provider_ids):
+            return provider_ids[index - 1]
+    return raw
 
 
 def _print_plan(*, lang: str, root_prefix: Path, www_domain: str, edge_domain: str, dns_provider: str) -> None:
@@ -206,7 +223,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     else:
         www_domain = prompt_input(t.prompt_www_domain)
         edge_domain = prompt_input(t.prompt_edge_domain)
-        dns_provider = prompt_input(t.prompt_dns_provider)
+        dns_provider = prompt_choose_dns_provider(lang, load_provider_registry())
 
     if not www_domain or not edge_domain or not dns_provider:
         print("error: missing required inputs", file=sys.stderr)
@@ -215,7 +232,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     registry = load_provider_registry()
     if dns_provider not in registry:
         print(f"error: unknown dns provider: {dns_provider}", file=sys.stderr)
-        print("supported_providers=" + ",".join(sorted(registry.keys())), file=sys.stderr)
+        print("supported_providers=" + ",".join(registry.keys()), file=sys.stderr)
         return 2
 
     # Preflight credential check (fail closed) using the same source order as kernel.
@@ -237,7 +254,7 @@ def cmd_install(args: argparse.Namespace) -> int:
             print(t.prompt_yes_to_continue)
             return 2
         confirm = input(t.prompt_yes_to_continue + " ").strip()
-        if confirm != "YES":
+        if confirm.lower() not in YES_VALUES:
             print(t.abort_message, file=sys.stderr)
             return 2
 
