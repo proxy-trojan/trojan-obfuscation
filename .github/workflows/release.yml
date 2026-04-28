@@ -91,11 +91,13 @@ jobs:
           . .venv/bin/activate
 
           mkdir -p dist
+          # NOTE: we must bundle the installer kernel (bash + templates + provider registry + locks)
+          # so the single-binary `tp` can run `tp install` without a checked-out repo.
           pyinstaller -F \
             -n tp \
+            --add-data "scripts/install:scripts/install" \
             scripts/install/runtime/cli.py
           cp dist/tp "dist/tp-${{ matrix.target }}"
-
       - name: Generate checksums
         run: |
           set -euo pipefail

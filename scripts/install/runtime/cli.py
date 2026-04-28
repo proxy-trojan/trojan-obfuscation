@@ -10,7 +10,31 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+def _resolve_repo_root() -> Path:
+    # Allow explicit override for debugging.
+    override = os.environ.get("TP_REPO_ROOT")
+    if override:
+        return Path(override).expanduser().resolve()
+
+    # PyInstaller sets sys.frozen and (normally) sys._MEIPASS.
+    if getattr(sys, "frozen", False):
+        mei = getattr(sys, "_MEIPASS", None)
+        if mei:
+            return Path(mei).resolve()
+        # Fallback when _MEIPASS is not available for some reason:
+        # treat the executable directory as the root.
+        return Path(sys.executable).resolve().parent
+
+    p = Path(__file__).resolve()
+    if len(p.parents) >= 4:
+        # .../scripts/install/runtime/cli.py -> repo root
+        return p.parents[3]
+
+    # Best-effort fallback.
+    return Path.cwd().resolve()
+
+
+REPO_ROOT = _resolve_repo_root()
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
