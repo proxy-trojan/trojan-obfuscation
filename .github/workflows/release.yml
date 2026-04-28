@@ -47,6 +47,63 @@ jobs:
           echo "OK: stable tag detected."
 
   # ============================================
+  # tp CLI bootstrap artifacts (Linux amd64/arm64)
+  # ============================================
+  build-tp-linux:
+    needs: [release-policy-guard]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-22.04
+            arch: x86_64
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            arch: aarch64
+
+    runs-on: ${{ matrix.runner }}
+    name: tp ${{ matrix.target }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Python packaging toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-venv
+          python3 -m ensurepip --upgrade
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pyinstaller
+
+      - name: Build tp single-binary
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          pyinstaller -F \
+            -n tp \
+            scripts/install/runtime/cli.py
+          cp dist/tp "dist/tp-${{ matrix.target }}"
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum "tp-${{ matrix.target }}" > "tp-${{ matrix.target }}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tp-${{ matrix.target }}
+          path: |
+            dist/tp-${{ matrix.target }}
+            dist/tp-${{ matrix.target }}.sha256
+
+  # ============================================
   # Linux Builds (x86_64 and aarch64)
   # ============================================
   build-linux:
@@ -347,7 +404,7 @@ jobs:
   validate-artifacts:
     name: Validate artifacts (core + client)
     runs-on: ubuntu-22.04
-    needs: [build-linux, build-macos, build-windows, client-packaging]
+    needs: [build-tp-linux, build-linux, build-macos, build-windows, client-packaging]
     if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
 
     steps:
@@ -457,7 +514,7 @@ jobs:
   # Create GitHub Release
   # ============================================
   release:
-    needs: [build-linux, build-macos, build-windows, client-packaging, validate-artifacts]
+    needs: [build-tp-linux, build-linux, build-macos, build-windows, client-packaging, validate-artifacts]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
 
@@ -532,6 +589,18 @@ jobs:
           See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
           EOF
 
+      - name: Prepare guided quick-install assets
+        run: |
+          set -euo pipefail
+          cp scripts/release/tp-install.sh artifacts/tp-install.sh
+          sha256sum artifacts/tp-install.sh > artifacts/tp-install.sh.sha256
+
+          # Copy tp artifacts into release asset names expected by tp-install.sh
+          cp artifacts/tp-linux-amd64 artifacts/tp-linux-amd64
+          cp artifacts/tp-linux-amd64.sha256 artifacts/tp-linux-amd64.sha256
+          cp artifacts/tp-linux-arm64 artifacts/tp-linux-arm64
+          cp artifacts/tp-linux-arm64.sha256 artifacts/tp-linux-arm64.sha256
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
@@ -546,5 +615,8 @@ jobs:
             artifacts/*.deb
             artifacts/*.apk
             artifacts/*.sha256
+            artifacts/tp-linux-amd64
+            artifacts/tp-linux-arm64
+            artifacts/tp-install.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
