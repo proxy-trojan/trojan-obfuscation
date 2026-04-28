@@ -4,6 +4,8 @@ This directory keeps current, actionable project documentation.
 
 ## Bilingual entrypoints
 
+- 中文快速安装（引导式）：`zh-CN/quick-install.md`
+- English quick install (guided): `en/quick-install.md`
 - 中文快速开始：`zh-CN/quickstart.md`
 - English quickstart: `en/quickstart.md`
 - 中文安装骨架：`zh-CN/install-kernel.md`

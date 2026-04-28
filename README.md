@@ -9,16 +9,23 @@ This repo also includes:
 
 ---
 
-## Quick install (Full Installer v1) — Linux
+## Quick install (guided) — Linux
 
-### Prerequisites
+Run the one-liner to start the guided installer:
 
-- Linux host (systemd assumed)
-- DNS records for:
-  - `www.example.com` (public web surface)
-  - `edge.example.com` (Trojan entrypoint SNI)
-- Ports **80** / **443** reachable
-- DNS provider credentials for **DNS-01**
+```bash
+curl -fsSL https://github.com/proxy-trojan/trojan-obfuscation/releases/latest/download/tp-install.sh | sudo bash
+```
+
+Docs:
+- English: `docs/en/quick-install.md`
+- 中文：`docs/zh-CN/quick-install.md`
+
+---
+
+## Full Installer v1 (kernel entrypoint) — Linux
+
+If you prefer running the installer kernel directly:
 
 ### 1) Preflight (check-only)
 
