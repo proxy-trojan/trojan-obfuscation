@@ -117,4 +117,19 @@ mv "${dest_path}.tmp" "$dest_path"
 echo "installed=1"
 
 echo "running: tp install ${args_to_tp_install[*]}"
-exec "$dest_path" install "${args_to_tp_install[@]}"
+
+# When executed as `curl ... | sudo bash`, stdin is the script stream (EOF after read),
+# so interactive prompts inside `tp install` would fail. Prefer reading from the
+# controlling terminal if available.
+if [[ -t 0 ]]; then
+  exec "$dest_path" install "${args_to_tp_install[@]}"
+fi
+
+if [[ -r /dev/tty ]]; then
+  exec "$dest_path" install "${args_to_tp_install[@]}" </dev/tty
+fi
+
+print_err "error: no interactive stdin available (not a TTY)."
+print_err "hint: re-run with passthrough args, e.g.:"
+print_err "  curl -fsSL .../tp-install.sh | sudo bash -s -- -- --non-interactive --lang en --www-domain ... --edge-domain ... --dns-provider ... --yes"
+exit 2
