@@ -72,6 +72,19 @@ def choose_lang(raw: str | None) -> str:
     return "en"
 
 
+def prompt_choose_lang() -> str:
+    print("Select language / 选择语言:")
+    print("1) 中文")
+    print("2) English")
+    choice = input("> ").strip()
+    if choice == "1":
+        return "zh-CN"
+    if choice == "2":
+        return "en"
+    # Default to English on invalid input.
+    return "en"
+
+
 def prompt_input(label: str) -> str:
     value = input(f"{label}: ").strip()
     return value
@@ -144,7 +157,13 @@ def _run_kernel(*, root_prefix: Path, www_domain: str, edge_domain: str, dns_pro
 
 
 def cmd_install(args: argparse.Namespace) -> int:
-    lang = choose_lang(args.lang)
+    if args.lang:
+        lang = choose_lang(args.lang)
+    elif args.non_interactive:
+        lang = "en"
+    else:
+        lang = prompt_choose_lang()
+
     t = I18N[lang]
     root = Path(args.root_prefix)
 
