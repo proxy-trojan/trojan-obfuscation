@@ -237,7 +237,7 @@ cat > "$TMPDIR/server.json" <<EOF
     "curves": "",
     "dhparam": ""
   },
-  "threads": 1,
+  "threads": 4,
   "tcp": {
     "prefer_ipv4": false,
     "no_delay": true,
