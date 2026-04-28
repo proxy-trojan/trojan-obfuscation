@@ -119,17 +119,22 @@ echo "installed=1"
 echo "running: tp install ${args_to_tp_install[*]}"
 
 # When executed as `curl ... | sudo bash`, stdin is the script stream (EOF after read),
-# so interactive prompts inside `tp install` would fail. Prefer reading from the
-# controlling terminal if available.
+# so interactive prompts inside `tp install` would fail.
+#
+# We *prefer* reading from the controlling terminal, but `/dev/tty` can exist
+# while still being non-openable when there is no controlling TTY (e.g. non-PTY ssh,
+# some container/CI contexts). So we must test openability, not just readability.
 if [[ -t 0 ]]; then
   exec "$dest_path" install "${args_to_tp_install[@]}"
 fi
 
-if [[ -r /dev/tty ]]; then
+if [[ -r /dev/tty ]] && { : </dev/tty; } 2>/dev/null; then
   exec "$dest_path" install "${args_to_tp_install[@]}" </dev/tty
 fi
 
-print_err "error: no interactive stdin available (not a TTY)."
-print_err "hint: re-run with passthrough args, e.g.:"
-print_err "  curl -fsSL .../tp-install.sh | sudo bash -s -- -- --non-interactive --lang en --www-domain ... --edge-domain ... --dns-provider ... --yes"
+print_err "error: no interactive stdin available (stdin is not a TTY and /dev/tty is not usable)."
+print_err "hint:"
+print_err "  - If you want interactive install, run from a real terminal (SSH with -t / allocate a PTY)."
+print_err "  - Otherwise, re-run with passthrough args, e.g.:"
+print_err "      curl -fsSL .../tp-install.sh | sudo bash -s -- -- --non-interactive --lang en --www-domain ... --edge-domain ... --dns-provider ... --yes"
 exit 2
