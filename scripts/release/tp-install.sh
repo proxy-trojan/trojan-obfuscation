@@ -26,6 +26,58 @@ print_err() {
   echo "$*" >&2
 }
 
+prompt_tty_line() {
+  local prompt="$1"
+  local value=""
+  printf '%s\n' "$prompt" >/dev/tty
+  read -r -p "> " value </dev/tty
+  printf '%s' "$value"
+}
+
+collect_interactive_args_from_tty() {
+  local lang_choice lang www_domain edge_domain dns_provider confirm
+
+  printf 'Select language / 选择语言:\n' >/dev/tty
+  printf '1) 中文\n' >/dev/tty
+  printf '2) English\n' >/dev/tty
+  read -r -p "> " lang_choice </dev/tty
+  if [[ "$lang_choice" == "1" ]]; then
+    lang="zh-CN"
+  else
+    lang="en"
+  fi
+
+  if [[ "$lang" == "zh-CN" ]]; then
+    www_domain="$(prompt_tty_line 'www 域名:')"
+    edge_domain="$(prompt_tty_line 'edge 域名:')"
+    dns_provider="$(prompt_tty_line 'DNS provider:')"
+    confirm="$(prompt_tty_line '输入 YES 继续，其他任意输入将中止：')"
+  else
+    www_domain="$(prompt_tty_line 'www domain:')"
+    edge_domain="$(prompt_tty_line 'edge domain:')"
+    dns_provider="$(prompt_tty_line 'dns provider:')"
+    confirm="$(prompt_tty_line 'Type YES to continue, anything else to abort:')"
+  fi
+
+  if [[ "$confirm" != "YES" ]]; then
+    if [[ "$lang" == "zh-CN" ]]; then
+      print_err '已中止'
+    else
+      print_err 'aborted'
+    fi
+    exit 2
+  fi
+
+  args_to_tp_install=(
+    --non-interactive
+    --lang "$lang"
+    --www-domain "$www_domain"
+    --edge-domain "$edge_domain"
+    --dns-provider "$dns_provider"
+    --yes
+  )
+}
+
 require_cmd() {
   local name="$1"
   if ! command -v "$name" >/dev/null 2>&1; then
@@ -118,18 +170,23 @@ echo "installed=1"
 
 echo "running: tp install ${args_to_tp_install[*]}"
 
-# When executed as `curl ... | sudo bash`, stdin is the script stream (EOF after read),
-# so interactive prompts inside `tp install` would fail.
-#
-# We *prefer* reading from the controlling terminal, but `/dev/tty` can exist
-# while still being non-openable when there is no controlling TTY (e.g. non-PTY ssh,
-# some container/CI contexts). So we must test openability, not just readability.
+# When executed as `curl ... | sudo bash`, stdin is the script stream (EOF after read).
+# Also, under sudo/use_pty, handing /dev/tty directly to a child onefile binary can
+# trigger job-control stops (SIGTTIN) when the real reader is no longer in the tty's
+# foreground process group. So in the pipe-stdin case we collect answers in this shell
+# from /dev/tty first, then exec `tp install --non-interactive ...`.
 if [[ -t 0 ]]; then
   exec "$dest_path" install "${args_to_tp_install[@]}"
 fi
 
+if ((${#args_to_tp_install[@]} > 0)); then
+  exec "$dest_path" install "${args_to_tp_install[@]}"
+fi
+
 if [[ -r /dev/tty ]] && { : </dev/tty; } 2>/dev/null; then
-  exec "$dest_path" install "${args_to_tp_install[@]}" </dev/tty
+  collect_interactive_args_from_tty
+  echo "running: tp install ${args_to_tp_install[*]}"
+  exec "$dest_path" install "${args_to_tp_install[@]}"
 fi
 
 print_err "error: no interactive stdin available (stdin is not a TTY and /dev/tty is not usable)."
