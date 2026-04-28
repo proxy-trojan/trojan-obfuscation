@@ -75,14 +75,21 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y python3 python3-venv
-          python3 -m ensurepip --upgrade
-          python3 -m pip install --upgrade pip
-          python3 -m pip install pyinstaller
+          # NOTE: On Ubuntu runners, `python3 -m ensurepip` is disabled for the system Python.
+          # Install pip via apt and keep tooling isolated in a venv.
+          sudo apt-get install -y python3 python3-venv python3-pip
+
+          python3 -m venv .venv
+          . .venv/bin/activate
+
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
 
       - name: Build tp single-binary
         run: |
           set -euo pipefail
+          . .venv/bin/activate
+
           mkdir -p dist
           pyinstaller -F \
             -n tp \
